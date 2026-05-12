@@ -1,0 +1,18 @@
+# CODEOWNERS — auto-requests reviewers on PRs.
+# Order matters: later patterns override earlier ones.
+# Enforcement ("Require review from Code Owners") needs GitHub Pro.
+# Until then, this file still drives auto-request behaviour on PRs.
+
+# Default: captain reviews anything not otherwise claimed.
+*                       @RizzoHou
+
+# Lanes (folders may not exist yet — rules apply once they do).
+/src/tools/             @by-lastime
+/src/ui/                @Q-star17
+/src/agent/             @RizzoHou
+/src/rag/               @RizzoHou
+
+# Cross-cutting + meta.
+/docs/                  @RizzoHou
+/CLAUDE.md              @RizzoHou
+/.github/               @RizzoHou
