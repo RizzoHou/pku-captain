@@ -34,7 +34,7 @@ Plan scope so the 06-06 demo is achievable; polish belongs in the 06-06 → 07-0
 
 ## Team and coordination
 
-Three members; the user (`RizzoHou` on GitHub) is captain and absorbs orchestration overhead. One known teammate: `by-lastime`. Suggestions that touch division of labor should be phrased so the captain can hand them off — don't assume the user will personally do every task.
+Three members; the user (`RizzoHou` on GitHub) is captain and absorbs orchestration overhead. Teammates: `by-lastime`, `Q-star17`. Suggestions that touch division of labor should be phrased so the captain can hand them off — don't assume the user will personally do every task.
 
 ## Conventions worth observing
 
