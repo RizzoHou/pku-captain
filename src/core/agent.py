@@ -15,9 +15,9 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
-from pku_captain.llm.base import ChatMessage, LLMProvider
-from pku_captain.tools.base import ToolRegistry
-from pku_captain.workflows.base import WorkflowRegistry
+from ..llm.base import ChatMessage, LLMProvider
+from ..tools.base import ToolRegistry
+from ..workflows.base import WorkflowRegistry
 
 
 @dataclass

@@ -1,4 +1,4 @@
-from pku_captain.llm.base import (
+from .base import (
     ChatMessage,
     ChatResponse,
     LLMProvider,

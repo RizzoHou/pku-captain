@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
-from pku_captain.tools.base import ToolRegistry
+from ..tools.base import ToolRegistry
 
 
 @dataclass(frozen=True)

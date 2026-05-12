@@ -21,10 +21,10 @@ dev = [
 ]
 
 [project.scripts]
-pku-captain = "pku_captain.__main__:main"
+pku-captain = "src.__main__:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/pku_captain"]
+packages = ["src"]
 
 [tool.ruff]
 line-length = 100

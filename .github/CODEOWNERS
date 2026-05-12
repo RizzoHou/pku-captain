@@ -8,5 +8,5 @@
 
 # Lanes — uncomment and replace the owner after the skills conversation.
 # Captain stays on Agent (core/), LLM, and RAG regardless.
-# /src/pku_captain/tools/               @<tools-owner>
-# /src/pku_captain/ui/                  @<ui-owner>
+# /src/tools/                           @<tools-owner>
+# /src/ui/                              @<ui-owner>
