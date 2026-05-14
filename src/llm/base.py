@@ -13,16 +13,6 @@ from typing import Any, ClassVar, Literal
 
 
 @dataclass(frozen=True)
-class ChatMessage:
-    """A single chat-history entry in OpenAI format."""
-
-    role: Literal["system", "user", "assistant", "tool"]
-    content: str
-    name: str | None = None
-    tool_call_id: str | None = None
-
-
-@dataclass(frozen=True)
 class ToolCall:
     """A tool invocation requested by the LLM."""
 
@@ -32,9 +22,33 @@ class ToolCall:
 
 
 @dataclass(frozen=True)
+class ChatMessage:
+    """A single chat-history entry in OpenAI format.
+
+    `tool_calls` is only populated on assistant messages that requested
+    tool invocations; per the OpenAI/DeepSeek spec, such an assistant
+    message must be present in history before any subsequent `tool`-role
+    reply, otherwise the API rejects the request.
+
+    `reasoning_content` carries chain-of-thought output from reasoning
+    models (e.g. DeepSeek with `effort=max`). DeepSeek requires it to be
+    passed back to the API on the next turn for the model to continue
+    coherently — providers that don't surface reasoning leave it `None`.
+    """
+
+    role: Literal["system", "user", "assistant", "tool"]
+    content: str
+    name: str | None = None
+    tool_call_id: str | None = None
+    tool_calls: tuple[ToolCall, ...] = ()
+    reasoning_content: str | None = None
+
+
+@dataclass(frozen=True)
 class ChatResponse:
     text: str
     tool_calls: list[ToolCall] = field(default_factory=list)
+    reasoning_content: str | None = None
 
 
 class LLMProvider(ABC):

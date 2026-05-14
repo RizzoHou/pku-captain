@@ -1,3 +1,4 @@
 from .agent import Agent, AgentEvent
+from .conversation import Conversation
 
-__all__ = ["Agent", "AgentEvent"]
+__all__ = ["Agent", "AgentEvent", "Conversation"]

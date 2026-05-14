@@ -19,6 +19,7 @@ env/
 # Local config / secrets
 .env
 .env.local
+secrets/
 
 # Editor / OS
 .DS_Store
