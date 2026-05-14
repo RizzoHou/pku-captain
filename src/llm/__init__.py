@@ -5,10 +5,12 @@ from .base import (
     LLMProviderRegistry,
     ToolCall,
 )
+from .echo import EchoLLMProvider
 
 __all__ = [
     "ChatMessage",
     "ChatResponse",
+    "EchoLLMProvider",
     "LLMProvider",
     "LLMProviderRegistry",
     "ToolCall",
