@@ -21,6 +21,9 @@ env/
 .env.local
 secrets/
 
+# CLI conversation dumps (/save)
+debug/
+
 # Editor / OS
 .DS_Store
 .idea/

@@ -16,6 +16,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import asdict
+from datetime import datetime
+from pathlib import Path
 from textwrap import shorten
 from typing import Any
 
@@ -24,6 +27,8 @@ from .core import AgentEvent, build_agent
 _HELP = """Commands:
   /help          show this help
   /reset         clear conversation history (rebuild agent)
+  /save [path]   dump conversation + reasoning to JSON for debugging
+                 (default: debug/conversation-<timestamp>.json)
   /quit, /exit   leave the REPL  (also: Ctrl-D / Ctrl-C)
 Otherwise: type your message and press Enter."""
 
@@ -56,6 +61,23 @@ def _print_event(event: AgentEvent) -> str | None:
     elif event.kind == "final":
         return event.payload.get("text") or "(empty reply)"
     return None
+
+
+def _default_save_path() -> Path:
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    return Path("debug") / f"conversation-{stamp}.json"
+
+
+def _save_conversation(agent: Any, mode: str, target: Path) -> Path:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    dump = {
+        "mode": mode,
+        "llm_provider": getattr(agent.llm, "name", type(agent.llm).__name__),
+        "tools": sorted(t.name for t in agent.tools.all()),
+        "messages": [asdict(msg) for msg in agent.conversation.snapshot()],
+    }
+    target.write_text(json.dumps(dump, ensure_ascii=False, indent=2), encoding="utf-8")
+    return target
 
 
 def _dump_reasoning(agent: Any, watermark: int) -> None:
@@ -95,6 +117,16 @@ def run_repl(*, offline: bool, show_reasoning: bool) -> int:
         if line == "/reset":
             agent = build_agent(offline=offline)
             print("(conversation reset)")
+            continue
+        if line == "/save" or line.startswith("/save "):
+            arg = line[len("/save"):].strip()
+            target = Path(arg).expanduser() if arg else _default_save_path()
+            try:
+                written = _save_conversation(agent, mode, target)
+            except OSError as exc:
+                print(f"[error] could not write {target}: {exc}", file=sys.stderr)
+                continue
+            print(f"(saved {len(agent.conversation)} messages to {written})")
             continue
 
         watermark = len(agent.conversation)
