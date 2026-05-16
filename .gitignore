@@ -24,6 +24,9 @@ secrets/
 # CLI conversation dumps (/save)
 debug/
 
+# Local code-audit artifacts
+docs/code_audit_panel.html
+
 # Editor / OS
 .DS_Store
 .idea/
