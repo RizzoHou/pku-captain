@@ -1,11 +1,8 @@
 """PKU3bAssignmentsTool — fetch course assignments via the ``pku3b`` CLI.
 
-Wraps ``pku3b assignment list`` (alias ``pku3b a ls``). The CLI prints a
-human-readable, ANSI-coloured listing grouped by section (未完成 / 已完成).
-This tool runs the subprocess, strips colour, parses the listing into
-structured records, and returns both the structured form and the cleaned
-raw text — the latter is useful when the parser misses a corner case
-and the LLM still has to ground its reply in something concrete.
+Calls ``pku3b assignment list --format json`` (from our fork at
+``github.com/RizzoHou/pku3b`` branch ``feat/assignment-list-json-output``)
+and consumes the structured JSON directly — no text parsing.
 
 By default only outstanding assignments are returned; set
 ``include_completed=True`` to pass ``--all`` through to ``pku3b``.
@@ -13,7 +10,7 @@ By default only outstanding assignments are returned; set
 
 from __future__ import annotations
 
-import re
+import json
 from dataclasses import asdict, dataclass, field
 from typing import Any, ClassVar
 
@@ -26,32 +23,31 @@ from .pku3b import (
     run_pku3b,
 )
 
-_SECTION_RE = re.compile(r"^>\s*(?P<title>.+?)\s*<\s*$")
-_ASSIGNMENT_RE = re.compile(
-    r"^(?P<course>.+?)\s+>\s+(?P<title>.+?)\s+\((?P<deadline>[^()]+)\)\s+"
-    r"(?P<id>[0-9a-fA-F]{8,})\s*$"
-)
-_ATTACHMENT_RE = re.compile(r"^\[附件\]\s*(?P<name>.+?)\s*$")
-
 
 @dataclass
 class Assignment:
-    course: str
-    title: str
-    deadline: str
     id: str
-    section: str | None = None
-    description: str = ""
-    attachments: list[str] = field(default_factory=list)
+    course_name: str
+    course_title: str
+    course_id: str
+    title: str
+    deadline_raw: str | None
+    deadline_iso: str | None
+    completed: bool
+    last_attempt: str | None
+    descriptions: list[str] = field(default_factory=list)
+    attachments: list[dict[str, str]] = field(default_factory=list)
 
 
 class PKU3bAssignmentsTool(Tool):
     name: ClassVar[str] = "pku3b_assignments"
     description: ClassVar[str] = (
         "List course assignments from PKU 教学网 (Blackboard) via the local "
-        "`pku3b` CLI. Returns each assignment's course, title, deadline, id, "
-        "and any attachment filenames. Use this to answer questions like "
-        "“今天有什么作业？” / “这周要交什么？”."
+        "`pku3b` CLI. Returns each assignment's course (short name + full "
+        "title + course id), assignment title, raw + ISO-8601 deadlines, "
+        "completion status, descriptions, and attachment names + Blackboard "
+        "URIs. Use this to answer questions like “今天有什么作业？” / "
+        "“这周要交什么？”."
     )
     parameters_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
@@ -78,7 +74,7 @@ class PKU3bAssignmentsTool(Tool):
 
     def invoke(self, args: dict[str, Any]) -> ToolResult:
         include_completed = bool(args.get("include_completed", False))
-        cli_args = ["assignment", "list"]
+        cli_args = ["assignment", "list", "--format", "json"]
         if include_completed:
             cli_args.append("--all")
 
@@ -96,67 +92,38 @@ class PKU3bAssignmentsTool(Tool):
                 error=f"pku3b exited {run.returncode}: {err}",
             )
 
-        assignments = parse_assignment_list(run.stdout)
+        try:
+            records = json.loads(run.stdout)
+        except json.JSONDecodeError as exc:
+            return ToolResult(
+                success=False,
+                error=(
+                    f"failed to parse pku3b JSON output: {exc}. "
+                    "Confirm the installed binary supports `--format json` "
+                    "(install our fork: "
+                    "`cargo install --git https://github.com/RizzoHou/pku3b "
+                    "--branch feat/assignment-list-json-output`)."
+                ),
+            )
+
+        assignments = [_record_to_assignment(r) for r in records]
         return ToolResult(
             success=True,
-            data={
-                "assignments": [asdict(a) for a in assignments],
-                "raw": run.stdout,
-            },
+            data={"assignments": [asdict(a) for a in assignments]},
         )
 
 
-def parse_assignment_list(text: str) -> list[Assignment]:
-    """Parse the ANSI-stripped output of ``pku3b assignment list``.
-
-    Best-effort: the CLI's output format is not contractually stable, so
-    on a parse miss we keep going rather than raise. Description lines
-    between an assignment header and the next assignment (or attachment
-    block) are collected verbatim.
-    """
-    assignments: list[Assignment] = []
-    current_section: str | None = None
-    current: Assignment | None = None
-    pending_desc: list[str] = []
-
-    def flush_desc() -> None:
-        if current is not None and pending_desc:
-            current.description = "\n".join(pending_desc).strip()
-        pending_desc.clear()
-
-    for raw_line in text.splitlines():
-        line = raw_line.rstrip()
-        if not line.strip():
-            continue
-
-        section_match = _SECTION_RE.match(line)
-        if section_match:
-            flush_desc()
-            current = None
-            current_section = section_match.group("title").strip()
-            continue
-
-        assignment_match = _ASSIGNMENT_RE.match(line)
-        if assignment_match:
-            flush_desc()
-            current = Assignment(
-                course=assignment_match.group("course").strip(),
-                title=assignment_match.group("title").strip(),
-                deadline=assignment_match.group("deadline").strip(),
-                id=assignment_match.group("id").strip(),
-                section=current_section,
-            )
-            assignments.append(current)
-            continue
-
-        attachment_match = _ATTACHMENT_RE.match(line)
-        if attachment_match and current is not None:
-            flush_desc()
-            current.attachments.append(attachment_match.group("name").strip())
-            continue
-
-        if current is not None:
-            pending_desc.append(line)
-
-    flush_desc()
-    return assignments
+def _record_to_assignment(record: dict[str, Any]) -> Assignment:
+    return Assignment(
+        id=record["id"],
+        course_name=record["course_name"],
+        course_title=record["course_title"],
+        course_id=record["course_id"],
+        title=record["title"],
+        deadline_raw=record.get("deadline_raw"),
+        deadline_iso=record.get("deadline_iso"),
+        completed=bool(record.get("completed", False)),
+        last_attempt=record.get("last_attempt"),
+        descriptions=list(record.get("descriptions") or []),
+        attachments=[dict(a) for a in (record.get("attachments") or [])],
+    )

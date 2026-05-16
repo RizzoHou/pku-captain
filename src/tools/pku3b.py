@@ -1,11 +1,19 @@
 """Thin subprocess wrapper around the ``pku3b`` CLI.
 
-`pku3b` is an external Rust binary (v0.12.x on this machine at
-``/home/ubuntu/.local/bin/pku3b``). This module isolates the subprocess
-mechanics — locating the executable, building argv, running with a
-timeout, and stripping ANSI colour codes from stdout — so the Tool
-subclasses (PKU3bAssignmentsTool today, PKU3bAnnouncementsTool later)
-stay focused on argument parsing and result shaping.
+`pku3b` is an external Rust binary. PKU Captain ships against our fork
+at https://github.com/RizzoHou/pku3b (branch
+``feat/assignment-list-json-output``), which adds ``--format json`` to
+the relevant subcommands so Python consumers get structured data
+directly. Install with:
+
+    cargo install --git https://github.com/RizzoHou/pku3b \\
+        --branch feat/assignment-list-json-output
+
+This module isolates the subprocess mechanics — locating the
+executable, building argv, running with a timeout, and stripping ANSI
+colour codes (still useful for ``stderr`` and any legacy text
+subcommands) — so the Tool subclasses stay focused on shaping the
+JSON response.
 
 It is not itself a Tool subclass; it has no JSON schema and is never
 exposed to the LLM. Callers should treat a non-zero return code as a
