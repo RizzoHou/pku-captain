@@ -29,7 +29,7 @@ from ..tools import (
     WeatherTool,
 )
 from ..tools.base import ToolRegistry
-from ..workflows import HelloWorkflow
+from ..workflows import HelloWorkflow, MorningBriefingWorkflow
 from ..workflows.base import WorkflowRegistry
 from .agent import Agent
 from .conversation import Conversation
@@ -113,6 +113,7 @@ def _build_knowledge_base() -> KnowledgeBase:
 def _build_workflows(tools: ToolRegistry) -> WorkflowRegistry:
     registry = WorkflowRegistry()
     registry.register(HelloWorkflow(tools))
+    registry.register(MorningBriefingWorkflow(tools))
     return registry
 
 
