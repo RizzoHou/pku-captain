@@ -19,7 +19,13 @@ from ..rag import (
     SourceRegistry,
     StaticSource,
 )
-from ..tools import ClockTool, KnowledgeSearchTool, PKU3bAssignmentsTool, WeatherTool
+from ..tools import (
+    ClockTool,
+    KnowledgeSearchTool,
+    MemoryTool,
+    PKU3bAssignmentsTool,
+    WeatherTool,
+)
 from ..tools.base import ToolRegistry
 from ..workflows import HelloWorkflow
 from ..workflows.base import WorkflowRegistry
@@ -105,6 +111,7 @@ _SAMPLE_CHUNKS: tuple[Chunk, ...] = (
 def _build_tools(*, offline: bool) -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(ClockTool())
+    registry.register(MemoryTool())
     if not offline:
         registry.register(PKU3bAssignmentsTool())
         registry.register(WeatherTool())

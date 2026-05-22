@@ -25,6 +25,9 @@ debug/
 # Claude Code worktrees / local state
 .claude/
 
+# Local app data (memory store, reminders, etc.)
+data/
+
 # Local code-audit artifacts
 docs/code_audit_panel.html
 
