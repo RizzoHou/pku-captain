@@ -15,7 +15,7 @@
 
 ## 交付物
 
-- 新建 `src/rag/memory.py`（或 `src/core/memory.py`，自行选最合理位置）—— 记忆后端：增 / 删 / 改 / 查偏好条目，持久化到本地文件。
+- 新建 `src/core/memory.py` —— 记忆后端：增 / 删 / 改 / 查偏好条目，持久化到本地文件。（记忆是用户偏好，不是 RAG 检索内容，故归 `src/core`，不要放进 `src/rag`。）
 - 新建 `src/tools/memory.py` —— `MemoryTool(Tool)`。
 - 修改 `src/tools/__init__.py` —— 导出 `MemoryTool`。
 - 修改 `src/core/bootstrap.py` —— 在 `_build_tools()` 注册 `MemoryTool`。记忆是纯本地操作，离线安全 —— **在线和离线分支都注册**（放在 `ClockTool` 那一段，不要放进 `if not offline:`）。
