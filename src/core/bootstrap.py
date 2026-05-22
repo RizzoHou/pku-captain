@@ -24,6 +24,7 @@ from ..tools import (
     KnowledgeSearchTool,
     MemoryTool,
     PKU3bAssignmentsTool,
+    ReminderTool,
     WeatherTool,
 )
 from ..tools.base import ToolRegistry
@@ -112,6 +113,7 @@ def _build_tools(*, offline: bool) -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(ClockTool())
     registry.register(MemoryTool())
+    registry.register(ReminderTool())
     if not offline:
         registry.register(PKU3bAssignmentsTool())
         registry.register(WeatherTool())
