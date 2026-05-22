@@ -22,6 +22,9 @@ secrets/
 # CLI conversation dumps (/save)
 debug/
 
+# Local persistent state (memory store, etc.)
+data/
+
 # Local code-audit artifacts
 docs/code_audit_panel.html
 

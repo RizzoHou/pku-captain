@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..llm import DeepSeekProvider, EchoLLMProvider, LLMProvider
-from ..tools import ClockTool, PKU3bAssignmentsTool, WeatherTool
+from ..tools import ClockTool, MemoryTool, PKU3bAssignmentsTool, WeatherTool
 from ..tools.base import ToolRegistry
 from ..workflows import HelloWorkflow
 from ..workflows.base import WorkflowRegistry
@@ -66,6 +66,7 @@ def _build_llm(*, offline: bool) -> LLMProvider:
 def _build_tools(*, offline: bool) -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(ClockTool())
+    registry.register(MemoryTool())
     if not offline:
         registry.register(PKU3bAssignmentsTool())
         registry.register(WeatherTool())
