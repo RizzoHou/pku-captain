@@ -1,0 +1,70 @@
+{
+  "source_url": "https://dean.pku.edu.cn/web/calendar.php",
+  "academic_year": "2025-2026",
+  "term": "spring",
+  "snapshot_note": "Hand-curated PKU 2025-2026 spring-term academic calendar. Reference data only — verify against the official calendar before relying on exact dates.",
+  "events": [
+    {
+      "id": "cal-2026-spring-start",
+      "name": "春季学期开学（第1周）",
+      "type": "term_boundary",
+      "date": "2026-02-23",
+      "note": "2025-2026学年春季学期正式开始上课。"
+    },
+    {
+      "id": "cal-2026-qingming",
+      "name": "清明节放假",
+      "type": "holiday",
+      "start": "2026-04-04",
+      "end": "2026-04-06",
+      "note": "清明节放假调休，共3天。"
+    },
+    {
+      "id": "cal-2026-labour-day",
+      "name": "劳动节放假",
+      "type": "holiday",
+      "start": "2026-05-01",
+      "end": "2026-05-05",
+      "note": "劳动节放假调休，共5天。"
+    },
+    {
+      "id": "cal-2026-midterm-check",
+      "name": "期中教学检查周（第8-9周）",
+      "type": "academic_event",
+      "start": "2026-04-13",
+      "end": "2026-04-24",
+      "note": "学校开展期中教学检查，部分课程安排期中考核。"
+    },
+    {
+      "id": "cal-2026-dragon-boat",
+      "name": "端午节放假",
+      "type": "holiday",
+      "start": "2026-06-19",
+      "end": "2026-06-21",
+      "note": "端午节放假，共3天。"
+    },
+    {
+      "id": "cal-2026-final-exams",
+      "name": "期末考试周（第18-19周）",
+      "type": "exam_period",
+      "start": "2026-06-22",
+      "end": "2026-07-03",
+      "note": "2025-2026学年春季学期期末考试集中进行。"
+    },
+    {
+      "id": "cal-2026-spring-end",
+      "name": "春季学期结束，暑假开始",
+      "type": "term_boundary",
+      "date": "2026-07-04",
+      "note": "春季学期教学与考试全部结束，进入暑假。"
+    },
+    {
+      "id": "cal-2026-summer-school",
+      "name": "2026年暑期学校（小学期）",
+      "type": "academic_event",
+      "start": "2026-07-06",
+      "end": "2026-08-14",
+      "note": "暑期学校课程开设期间。"
+    }
+  ]
+}

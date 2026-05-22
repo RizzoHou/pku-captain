@@ -40,6 +40,16 @@ Independent task. Do not depend on task 002 — 002 self-tests with `StaticSourc
 - [ ] `build_source_registry().all()` returns both Sources.
 - [ ] `python -m src.cli --offline` still starts.
 
+## Implementation notes
+
+Neither PKU source exposes a stable public data interface, so both Sources were implemented against fixed JSON snapshots checked into the repo (per the fallback clause above). The `fetch()` shape is unchanged, so a live fetcher is a drop-in replacement.
+
+- `DeanSource` (`name = "pku_dean"`, `refresh_interval = 3600`) — reads `src/rag/data/dean_notices.json`. The PKU Dean's Office site (`dean.pku.edu.cn`) serves notices as server-rendered HTML with no JSON/RSS feed; the snapshot is hand-curated reference data, one notice per `Chunk`.
+- `CalendarSource` (`name = "pku_calendar"`, `refresh_interval = 86400`) — reads `src/rag/data/academic_calendar.json`. The academic calendar is published as an HTML page / image; the snapshot is the hand-curated 2025-2026 spring-term calendar, one event per `Chunk`.
+- Both classes accept an optional `data_path` constructor argument so the captain can point them at a refreshed snapshot (or a future fetcher's cache) without code changes.
+- The data files are reference data, not authoritative — dates should be verified against the official calendar before the live fetcher lands.
+- `build_source_registry()` is also re-exported from `src.core` (alongside `build_agent`) for the GUI lane.
+
 ## Commit and boundaries
 
 - Commit to **this worktree branch** using Conventional Commits.

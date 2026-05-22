@@ -11,6 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..llm import DeepSeekProvider, EchoLLMProvider, LLMProvider
+from ..rag import CalendarSource, DeanSource, SourceRegistry
 from ..tools import ClockTool, PKU3bAssignmentsTool, WeatherTool
 from ..tools.base import ToolRegistry
 from ..workflows import HelloWorkflow
@@ -75,4 +76,17 @@ def _build_tools(*, offline: bool) -> ToolRegistry:
 def _build_workflows(tools: ToolRegistry) -> WorkflowRegistry:
     registry = WorkflowRegistry()
     registry.register(HelloWorkflow(tools))
+    return registry
+
+
+def build_source_registry() -> SourceRegistry:
+    """Assemble the SourceRegistry the dashboard polls for RAG content.
+
+    Per `docs/integration_contract_zh.md` §5, the dashboard (GUI lane)
+    obtains its `SourceRegistry` through this factory and never
+    constructs concrete `Source` subclasses itself.
+    """
+    registry = SourceRegistry()
+    registry.register(DeanSource())
+    registry.register(CalendarSource())
     return registry

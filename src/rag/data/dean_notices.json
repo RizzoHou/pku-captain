@@ -1,0 +1,46 @@
+{
+  "source_url": "https://dean.pku.edu.cn/service/web/announcementlist.php",
+  "snapshot_note": "Hand-curated snapshot of PKU Dean's Office notices. Reference data only — not an authoritative feed. Replace with a live fetcher when one is available.",
+  "notices": [
+    {
+      "id": "dean-2026-0512-final-exam",
+      "title": "关于2025-2026学年春季学期期末考试安排的通知",
+      "url": "https://dean.pku.edu.cn/service/web/announcementinfo.php?id=2026-0512",
+      "publish_date": "2026-05-12",
+      "category": "考试",
+      "body": "2025-2026学年春季学期期末考试定于第18-19周（2026年6月22日至7月3日）进行。请各位同学通过教务网查询本人考试时间与考场，考试期间凭学生证入场。缓考、补考申请须在考试周开始前一周内提交所在院系教务办。"
+    },
+    {
+      "id": "dean-2026-0508-graduation",
+      "title": "关于2026届本科毕业生离校工作的通知",
+      "url": "https://dean.pku.edu.cn/service/web/announcementinfo.php?id=2026-0508",
+      "publish_date": "2026-05-08",
+      "category": "毕业",
+      "body": "2026届本科毕业生须于2026年6月28日前完成成绩审核、学位申请与离校手续办理。毕业典礼定于2026年7月初举行，具体安排另行通知。请毕业班同学关注所在院系通知，及时归还图书、清退宿舍。"
+    },
+    {
+      "id": "dean-2026-0428-fall-course-selection",
+      "title": "关于2026-2027学年第一学期选课工作的通知",
+      "url": "https://dean.pku.edu.cn/service/web/announcementinfo.php?id=2026-0428",
+      "publish_date": "2026-04-28",
+      "category": "选课",
+      "body": "2026-2027学年第一学期预选将于2026年6月10日至6月16日在教务网开放。请同学们提前查阅开课计划，合理安排选课方案。补退选阶段安排在秋季学期开学后第1-2周。"
+    },
+    {
+      "id": "dean-2026-0415-summer-school",
+      "title": "关于2026年暑期学校（小学期）选课的通知",
+      "url": "https://dean.pku.edu.cn/service/web/announcementinfo.php?id=2026-0415",
+      "publish_date": "2026-04-15",
+      "category": "选课",
+      "body": "2026年暑期学校课程将于2026年7月6日至8月14日开设，选课时间为2026年6月1日至6月7日。暑期学校面向全校本科生开放，部分课程接受外校学生选修，具体课程列表见教务网暑期学校专栏。"
+    },
+    {
+      "id": "dean-2026-0320-midterm-check",
+      "title": "关于开展2025-2026学年春季学期期中教学检查的通知",
+      "url": "https://dean.pku.edu.cn/service/web/announcementinfo.php?id=2026-0320",
+      "publish_date": "2026-03-20",
+      "category": "教学",
+      "body": "学校定于第8-9周开展春季学期期中教学检查，重点检查课堂教学秩序、教学进度与学生学习情况。请各院系组织师生座谈，收集教学反馈意见，并于第10周前报送检查总结。"
+    }
+  ]
+}
