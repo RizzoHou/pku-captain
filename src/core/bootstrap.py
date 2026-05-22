@@ -24,6 +24,7 @@ from ..tools import (
     KnowledgeSearchTool,
     LectureTool,
     MemoryTool,
+    PKU3bAnnouncementsTool,
     PKU3bAssignmentsTool,
     ReminderTool,
     WeatherTool,
@@ -117,6 +118,7 @@ def _build_tools(*, offline: bool) -> ToolRegistry:
     registry.register(ReminderTool())
     if not offline:
         registry.register(PKU3bAssignmentsTool())
+        registry.register(PKU3bAnnouncementsTool())
         registry.register(WeatherTool())
         registry.register(KnowledgeSearchTool(_build_knowledge_base()))
         registry.register(LectureTool())
