@@ -38,6 +38,15 @@ Independent task. Task 007 orchestrates this tool, but this task does not depend
 - [ ] When `pku3b` is missing / times out / returns non-zero, `invoke()` returns `ToolResult(success=False, ...)` without raising.
 - [ ] `python -m src.cli --offline` still starts (the tool is not registered offline, which is expected).
 
+## Implementation notes
+
+- `pku3b announcement` (v0.13.0, our fork) exposes `list` / `show` subcommands but **neither supports `--format json`** — only `assignment list` carries the fork's JSON patch. `PKU3bAnnouncementsTool` therefore parses `strip_ansi()`'d text output (the per-task fallback). Captain decides whether to extend the fork with `--format json` for `announcement`; until then the text parser is the contract.
+- Parsing caveats baked into the parser:
+  - `announcement list` truncates long titles (trailing `…`/`...`); the full title is only available via `announcement show <id>` (detail mode). `data.announcements[].title` may thus be truncated.
+  - Some announcement titles contain embedded newlines, so a list entry can span multiple physical lines. The parser splits on the `[ N]` index marker, not on `\n`, and collapses internal whitespace.
+  - pku3b IDs are lowercase hex with leading zeros dropped, so their length varies (matched as `[0-9a-f]{8,}`).
+- The tool has two modes in one `invoke()`: list (default) and detail (when `announcement_id` is passed). List supports `course` substring filter, `all_term`, `limit`, `force`; detail supports `all_term`, `force`.
+
 ## Commit and boundaries
 
 - Commit to **this worktree branch** using Conventional Commits.
