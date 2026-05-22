@@ -1,0 +1,58 @@
+[
+  {
+    "title": "静园学术讲座：从宋词看士大夫的精神世界",
+    "time": "2026-05-23T19:00:00",
+    "location": "二教107",
+    "speaker": "中文系 张维 教授",
+    "link": "https://resource.pku.edu.cn/index.php?r=lecturepre/view&id=20260523-jingyuan"
+  },
+  {
+    "title": "博雅人文讲堂：人工智能时代的伦理边界",
+    "time": "2026-05-26T15:30:00",
+    "location": "英杰交流中心阳光厅",
+    "speaker": "哲学系 李哲 研究员",
+    "link": "https://resource.pku.edu.cn/index.php?r=lecturepre/view&id=20260526-boya"
+  },
+  {
+    "title": "前沿科技讲座：量子计算的现状与未来",
+    "time": "2026-05-28T14:00:00",
+    "location": "理科教学楼201",
+    "speaker": "物理学院 王量子 教授",
+    "link": "https://resource.pku.edu.cn/index.php?r=lecturepre/view&id=20260528-quantum"
+  },
+  {
+    "title": "全球化讲座：后疫情时代的国际贸易格局",
+    "time": "2026-05-30T10:00:00",
+    "location": "经济学院305",
+    "speaker": "经济学院 陈国 教授",
+    "link": "https://resource.pku.edu.cn/index.php?r=lecturepre/view&id=20260530-global"
+  },
+  {
+    "title": "北大公共治理讲座：城市更新中的公众参与",
+    "time": "2026-06-03T19:00:00",
+    "location": "政府管理学院廖凯原楼",
+    "speaker": "政府管理学院 赵治 副教授",
+    "link": "https://resource.pku.edu.cn/index.php?r=lecturepre/view&id=20260603-governance"
+  },
+  {
+    "title": "计算机科学讲座：大模型推理的系统优化",
+    "time": "2026-06-05T16:00:00",
+    "location": "理科一号楼1131",
+    "speaker": "计算机学院 孙模 研究员",
+    "link": "https://resource.pku.edu.cn/index.php?r=lecturepre/view&id=20260605-llmsys"
+  },
+  {
+    "title": "古代文学讲座：《红楼梦》的版本流变",
+    "time": "2026-06-09T19:00:00",
+    "location": "人文学苑1号楼108",
+    "speaker": "中文系 周文 教授",
+    "link": "https://resource.pku.edu.cn/index.php?r=lecturepre/view&id=20260609-hongloumeng"
+  },
+  {
+    "title": "心理健康讲座：考试季的情绪管理",
+    "time": "2026-06-12T18:30:00",
+    "location": "学生中心多功能厅",
+    "speaker": "学生心理健康教育中心 吴心 咨询师",
+    "link": "https://resource.pku.edu.cn/index.php?r=lecturepre/view&id=20260612-psych"
+  }
+]

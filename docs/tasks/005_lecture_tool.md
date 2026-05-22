@@ -35,6 +35,12 @@ Independent task. Task 007 orchestrates this tool, but this task does not depend
 - [ ] When offline / the data source is unavailable, `invoke()` returns a `ToolResult` (no exception).
 - [ ] `python -m src.cli --offline` still starts (the tool is not registered offline, which is expected).
 
+## Implementation notes
+
+- **No stable public interface found.** PKU's lecture announcements live on the media-resource platform (`https://resource.pku.edu.cn/`, also `https://lecture.pku.edu.cn/`). The listing page (`?r=lecturepre/index`) sits behind the university unified-authentication login (`portal.pku.edu.cn`) and exposes no documented public JSON/REST API. No anonymous endpoint returns the upcoming-lecture feed.
+- **Fallback used:** `LectureTool` reads a curated JSON snapshot checked into the repo at `src/tools/data/lectures.json`. The `Tool` interface and `parameters_schema` are identical to what a live-source tool would expose (`limit`, `keyword`, `start_date`, `end_date`), so the captain can swap the file read for a real backend without touching callers or `MorningBriefingWorkflow`.
+- **Limitations:** the dataset is static — it does not refresh and will go stale. Lecture entries are representative samples, not a live feed. A real integration would need either (a) authenticated scraping of `resource.pku.edu.cn` with a session cookie, or (b) a campus-side data export. Treat the current data as demo-grade until then.
+
 ## Commit and boundaries
 
 - Commit to **this worktree branch** using Conventional Commits.
