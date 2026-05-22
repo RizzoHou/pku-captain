@@ -17,7 +17,6 @@ from ..rag import (
     DeanSource,
     KnowledgeBase,
     SourceRegistry,
-    StaticSource,
 )
 from ..tools import (
     ClockTool,
@@ -80,37 +79,6 @@ def _build_llm(*, offline: bool) -> LLMProvider:
     return DeepSeekProvider(api_key=api_key)
 
 
-# Built-in seed corpus for the knowledge base. The captain swaps in real
-# sources (DeanSource, CalendarSource) during integration; until then this
-# gives KnowledgeSearchTool something concrete to retrieve over.
-_SAMPLE_CHUNKS: tuple[Chunk, ...] = (
-    Chunk(
-        source_name="sample",
-        identifier="calendar-2026-spring",
-        text="北京大学2026年春季学期：2月23日开学，6月22日至7月3日为考试周，7月4日起放暑假。",
-        metadata={"topic": "academic_calendar"},
-    ),
-    Chunk(
-        source_name="sample",
-        identifier="library-hours",
-        text="北京大学图书馆开放时间：周一至周日7:00至22:30，考试周延长至23:30闭馆。",
-        metadata={"topic": "library"},
-    ),
-    Chunk(
-        source_name="sample",
-        identifier="course-drop",
-        text="退课办理：开学后两周内可通过教务系统自由退课，逾期需经院系审批。",
-        metadata={"topic": "registration"},
-    ),
-    Chunk(
-        source_name="sample",
-        identifier="dining-hall",
-        text="学校食堂用餐：燕南、农园、家园等食堂支持校园卡和手机扫码支付，早餐7:00开始供应。",
-        metadata={"topic": "dining"},
-    ),
-)
-
-
 def _build_tools(*, offline: bool) -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(ClockTool())
@@ -126,14 +94,19 @@ def _build_tools(*, offline: bool) -> ToolRegistry:
 
 
 def _build_knowledge_base() -> KnowledgeBase:
-    """Build an in-memory KnowledgeBase seeded with the sample corpus.
+    """Build an in-memory KnowledgeBase seeded from the registered Sources.
 
-    Indexing here loads the BGE embedding model, which is why the tool
-    is registered online only — offline GUI development never reaches
-    this path.
+    Pulls chunks from every `Source` in `build_source_registry()` so the
+    knowledge base retrieves over the same authoritative content the
+    dashboard shows. Indexing here loads the BGE embedding model, which
+    is why the tool is registered online only — offline GUI development
+    never reaches this path.
     """
     knowledge_base = KnowledgeBase()
-    knowledge_base.index(StaticSource(_SAMPLE_CHUNKS).fetch())
+    chunks: list[Chunk] = []
+    for source in build_source_registry().all():
+        chunks.extend(source.fetch())
+    knowledge_base.index(chunks)
     return knowledge_base
 
 
