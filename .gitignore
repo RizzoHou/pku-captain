@@ -22,6 +22,9 @@ secrets/
 # CLI conversation dumps (/save)
 debug/
 
+# Local app data (reminders, etc.)
+data/
+
 # Local code-audit artifacts
 docs/code_audit_panel.html
 
