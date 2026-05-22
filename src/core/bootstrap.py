@@ -11,8 +11,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..llm import DeepSeekProvider, EchoLLMProvider, LLMProvider
-from ..rag import CalendarSource, DeanSource, SourceRegistry
-from ..tools import ClockTool, PKU3bAssignmentsTool, WeatherTool
+from ..rag import (
+    CalendarSource,
+    Chunk,
+    DeanSource,
+    KnowledgeBase,
+    SourceRegistry,
+    StaticSource,
+)
+from ..tools import ClockTool, KnowledgeSearchTool, PKU3bAssignmentsTool, WeatherTool
 from ..tools.base import ToolRegistry
 from ..workflows import HelloWorkflow
 from ..workflows.base import WorkflowRegistry
@@ -64,13 +71,57 @@ def _build_llm(*, offline: bool) -> LLMProvider:
     return DeepSeekProvider(api_key=api_key)
 
 
+# Built-in seed corpus for the knowledge base. The captain swaps in real
+# sources (DeanSource, CalendarSource) during integration; until then this
+# gives KnowledgeSearchTool something concrete to retrieve over.
+_SAMPLE_CHUNKS: tuple[Chunk, ...] = (
+    Chunk(
+        source_name="sample",
+        identifier="calendar-2026-spring",
+        text="北京大学2026年春季学期：2月23日开学，6月22日至7月3日为考试周，7月4日起放暑假。",
+        metadata={"topic": "academic_calendar"},
+    ),
+    Chunk(
+        source_name="sample",
+        identifier="library-hours",
+        text="北京大学图书馆开放时间：周一至周日7:00至22:30，考试周延长至23:30闭馆。",
+        metadata={"topic": "library"},
+    ),
+    Chunk(
+        source_name="sample",
+        identifier="course-drop",
+        text="退课办理：开学后两周内可通过教务系统自由退课，逾期需经院系审批。",
+        metadata={"topic": "registration"},
+    ),
+    Chunk(
+        source_name="sample",
+        identifier="dining-hall",
+        text="学校食堂用餐：燕南、农园、家园等食堂支持校园卡和手机扫码支付，早餐7:00开始供应。",
+        metadata={"topic": "dining"},
+    ),
+)
+
+
 def _build_tools(*, offline: bool) -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(ClockTool())
     if not offline:
         registry.register(PKU3bAssignmentsTool())
         registry.register(WeatherTool())
+        registry.register(KnowledgeSearchTool(_build_knowledge_base()))
     return registry
+
+
+def _build_knowledge_base() -> KnowledgeBase:
+    """Build an in-memory KnowledgeBase seeded with the sample corpus.
+
+    Indexing here loads the BGE embedding model, which is why the tool
+    is registered online only — offline GUI development never reaches
+    this path.
+    """
+    knowledge_base = KnowledgeBase()
+    knowledge_base.index(StaticSource(_SAMPLE_CHUNKS).fetch())
+    return knowledge_base
 
 
 def _build_workflows(tools: ToolRegistry) -> WorkflowRegistry:

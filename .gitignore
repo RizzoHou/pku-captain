@@ -22,6 +22,9 @@ secrets/
 # CLI conversation dumps (/save)
 debug/
 
+# Claude Code worktrees / local state
+.claude/
+
 # Local code-audit artifacts
 docs/code_audit_panel.html
 
