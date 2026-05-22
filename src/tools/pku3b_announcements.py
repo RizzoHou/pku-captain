@@ -142,9 +142,10 @@ class PKU3bAnnouncementsTool(Tool):
     # -- list mode -----------------------------------------------------
 
     def _list(self, args: dict[str, Any]) -> ToolResult:
-        cli_args = ["announcement", "list"]
+        cli_args = ["announcement"]
         if bool(args.get("force", False)):
             cli_args.append("--force")
+        cli_args.append("list")
         if bool(args.get("all_term", False)):
             cli_args.append("--all-term")
 
@@ -182,7 +183,10 @@ class PKU3bAnnouncementsTool(Tool):
             return ToolResult(
                 success=False, error="announcement_id must be a non-empty string"
             )
-        cli_args = ["announcement", "show", announcement_id]
+        cli_args = ["announcement"]
+        if bool(args.get("force", False)):
+            cli_args.append("--force")
+        cli_args.extend(["show", announcement_id])
         if bool(args.get("all_term", False)):
             cli_args.append("--all-term")
 

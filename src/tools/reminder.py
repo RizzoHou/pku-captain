@@ -64,8 +64,13 @@ class ReminderStore:
     def _load(self) -> list[Reminder]:
         if not self._path.exists():
             return []
-        raw = json.loads(self._path.read_text(encoding="utf-8"))
-        return [Reminder(**item) for item in raw]
+        try:
+            raw = json.loads(self._path.read_text(encoding="utf-8"))
+            return [Reminder(**item) for item in raw]
+        except (json.JSONDecodeError, OSError, TypeError):
+            # Corrupt or unreadable store: start clean rather than crash
+            # the tool. A subsequent _save() overwrites the bad file.
+            return []
 
     def _save(self, reminders: list[Reminder]) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
