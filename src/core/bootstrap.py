@@ -22,6 +22,7 @@ from ..rag import (
 from ..tools import (
     ClockTool,
     KnowledgeSearchTool,
+    LectureTool,
     MemoryTool,
     PKU3bAssignmentsTool,
     ReminderTool,
@@ -118,6 +119,7 @@ def _build_tools(*, offline: bool) -> ToolRegistry:
         registry.register(PKU3bAssignmentsTool())
         registry.register(WeatherTool())
         registry.register(KnowledgeSearchTool(_build_knowledge_base()))
+        registry.register(LectureTool())
     return registry
 
 
