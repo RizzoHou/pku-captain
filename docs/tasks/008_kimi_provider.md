@@ -45,3 +45,26 @@ Independent task.
 - **Do not** push, **do not** merge into main, **do not** open a PR — the captain integrates (see `000_delegation_guide.md`).
 - **Do not** tick `docs/roadmap_zh.md`.
 - Ensure all changes are committed before finishing.
+
+## Implementation notes
+
+For the captain wiring a vision call site during integration:
+
+- **Base URL**: `https://api.moonshot.cn/v1` — Kimi (Moonshot AI) exposes an OpenAI-compatible API, so the request/response shape matches `DeepSeekProvider` (`POST /chat/completions`, `Bearer` auth). Override `base_url` for the international endpoint (`https://api.moonshot.ai/v1`) if needed.
+- **Model**: defaults to `moonshot-v1-8k-vision-preview` (vision-capable, 8k context). Alternatives: `moonshot-v1-32k-vision-preview`, `moonshot-v1-128k-vision-preview` for larger context, or `kimi-latest` which auto-selects context and also accepts images. Pass via the `model=` constructor arg.
+- **No `reasoning_content`**: Kimi has no DeepSeek-style thinking mode. `KimiProvider` neither sends nor parses it; `ChatResponse.reasoning_content` is always `None`.
+- **Multimodal message format**: the base `ChatMessage.content` is typed `str`, but for a vision turn the caller passes a *list* of content parts as `content` (Python annotations are not enforced at runtime). Build parts with the module helpers `text_part(str)` and `image_part(url)`, where `url` is a remote URL or a `data:image/<fmt>;base64,<...>` URI. Example:
+
+  ```python
+  from src.llm import ChatMessage, KimiProvider, image_part, text_part
+
+  msg = ChatMessage(
+      role="user",
+      content=[image_part("data:image/jpeg;base64,..."), text_part("What's in this image?")],
+  )
+  KimiProvider(api_key).chat([msg])
+  ```
+
+  `_to_api_message` forwards a list `content` unchanged for `system`/`user` roles; a plain-`str` `content` is sent as-is. This keeps the integration contract's `ChatMessage` unchanged — no `base.py` edit — while still supporting Kimi's OpenAI-style `{"type": "image_url", "image_url": {"url": ...}}` parts.
+- **API key**: `secrets/kimi_key.txt` (the `secrets/` directory is gitignored). Load it the same way the smoke script loads the DeepSeek key.
+- **Errors**: non-2xx responses raise `KimiAPIError` (subclass of `RuntimeError`), mirroring `DeepSeekAPIError`.
