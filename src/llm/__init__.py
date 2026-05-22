@@ -7,6 +7,7 @@ from .base import (
 )
 from .deepseek import DeepSeekAPIError, DeepSeekProvider
 from .echo import EchoLLMProvider
+from .kimi import KimiAPIError, KimiProvider, image_part, text_part
 
 __all__ = [
     "ChatMessage",
@@ -14,7 +15,11 @@ __all__ = [
     "DeepSeekAPIError",
     "DeepSeekProvider",
     "EchoLLMProvider",
+    "KimiAPIError",
+    "KimiProvider",
     "LLMProvider",
     "LLMProviderRegistry",
     "ToolCall",
+    "image_part",
+    "text_part",
 ]
