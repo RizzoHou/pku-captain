@@ -1,54 +1,54 @@
-# 任务 007 — `MorningBriefingWorkflow`
+# Task 007 — `MorningBriefingWorkflow`
 
-> 委派给 worktree Claude。动手前先读 `CLAUDE.md` 与 `docs/integration_contract_zh.md`。
+> Delegated to a worktree Claude. Before starting, read `CLAUDE.md` and `docs/integration_contract_zh.md`.
 >
-> **B 波任务**：本任务编排任务 005（`LectureTool`）、006（`PKU3bAnnouncementsTool`）产出的工具。委派本任务前，005、006（建议加 001）应已合并进 `main` —— 否则你的 worktree 里这些工具不存在，无法端到端自测。
+> **Wave B task**: this orchestrates the tools produced by task 005 (`LectureTool`) and 006 (`PKU3bAnnouncementsTool`). Before delegating this task, 005 and 006 (and ideally 001) should already be merged into `main` — otherwise those tools do not exist in this worktree and the workflow cannot be self-tested end-to-end.
 
-## 目标
+## Goal
 
-完整实现 `MorningBriefingWorkflow` —— 把多个工具的结果合成一份「晨间简报」：今日 DDL、课程通知、近期讲座、天气。属核心功能 #4 多步骤工作流。
+Fully implement `MorningBriefingWorkflow` — compose the results of multiple tools into a "morning briefing": today's DDLs, course announcements, recent lectures, weather. Part of core feature #4, multi-step workflows.
 
-## 背景
+## Background
 
-`Workflow` 抽象基类在 `src/workflows/base.py`：构造时收一个 `ToolRegistry`（存为 `self.tools`），实现 `run()` 返回 `WorkflowResult`（`success / summary / details / error`）。参考子类 `src/workflows/hello.py`（`HelloWorkflow`）演示了最简的「取一个工具 → 包成结果」。本任务把它扩展成多工具编排。
+The `Workflow` abstract base class is in `src/workflows/base.py`: it takes a `ToolRegistry` at construction (stored as `self.tools`) and implements `run()` returning a `WorkflowResult` (`success / summary / details / error`). The reference subclass `src/workflows/hello.py` (`HelloWorkflow`) shows the simplest "call one tool → wrap the result" shape. This task extends that into multi-tool orchestration.
 
-可用工具（按 `name` 从 `self.tools` 取）：
+Available tools (fetch by `name` from `self.tools`):
 
-- `pku3b_assignments` —— 作业 / DDL（已存在）。
-- `weather` —— 天气（已存在）。
-- `pku3b_announcements` —— 课程通知（任务 006）。
-- `lecture` —— 讲座（任务 005）。
-- `clock` —— 当前时间（已存在）。
+- `pku3b_assignments` — assignments / DDLs (already exists).
+- `weather` — weather (already exists).
+- `pku3b_announcements` — course announcements (task 006).
+- `lecture` — lectures (task 005).
+- `clock` — current time (already exists).
 
-## 交付物
+## Deliverables
 
-- 新建 `src/workflows/morning_briefing.py` —— `MorningBriefingWorkflow(Workflow)`。
-- 修改 `src/workflows/__init__.py` —— 导出 `MorningBriefingWorkflow`。
-- 修改 `src/core/bootstrap.py` —— 在 `_build_workflows()` 注册 `MorningBriefingWorkflow`。
+- New file `src/workflows/morning_briefing.py` — `MorningBriefingWorkflow(Workflow)`.
+- Edit `src/workflows/__init__.py` — export `MorningBriefingWorkflow`.
+- Edit `src/core/bootstrap.py` — register `MorningBriefingWorkflow` in `_build_workflows()`.
 
-## 实现要求
+## Implementation requirements
 
-- `run()` 依次调用上述工具的 `invoke()`，把结果聚合进 `WorkflowResult`：`summary` 是一段人类可读的中文简报，`details` 按工具名分键存原始结果。
-- **优雅降级**：用 `self.tools` 取工具前先判断是否注册（`offline` 模式下 `weather` / `pku3b_*` / `lecture` 都不在）；某个工具缺失或 `invoke()` 返回 `success=False` 时，跳过该板块并在简报里注明，**不要**让整个工作流失败。只有全部数据源都拿不到时才返回 `success=False`。
-- `ToolRegistry` 只有 `get(name)`(命中失败会 `KeyError`)、`all()`、`get`。判断是否存在可用 `any(t.name == "lecture" for t in self.tools.all())` 之类的方式。
-- subclass + register 模式；模块导入零副作用。
-- 「时间感知」可借 `clock` 工具拿当前日期，用于筛「今日」DDL / 「近期」讲座。
+- `run()` calls the tools above via `invoke()` in turn and aggregates results into a `WorkflowResult`: `summary` is a human-readable briefing, `details` stores the raw results keyed by tool name.
+- **Graceful degradation**: before fetching a tool from `self.tools`, check whether it is registered (in `offline` mode `weather` / `pku3b_*` / `lecture` are all absent). If a tool is missing or its `invoke()` returns `success=False`, skip that section and note it in the briefing — **do not** fail the whole workflow. Return `success=False` only when no data source at all is reachable.
+- `ToolRegistry` exposes `get(name)` (raises `KeyError` on a miss), `all()`, and `register()`. Check existence with something like `any(t.name == "lecture" for t in self.tools.all())`.
+- Subclass + register pattern; modules side-effect-free on import.
+- For time-awareness, use the `clock` tool to get the current date, then filter "today's" DDLs and "recent" lectures.
 
-## 依赖
+## Dependencies
 
-依赖任务 005、006 已合并（建议 001 也已合并）。002 / 003 / 004 与本任务无关。
+Depends on tasks 005 and 006 being merged (task 001 ideally merged too). 002 / 003 / 004 are unrelated to this task.
 
-## 验收
+## Acceptance
 
-- [ ] `find src -name '*.py' -print0 | xargs -0 python -m py_compile` 无报错。
-- [ ] `ruff check src` 通过。
-- [ ] 用一个注册了全部工具的 `ToolRegistry` 构造工作流，`run()` 返回 `success=True` 且 `summary` 含各板块。
-- [ ] 用一个**只注册了部分工具**的 `ToolRegistry` 构造，`run()` 仍优雅返回，缺失板块有注明、不抛异常。
-- [ ] `python -m src.cli --offline` 仍能启动。
+- [ ] `find src -name '*.py' -print0 | xargs -0 python -m py_compile` passes.
+- [ ] `ruff check src` passes.
+- [ ] Constructing the workflow with a `ToolRegistry` that has all tools registered, `run()` returns `success=True` and `summary` includes every section.
+- [ ] Constructing it with a `ToolRegistry` that has **only some tools** registered, `run()` still returns gracefully — missing sections are noted, no exception raised.
+- [ ] `python -m src.cli --offline` still starts.
 
-## 提交与边界
+## Commit and boundaries
 
-- 用 Conventional Commits 提交到**本 worktree 分支**。
-- **不要** push、**不要** merge 回 main、**不要**开 PR —— 整合由 captain 完成（见 `000_delegation_guide.md`）。
-- **不要**勾选 `docs/roadmap_zh.md`。
-- 收尾前确保所有改动已提交。
+- Commit to **this worktree branch** using Conventional Commits.
+- **Do not** push, **do not** merge into main, **do not** open a PR — the captain integrates (see `000_delegation_guide.md`).
+- **Do not** tick `docs/roadmap_zh.md`.
+- Ensure all changes are committed before finishing.

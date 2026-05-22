@@ -1,43 +1,43 @@
-# 任务 005 — `LectureTool`
+# Task 005 — `LectureTool`
 
-> 委派给 worktree Claude。动手前先读 `CLAUDE.md` 与 `docs/integration_contract_zh.md`。
+> Delegated to a worktree Claude. Before starting, read `CLAUDE.md` and `docs/integration_contract_zh.md`.
 
-## 目标
+## Goal
 
-实现 `LectureTool` —— 让 agent 能查询北大近期讲座信息（标题、时间、地点、主讲人）。属核心功能 #3 工具集的一员，也是 `MorningBriefingWorkflow`（任务 007）的数据来源之一。
+Implement `LectureTool` — letting the agent query recent PKU lecture information (title, time, location, speaker). Part of the core feature #3 tool set, and a data source for `MorningBriefingWorkflow` (task 007).
 
-## 背景
+## Background
 
-`Tool` 抽象基类在 `src/tools/base.py`，网络型参考子类见 `src/tools/weather.py`（`requests`、超时、`requests.RequestException` 兜底成 `ToolResult(success=False, ...)`）。
+The `Tool` abstract base class is in `src/tools/base.py`; the network-backed reference subclass is `src/tools/weather.py` (`requests`, timeout, `requests.RequestException` caught and turned into `ToolResult(success=False, ...)`).
 
-## 交付物
+## Deliverables
 
-- 新建 `src/tools/lecture.py` —— `LectureTool(Tool)`。
-- 修改 `src/tools/__init__.py` —— 导出 `LectureTool`。
-- 修改 `src/core/bootstrap.py` —— 在 `_build_tools()` 的 `if not offline:` 分支注册 `LectureTool`（联网工具，离线子集不含它）。
+- New file `src/tools/lecture.py` — `LectureTool(Tool)`.
+- Edit `src/tools/__init__.py` — export `LectureTool`.
+- Edit `src/core/bootstrap.py` — register `LectureTool` inside the `if not offline:` branch of `_build_tools()` (network-backed tool; not in the offline subset).
 
-## 实现要求
+## Implementation requirements
 
-- `parameters_schema` 可收可选过滤参数（如 `limit`、日期范围 / 关键词）；`invoke()` 返回 `ToolResult`，`data` 为讲座列表，每条含标题、时间、地点、主讲人、链接。
-- 网络错误、超时、空结果都要兜底成 `ToolResult(success=False, error=...)` 或 `success=True` + 空列表，不要让异常冒泡（参考 `WeatherTool` 的 `try/except`）。
-- 数据源自行调研北大讲座信息的公开来源。**若找不到稳定可用的公开接口**：先把工具实现为读取仓库内一份固定 JSON（保留 `Tool` 接口与 `parameters_schema` 不变），并在本文件「实现备注」处写明所用数据源与限制，captain 后续接真实源。功能完整性优先于数据真实性。
-- subclass + register 模式；模块导入零副作用；`invoke()` 线程安全（集成契约 §5）。
+- `parameters_schema` may take optional filter parameters (e.g. `limit`, date range / keyword); `invoke()` returns a `ToolResult` whose `data` is a list of lectures, each with title, time, location, speaker, link.
+- Network errors, timeouts, and empty results must all be handled into `ToolResult(success=False, error=...)` or `success=True` + empty list — do not let exceptions propagate (see `WeatherTool`'s `try/except`).
+- Research the public source for PKU lecture information yourself. **If no stable public interface is available**: implement the tool to read a fixed JSON file checked into the repo (keep the `Tool` interface and `parameters_schema` unchanged), and record the data source used and its limitations under an "Implementation notes" section in this file — the captain wires the real source later. Feature completeness takes priority over data freshness.
+- Subclass + register pattern; modules side-effect-free on import; `invoke()` thread-safe (integration contract §5).
 
-## 依赖
+## Dependencies
 
-独立任务。任务 007 会编排本工具，但本任务不依赖 007。
+Independent task. Task 007 orchestrates this tool, but this task does not depend on 007.
 
-## 验收
+## Acceptance
 
-- [ ] `find src -name '*.py' -print0 | xargs -0 python -m py_compile` 无报错。
-- [ ] `ruff check src` 通过。
-- [ ] 直接构造 `LectureTool` 并 `invoke({})`，返回结构化讲座列表（或按上面的备选方案）。
-- [ ] 断网 / 数据源不可用时，`invoke()` 返回 `ToolResult`（不抛异常）。
-- [ ] `python -m src.cli --offline` 仍能启动（离线下该工具不注册，属预期）。
+- [ ] `find src -name '*.py' -print0 | xargs -0 python -m py_compile` passes.
+- [ ] `ruff check src` passes.
+- [ ] Constructing `LectureTool` directly and calling `invoke({})` returns a structured lecture list (or the fallback above).
+- [ ] When offline / the data source is unavailable, `invoke()` returns a `ToolResult` (no exception).
+- [ ] `python -m src.cli --offline` still starts (the tool is not registered offline, which is expected).
 
-## 提交与边界
+## Commit and boundaries
 
-- 用 Conventional Commits 提交到**本 worktree 分支**。
-- **不要** push、**不要** merge 回 main、**不要**开 PR —— 整合由 captain 完成（见 `000_delegation_guide.md`）。
-- **不要**勾选 `docs/roadmap_zh.md`。
-- 收尾前确保所有改动已提交。
+- Commit to **this worktree branch** using Conventional Commits.
+- **Do not** push, **do not** merge into main, **do not** open a PR — the captain integrates (see `000_delegation_guide.md`).
+- **Do not** tick `docs/roadmap_zh.md`.
+- Ensure all changes are committed before finishing.

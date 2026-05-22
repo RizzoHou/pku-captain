@@ -1,45 +1,45 @@
-# 任务 004 — `ReminderTool`
+# Task 004 — `ReminderTool`
 
-> 委派给 worktree Claude。动手前先读 `CLAUDE.md` 与 `docs/integration_contract_zh.md`。
+> Delegated to a worktree Claude. Before starting, read `CLAUDE.md` and `docs/integration_contract_zh.md`.
 
-## 目标
+## Goal
 
-实现 `ReminderTool` —— 让 agent 能创建、列出、删除提醒事项（如「明天 10 点交作业」「周五前看讲座」）。属核心功能 #3 工具集的一员。
+Implement `ReminderTool` — letting the agent create, list, and delete reminders (e.g. "submit assignment at 10am tomorrow", "see a lecture before Friday"). Part of the core feature #3 tool set.
 
-## 背景
+## Background
 
-`Tool` 抽象基类在 `src/tools/base.py`，参考子类见 `src/tools/weather.py`（网络型）与 `src/tools/clock.py`（无参型）。`ToolResult` 字段为 `success / data / error`。
+The `Tool` abstract base class is in `src/tools/base.py`; reference subclasses are `src/tools/weather.py` (network-backed) and `src/tools/clock.py` (no-parameter). `ToolResult` has fields `success / data / error`.
 
-## 交付物
+## Deliverables
 
-- 新建 `src/tools/reminder.py` —— `ReminderTool(Tool)`，以及背后的提醒持久化存储（可在同文件内放一个小后端类）。
-- 修改 `src/tools/__init__.py` —— 导出 `ReminderTool`。
-- 修改 `src/core/bootstrap.py` —— 在 `_build_tools()` 注册 `ReminderTool`。提醒是纯本地操作，离线安全 —— **在线和离线分支都注册**（与 `ClockTool` 同段，不要放进 `if not offline:`）。
-- 若新增数据文件目录（如 `data/`），把它加进 `.gitignore`。
+- New file `src/tools/reminder.py` — `ReminderTool(Tool)`, plus the reminder persistence store (a small backend class in the same file is fine).
+- Edit `src/tools/__init__.py` — export `ReminderTool`.
+- Edit `src/core/bootstrap.py` — register `ReminderTool` in `_build_tools()`. Reminders are a purely local operation and offline-safe — **register it in both the online and offline branches** (alongside `ClockTool`, not inside `if not offline:`).
+- If you add a new data directory (e.g. `data/`), add it to `.gitignore`.
 
-## 实现要求
+## Implementation requirements
 
-- 提醒条目至少含：文本、触发时间（ISO-8601）、创建时间、完成 / 未完成状态。持久化到仓库内一个 gitignored 路径（如 `data/reminders.json`）。
-- `ReminderTool` 用 `action` 参数分发 `add` / `list` / `done` / `delete`，`parameters_schema` 明确每种 action 的参数；时间参数收 ISO-8601 字符串。`invoke()` 返回 `ToolResult`。
-- v1 不要求后台定时弹通知 —— 只做存储 + 查询；「到点提醒」的触达是后续议题。`list` 应支持「只看未来的 / 未完成的」。
-- subclass + register 模式；模块导入零副作用；`invoke()` 线程安全（集成契约 §5）。
-- 注意与任务 003（记忆）职责区分：记忆存**长期偏好**，提醒存**带时间的待办**。两者独立，各自持久化。
+- A reminder entry has at least: text, trigger time (ISO-8601), creation time, done/not-done status. Persist to a gitignored path inside the repo (e.g. `data/reminders.json`).
+- `ReminderTool` dispatches on an `action` parameter — `add` / `list` / `done` / `delete` — with `parameters_schema` clearly describing each action's parameters; time parameters take ISO-8601 strings. `invoke()` returns a `ToolResult`.
+- v1 does not require a background timer firing notifications — only storage + querying; actual "fire on time" delivery is a later concern. `list` should support filtering to "future only / not-done only".
+- Subclass + register pattern; modules side-effect-free on import; `invoke()` thread-safe (integration contract §5).
+- Note the separation from task 003 (memory): memory stores **long-term preferences**, reminders store **time-bound to-dos**. They are independent and each persists separately.
 
-## 依赖
+## Dependencies
 
-独立任务。
+Independent task.
 
-## 验收
+## Acceptance
 
-- [ ] `find src -name '*.py' -print0 | xargs -0 python -m py_compile` 无报错。
-- [ ] `ruff check src` 通过。
-- [ ] `add` 一条提醒 → 新建工具实例 → `list` 能读回（验证持久化）。
-- [ ] `add` / `list` / `done` / `delete` 各 `invoke()` 一次均返回预期结果。
-- [ ] `python -m src.cli --offline` 启动后，`ReminderTool` 出现在工具列表里。
+- [ ] `find src -name '*.py' -print0 | xargs -0 python -m py_compile` passes.
+- [ ] `ruff check src` passes.
+- [ ] `add` a reminder → construct a fresh tool instance → `list` reads it back (verifies persistence).
+- [ ] `invoke()` each of `add` / `list` / `done` / `delete` once, with expected results.
+- [ ] After `python -m src.cli --offline` starts, `ReminderTool` appears in the tool list.
 
-## 提交与边界
+## Commit and boundaries
 
-- 用 Conventional Commits 提交到**本 worktree 分支**。
-- **不要** push、**不要** merge 回 main、**不要**开 PR —— 整合由 captain 完成（见 `000_delegation_guide.md`）。
-- **不要**勾选 `docs/roadmap_zh.md`。
-- 收尾前确保所有改动已提交。
+- Commit to **this worktree branch** using Conventional Commits.
+- **Do not** push, **do not** merge into main, **do not** open a PR — the captain integrates (see `000_delegation_guide.md`).
+- **Do not** tick `docs/roadmap_zh.md`.
+- Ensure all changes are committed before finishing.

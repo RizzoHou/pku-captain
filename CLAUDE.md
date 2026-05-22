@@ -52,7 +52,7 @@ Plan scope so the 06-06 demo is achievable; polish belongs in the 06-06 → 07-0
 
 - **Stack** is now committed: Python 3.11+ / PyQt6 / DeepSeek (chat) + Kimi (vision) via `LLMProvider` abstraction / BGE-large-zh embeddings / SQLite + numpy for vectors / `pku3b` Rust CLI as subprocess.
 - **OOP is the point of the course.** New tools, workflows, LLMs, or sources go in as subclasses of the existing ABCs in `src/{tools,workflows,llm}/base.py` and `src/rag/source.py`, and register against the matching `*Registry` at the call site (keep modules side-effect-free — no auto-registration at import). Resist ad-hoc dispatch — the "subclass + register" pattern is the rubric showcase.
-- **Chinese is the primary language** for product copy, design docs, and likely most in-code comments and commit-body prose. Code identifiers should stay English. Don't translate the existing Chinese docs unprompted.
+- **Default to English** — interaction, operational docs (`docs/tasks/`), commit messages, in-code comments, code identifiers. **Chinese** is reserved for end-user-facing product copy (the app's users are PKU students) and the existing `*_zh.md` design docs (`design_reference_zh`, `roadmap_zh`, `schedule_zh`, `integration_contract_zh`, `setup_zh`) — don't translate those unprompted.
 
 ## Team and coordination
 

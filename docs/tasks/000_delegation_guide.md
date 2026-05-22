@@ -1,97 +1,117 @@
-# Week 2 后端任务委派说明
+# Week 2 Backend Task Delegation Guide
 
-本目录下的 `001`–`008` 是可独立交付的任务说明，每个用于委派给一个 **worktree Claude**。本文件说明如何委派与整合。读者是 captain（`RizzoHou`），不是 worktree Claude。
+The `001`–`008` files in this directory are self-contained task briefs, each meant to be delegated to one **worktree Claude**. This file explains how to delegate and integrate them. Audience: the captain (`RizzoHou`), not the worktree Claudes.
 
-## 任务清单与依赖
+## Task list and dependencies
 
-| 编号 | 任务 | 依赖 | 可选 |
+| # | Task | Depends on | Optional |
 | --- | --- | --- | --- |
-| 001 | `DeanSource` + `CalendarSource`（Source 子类） | 无 | |
-| 002 | RAG 栈：BGE 嵌入器 + `KnowledgeBase` + `KnowledgeSearchTool` | 无 | |
-| 003 | 记忆后端 + `MemoryTool` | 无 | |
-| 004 | `ReminderTool` | 无 | |
-| 005 | `LectureTool` | 无 | |
-| 006 | `PKU3bAnnouncementsTool` | 无 | |
-| 007 | `MorningBriefingWorkflow` | **005、006**（编排其工具）；建议 001 | |
-| 008 | `KimiProvider`（视觉 LLM） | 无 | 可选，削减顺序第 1 位 |
+| 001 | `DeanSource` + `CalendarSource` (Source subclasses) | none | |
+| 002 | RAG stack: BGE embedder + `KnowledgeBase` + `KnowledgeSearchTool` | none | |
+| 003 | Memory backend + `MemoryTool` | none | |
+| 004 | `ReminderTool` | none | |
+| 005 | `LectureTool` | none | |
+| 006 | `PKU3bAnnouncementsTool` | none | |
+| 007 | `MorningBriefingWorkflow` | **005, 006** (orchestrates their tools); 001 recommended | |
+| 008 | `KimiProvider` (vision LLM) | none | optional — cut-list item #1 |
 
-**两波推进**：
+**Two waves:**
 
-- **A 波（001–006、008）**：彼此无依赖，可全部并行委派。
-- **B 波（007）**：编排 005/006 的工具，应在 A 波合并进 `main` 后再委派 —— 否则它写出的工作流引用尚不存在的工具，无法端到端自测。
+- **Wave A (001–006, 008)** — no inter-task dependencies; delegate all in parallel.
+- **Wave B (007)** — orchestrates the tools from 005/006, so delegate it only after Wave A is merged into `main`. Otherwise the workflow it produces references tools that don't exist in its worktree and can't be self-tested end-to-end.
 
-002 内部是 嵌入器 → KnowledgeBase → KnowledgeSearchTool 的顺序链，但由**同一个** worktree Claude 串行完成，对外仍是一个独立任务，没有跨 worktree 依赖。
+002 is internally an embedder → KnowledgeBase → KnowledgeSearchTool chain, but a single worktree Claude completes it serially — it is one independent task with no cross-worktree dependency.
 
-## 委派方式
+## How to delegate
 
-并行或顺序都可以。**关键区别只在于 merge 必须顺序进行**（见下一节），worktree 本身并行跑没有问题。
+Parallel or sequential — both work. The only hard constraint is that **merges must be sequential** (see below); the worktrees themselves can run in parallel.
 
-每个任务开一个 worktree，并**显式命名**。在仓库根目录执行：
+Each task gets its own worktree with an explicit name. Run from the repo root.
+
+### Full command list
+
+**Wave A** — independent; run any or all in parallel, each in its own terminal:
 
 ```bash
 cd /home/ubuntu/projects/pku-captain
-claude --worktree worktree-004-reminder "请阅读并完整实现 docs/tasks/004_reminder_tool.md，按文件末尾的验收清单逐项自检，完成后用 Conventional Commits 提交到当前 worktree 分支。不要 push、不要 merge。"
+
+claude --worktree worktree-001-sources "Read and fully implement docs/tasks/001_source_subclasses.md. Work through the acceptance checklist at the end of the file. Commit to the current worktree branch using Conventional Commits. Do not push, do not merge."
+
+claude --worktree worktree-002-rag-stack "Read and fully implement docs/tasks/002_rag_stack.md. Work through the acceptance checklist at the end of the file. Commit to the current worktree branch using Conventional Commits. Do not push, do not merge."
+
+claude --worktree worktree-003-memory "Read and fully implement docs/tasks/003_memory.md. Work through the acceptance checklist at the end of the file. Commit to the current worktree branch using Conventional Commits. Do not push, do not merge."
+
+claude --worktree worktree-004-reminder "Read and fully implement docs/tasks/004_reminder_tool.md. Work through the acceptance checklist at the end of the file. Commit to the current worktree branch using Conventional Commits. Do not push, do not merge."
+
+claude --worktree worktree-005-lecture "Read and fully implement docs/tasks/005_lecture_tool.md. Work through the acceptance checklist at the end of the file. Commit to the current worktree branch using Conventional Commits. Do not push, do not merge."
+
+claude --worktree worktree-006-announcements "Read and fully implement docs/tasks/006_pku3b_announcements_tool.md. Work through the acceptance checklist at the end of the file. Commit to the current worktree branch using Conventional Commits. Do not push, do not merge."
+
+claude --worktree worktree-008-kimi "Read and fully implement docs/tasks/008_kimi_provider.md. Work through the acceptance checklist at the end of the file. Commit to the current worktree branch using Conventional Commits. Do not push, do not merge."
 ```
 
-把 `worktree-004-reminder` 与 `004_reminder_tool.md` 换成目标任务即可。每个任务一条命令、一个终端。
-
-- worktree 名建议统一为 `worktree-NNN-<slug>`，分支名随之可预测，便于后续 merge。
-- **必须给 `--worktree` 一个名字**：`--worktree` 的名字是可选参数，若写成 `claude --worktree "请阅读…"`，那段 prompt 会被当成 worktree 名。名字与 prompt 要分开两个参数。
-- 名字以 `worktree-` 开头时，worktree Claude 能确认自己「在 worktree 中」，从而遵守「只提交、不 push」规则。
-
-- **并行**：在多个终端同时跑多条上述命令（A 波 7 个任务可一次全开）。
-- **顺序**：一次跑一条，等该 Claude 跑完并 merge 后再开下一个。
-
-说明：
-
-- 任务说明文件已在 `main` 上，每个 worktree 都能直接读到 —— 无需手动拷贝。
-- 每个 worktree Claude 会自建 `.venv` 并安装依赖（`.venv/`、`secrets/` 是 gitignored，不会带进 worktree）。因此 worktree 里**只能跑离线校验**（`python -m src.cli --offline`、`py_compile`、`ruff`）；在线 agent 需要 DeepSeek key，跑不了，任务说明已据此设计验收项。
-- **先试跑一个再铺开**：第一次委派，建议先单独跑任务 004（最小、完全独立、不联网），确认 worktree Claude 能读到任务文件、按验收项自检、并停在「只提交本分支、不 push」的边界上；确认无误后再并行铺开其余任务。
-
-## 整合（merge）
-
-worktree Claude 只提交到自己的分支，**不 push、不 merge**（这是 worktree 规则）。整合由你来做。
-
-**按编号顺序 merge**（001 → 008）。007 在 005/006 之后，顺序天然满足。
+**Wave B** — run only after Wave A is merged into `main`:
 
 ```bash
 cd /home/ubuntu/projects/pku-captain
-git worktree list            # 列出各 worktree 路径与分支名
+
+claude --worktree worktree-007-morning-briefing "Read and fully implement docs/tasks/007_morning_briefing_workflow.md. Work through the acceptance checklist at the end of the file. Commit to the current worktree branch using Conventional Commits. Do not push, do not merge."
+```
+
+For sequential delegation, run one command at a time and merge its branch before starting the next.
+
+Notes:
+
+- **The `--worktree` name is mandatory.** Its name argument is optional to the flag, so `claude --worktree "Read ..."` swallows the prompt as the worktree name. Always pass name and prompt as two separate arguments.
+- A `worktree-` prefixed name lets the worktree Claude confirm it is "in a worktree" and follow the commit-only / no-push rule.
+- Task files are already on `main`, so every worktree reads them directly — no manual copying.
+- Each worktree Claude builds its own `.venv` and installs dependencies (`.venv/` and `secrets/` are gitignored and not copied into a worktree). A worktree can therefore only run **offline checks** (`python -m src.cli --offline`, `py_compile`, `ruff`); the online agent needs a DeepSeek key and won't run. The task briefs are written around this.
+- **Dry-run one before fanning out.** For the first delegation, run task 004 alone (smallest, fully independent, no network). Confirm the worktree Claude reads its brief, self-checks against the acceptance list, and stops at the commit-only / no-push boundary. Then fan out the rest.
+
+## Integration (merge)
+
+A worktree Claude commits only to its own branch — it does not push or merge (the worktree rule). Integration is the captain's job.
+
+**Merge in numeric order (001 → 008).** 007 lands after 005/006, which numeric order already satisfies.
+
+```bash
+cd /home/ubuntu/projects/pku-captain
+git worktree list            # show each worktree path and branch name
 git checkout main
 
 git merge worktree-001-sources
-find src -name '*.py' -print0 | xargs -0 python -m py_compile   # 每次 merge 后校验
+find src -name '*.py' -print0 | xargs -0 python -m py_compile   # verify after each merge
 git merge worktree-002-rag-stack
 find src -name '*.py' -print0 | xargs -0 python -m py_compile
-# ... 依次合并 003–008（分支名以实际 git worktree list 输出为准）
+# ... merge 003–008 in turn (branch names per `git worktree list` output)
 ```
 
-### 共享文件冲突
+### Shared-file conflicts
 
-worktree Claude 会改这些共享文件来注册自己的产物：
+Worktree Claudes touch these shared files to register their work:
 
-- `src/core/bootstrap.py` —— 注册新 Tool / Workflow / Source。
-- `src/{tools,rag,workflows,llm}/__init__.py` —— 导出新符号。
-- `pyproject.toml` —— 仅 002 会加嵌入相关依赖。
+- `src/core/bootstrap.py` — registers new Tool / Workflow / Source.
+- `src/{tools,rag,workflows,llm}/__init__.py` — exports new symbols.
+- `pyproject.toml` — only 002 adds embedding dependencies.
 
-并行 merge 时这几个文件会冲突。冲突**全是 additive**（双方各加新行，没有改同一行的语义），解决方式恒定：**两边新增的行都保留**。按编号顺序 merge 可把多数冲突降为 git 自动合并。
+Parallel merges will conflict on these. The conflicts are **purely additive** (each side adds new lines; no line's meaning is changed), so the resolution is always the same: **keep the new lines from both sides**. Merging in numeric order lets git auto-resolve most of them.
 
-worktree Claude **不会**改 `docs/roadmap_zh.md` —— roadmap 由 captain 维护。全部合并后由你勾选对应复选框并追加 involver。
+Worktree Claudes do **not** edit `docs/roadmap_zh.md` — the roadmap is captain-maintained. After all merges, the captain ticks the checkboxes and appends the involver handle.
 
-## 收尾
+## Wrap-up
 
-全部合并后：
+After all branches are merged:
 
 ```bash
 find src -name '*.py' -print0 | xargs -0 python -m py_compile
 ruff check src
-python -m src.cli --offline          # 离线 REPL 应能启动
-python -m src.cli                    # 在线（需 secrets/deepseek_key.txt）
-python scripts/smoke_deepseek.py     # 端到端探针
+python -m src.cli --offline          # offline REPL should start
+python -m src.cli                    # online (needs secrets/deepseek_key.txt)
+python scripts/smoke_deepseek.py     # end-to-end probe
 ```
 
-勾选 `docs/roadmap_zh.md` 第 2 周已完成条目并追加 `— @RizzoHou`，提交后 `git push`（main 已预授权）。清理 worktree：
+Tick the completed Week 2 items in `docs/roadmap_zh.md` and append `— @RizzoHou`, then `git push` (main is pre-authorized). Clean up worktrees:
 
 ```bash
-git worktree remove <worktree-path>   # 对每个 worktree
+git worktree remove <worktree-path>   # for each worktree
 ```

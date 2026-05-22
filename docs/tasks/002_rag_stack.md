@@ -1,53 +1,53 @@
-# 任务 002 — RAG 栈：BGE 嵌入器 + `KnowledgeBase` + `KnowledgeSearchTool`
+# Task 002 — RAG stack: BGE embedder + `KnowledgeBase` + `KnowledgeSearchTool`
 
-> 委派给 worktree Claude。动手前先读 `CLAUDE.md` 与 `docs/integration_contract_zh.md`。
+> Delegated to a worktree Claude. Before starting, read `CLAUDE.md` and `docs/integration_contract_zh.md`.
 
-## 目标
+## Goal
 
-实现知识库检索的完整一条链，对外暴露为一个可被 agent 调用的工具：
+Implement the full knowledge-base retrieval chain, exposed as a tool the agent can call:
 
-1. **BGE 嵌入器** —— 用 `BAAI/bge-large-zh-v1.5` 把中文文本编码成向量。
-2. **`KnowledgeBase`** —— SQLite 存 chunk + 向量，numpy 做余弦相似度检索。
-3. **`KnowledgeSearchTool`** —— `Tool` 子类，把检索能力暴露给 LLM。
+1. **BGE embedder** — encode Chinese text into vectors with `BAAI/bge-large-zh-v1.5`.
+2. **`KnowledgeBase`** — store chunks + vectors in SQLite, do cosine similarity retrieval with numpy.
+3. **`KnowledgeSearchTool`** — a `Tool` subclass exposing retrieval to the LLM.
 
-这三件由你一个人按上述顺序串行完成；对外是一个独立任务。
+Complete all three serially in this order; together they are one independent task.
 
-## 背景
+## Background
 
-`Tool` 抽象基类在 `src/tools/base.py`，参考子类见 `src/tools/weather.py`。`Source` / `Chunk` 在 `src/rag/source.py`，离线参考源 `StaticSource` 在 `src/rag/static.py`。技术栈已定：SQLite + numpy 存向量、BGE-large-zh 嵌入。
+The `Tool` abstract base class is in `src/tools/base.py`; a reference subclass is `src/tools/weather.py`. `Source` / `Chunk` are in `src/rag/source.py`; the offline reference source `StaticSource` is in `src/rag/static.py`. The stack is fixed: SQLite + numpy for vectors, BGE-large-zh for embeddings.
 
-## 交付物
+## Deliverables
 
-- 新建 `src/rag/embedder.py` —— BGE 嵌入器（建议一个小类，`encode(texts) -> np.ndarray`）。
-- 新建 `src/rag/knowledge_base.py` —— `KnowledgeBase`：建表、`index(chunks)`、`search(query, top_k) -> list[结果]`。
-- 新建 `src/tools/knowledge_search.py` —— `KnowledgeSearchTool(Tool)`。
-- 修改 `src/rag/__init__.py`、`src/tools/__init__.py` —— 导出新符号。
-- 修改 `src/core/bootstrap.py` —— 在 `_build_tools()` 的 `if not offline:` 分支注册 `KnowledgeSearchTool`（嵌入模型加载慢，离线 GUI 开发不应触发，故仅在线注册）。
-- 修改 `pyproject.toml` —— 加嵌入所需依赖（如 `sentence-transformers` 或 `transformers`+`torch`），放进 `dependencies`。
+- New file `src/rag/embedder.py` — the BGE embedder (a small class, e.g. `encode(texts) -> np.ndarray`).
+- New file `src/rag/knowledge_base.py` — `KnowledgeBase`: schema creation, `index(chunks)`, `search(query, top_k) -> list[result]`.
+- New file `src/tools/knowledge_search.py` — `KnowledgeSearchTool(Tool)`.
+- Edit `src/rag/__init__.py` and `src/tools/__init__.py` — export the new symbols.
+- Edit `src/core/bootstrap.py` — register `KnowledgeSearchTool` inside the `if not offline:` branch of `_build_tools()` (the embedding model is slow to load; offline GUI development should not trigger it, so register online only).
+- Edit `pyproject.toml` — add the embedding dependency (e.g. `sentence-transformers`, or `transformers` + `torch`) to `dependencies`.
 
-## 实现要求
+## Implementation requirements
 
-- 嵌入模型**懒加载**：首次 `encode()` 时再加载权重，不要在模块导入或对象构造时加载（首次加载耗时 / 占内存是已登记风险）。
-- `KnowledgeBase` 用 SQLite 持久化 chunk 文本、metadata、向量（向量可存 BLOB）；检索时载入 numpy 做余弦相似度。SHA-256 增量差分是最终提交窗口的事，本任务做到「能 index、能 search」即可。
-- `KnowledgeSearchTool`：`parameters_schema` 收 `query`（必填）与可选 `top_k`；`invoke()` 返回 `ToolResult`，`data` 为命中 chunk 列表（含文本、来源、相似度分数）。
-- subclass + register 模式；模块导入零副作用。
-- **用 `StaticSource` 自测，不要依赖任务 001。** bootstrap 里 `KnowledgeSearchTool` 背后的 `KnowledgeBase` 先用一份内置示例 chunk（或 `StaticSource`）建库即可；captain 会在整合期把 `DeanSource` / `CalendarSource` 接进来。
+- **Lazy-load the embedding model**: load weights on the first `encode()` call, not at module import or object construction (first-load latency / memory footprint is a registered project risk).
+- `KnowledgeBase` persists chunk text, metadata, and vectors in SQLite (vectors can be stored as BLOBs); on retrieval, load into numpy for cosine similarity. SHA-256 incremental diffing is a final-window concern — this task only needs "can index, can search".
+- `KnowledgeSearchTool`: `parameters_schema` takes a required `query` and an optional `top_k`; `invoke()` returns a `ToolResult` whose `data` is the list of hit chunks (with text, source, similarity score).
+- Subclass + register pattern; modules side-effect-free on import.
+- **Self-test with `StaticSource`; do not depend on task 001.** In bootstrap, the `KnowledgeBase` behind `KnowledgeSearchTool` may be built from a small set of built-in sample chunks (or `StaticSource`); the captain wires in `DeanSource` / `CalendarSource` during integration.
 
-## 依赖
+## Dependencies
 
-独立任务。
+Independent task.
 
-## 验收
+## Acceptance
 
-- [ ] `find src -name '*.py' -print0 | xargs -0 python -m py_compile` 无报错。
-- [ ] `ruff check src` 通过。
-- [ ] 能用一批示例 `Chunk` 建库，`KnowledgeBase.search()` 对相关 query 返回合理排序的结果。
-- [ ] 直接构造 `KnowledgeSearchTool` 并 `invoke({"query": ...})` 返回 `success=True`。
-- [ ] `python -m src.cli --offline` 仍能启动（离线下该工具不注册，属预期）。
+- [ ] `find src -name '*.py' -print0 | xargs -0 python -m py_compile` passes.
+- [ ] `ruff check src` passes.
+- [ ] A library can be built from sample `Chunk`s, and `KnowledgeBase.search()` returns reasonably-ranked results for a relevant query.
+- [ ] Constructing `KnowledgeSearchTool` directly and calling `invoke({"query": ...})` returns `success=True`.
+- [ ] `python -m src.cli --offline` still starts (the tool is not registered offline, which is expected).
 
-## 提交与边界
+## Commit and boundaries
 
-- 用 Conventional Commits 提交到**本 worktree 分支**。
-- **不要** push、**不要** merge 回 main、**不要**开 PR —— 整合由 captain 完成（见 `000_delegation_guide.md`）。
-- **不要**勾选 `docs/roadmap_zh.md`。
-- 收尾前确保所有改动已提交。
+- Commit to **this worktree branch** using Conventional Commits.
+- **Do not** push, **do not** merge into main, **do not** open a PR — the captain integrates (see `000_delegation_guide.md`).
+- **Do not** tick `docs/roadmap_zh.md`.
+- Ensure all changes are committed before finishing.

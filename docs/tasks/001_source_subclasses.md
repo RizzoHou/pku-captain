@@ -1,48 +1,48 @@
-# 任务 001 — `DeanSource` + `CalendarSource`（Source 子类）
+# Task 001 — `DeanSource` + `CalendarSource` (Source subclasses)
 
-> 委派给 worktree Claude。动手前先读 `CLAUDE.md` 与 `docs/integration_contract_zh.md` §5。
+> Delegated to a worktree Claude. Before starting, read `CLAUDE.md` and `docs/integration_contract_zh.md` §5.
 
-## 目标
+## Goal
 
-实现两个 `Source` 子类，让 RAG 知识库与仪表盘能从 PKU 官方信息源取数据：
+Implement two `Source` subclasses so the RAG knowledge base and the dashboard can pull data from PKU's official information sources:
 
-- `DeanSource` —— 北大教务部通知 / 公告。
-- `CalendarSource` —— 北大校历（学期周次、假期、考试周等）。
+- `DeanSource` — PKU Dean's Office (教务部) notices / announcements.
+- `CalendarSource` — PKU academic calendar (term weeks, holidays, exam weeks, etc.).
 
-## 背景
+## Background
 
-`Source` 抽象基类与 `SourceRegistry` 已存在于 `src/rag/source.py`，离线参考子类 `StaticSource` 在 `src/rag/static.py`。`Source.fetch()` 返回 `Iterable[Chunk]`，`Chunk` 字段为 `source_name / identifier / text / metadata`。RAG 管线负责下游的哈希、嵌入、存储 —— Source 只管抓取并切成 chunk。
+The `Source` abstract base class and `SourceRegistry` already exist in `src/rag/source.py`; the offline reference subclass `StaticSource` is in `src/rag/static.py`. `Source.fetch()` returns `Iterable[Chunk]`, where `Chunk` has fields `source_name / identifier / text / metadata`. The RAG pipeline owns downstream hashing, embedding, and storage — a Source only fetches and splits content into chunks.
 
-## 交付物
+## Deliverables
 
-- 新建 `src/rag/dean.py` —— `DeanSource(Source)`。
-- 新建 `src/rag/calendar.py` —— `CalendarSource(Source)`。
-- 修改 `src/rag/__init__.py` —— 导出 `DeanSource`、`CalendarSource`。
-- 修改 `src/core/bootstrap.py` —— 新增工厂函数 `build_source_registry() -> SourceRegistry`，在其中 `register()` 这两个 Source。仪表盘（GUI lane）将通过它取 `SourceRegistry`（见集成契约 §5）。
+- New file `src/rag/dean.py` — `DeanSource(Source)`.
+- New file `src/rag/calendar.py` — `CalendarSource(Source)`.
+- Edit `src/rag/__init__.py` — export `DeanSource`, `CalendarSource`.
+- Edit `src/core/bootstrap.py` — add a factory function `build_source_registry() -> SourceRegistry` that `register()`s both Sources. The dashboard (GUI lane) will obtain its `SourceRegistry` through this factory (see integration contract §5).
 
-## 实现要求
+## Implementation requirements
 
-- 继承 `Source`，设 `name`、`refresh_interval`（秒；教务通知建议 ~1h，校历建议 ~24h），实现 `fetch()`。
-- `fetch()` 把抓取内容切成语义合理的 `Chunk`：`identifier` 在源内稳定且唯一（便于下游 SHA 差分），`metadata` 放标题、URL、发布日期等。
-- 网络失败应抛异常或返回空，不要静默吞掉成 `Chunk`。
-- subclass + register 模式；模块导入零副作用 —— 注册只在 `build_source_registry()` 调用点发生。
-- 若某个源没有稳定的公开数据接口，可先实现为读取仓库内固定数据文件（保留 `fetch()` 形态不变），并在本文件「实现备注」处记录，captain 后续接真实源。
+- Subclass `Source`, set `name` and `refresh_interval` (seconds; ~1h for Dean notices, ~24h for the calendar), and implement `fetch()`.
+- `fetch()` splits fetched content into reasonably-sized `Chunk`s: `identifier` must be stable and unique within the source (so downstream SHA diffing works); put title, URL, publish date, etc. in `metadata`.
+- On a network failure, raise or return empty — do not silently swallow the error into a `Chunk`.
+- Subclass + register pattern; modules must be side-effect-free on import — registration happens only at the `build_source_registry()` call site.
+- If a source has no stable public data interface, implement it to read a fixed data file checked into the repo (keep the `fetch()` shape unchanged), and record this under an "Implementation notes" section in this file — the captain wires the real source later.
 
-## 依赖
+## Dependencies
 
-独立任务。不要依赖任务 002 —— 002 用 `StaticSource` 自测。
+Independent task. Do not depend on task 002 — 002 self-tests with `StaticSource`.
 
-## 验收
+## Acceptance
 
-- [ ] `find src -name '*.py' -print0 | xargs -0 python -m py_compile` 无报错。
-- [ ] `ruff check src` 通过。
-- [ ] 能构造 `DeanSource()` / `CalendarSource()` 并调用 `fetch()`，返回非空 `Chunk` 序列（或在数据源不可用时按上面的备选方案）。
-- [ ] `build_source_registry().all()` 返回这两个 Source。
-- [ ] `python -m src.cli --offline` 仍能启动。
+- [ ] `find src -name '*.py' -print0 | xargs -0 python -m py_compile` passes.
+- [ ] `ruff check src` passes.
+- [ ] `DeanSource()` / `CalendarSource()` can be constructed and `fetch()` returns a non-empty `Chunk` sequence (or the fixed-file fallback above when the data source is unavailable).
+- [ ] `build_source_registry().all()` returns both Sources.
+- [ ] `python -m src.cli --offline` still starts.
 
-## 提交与边界
+## Commit and boundaries
 
-- 用 Conventional Commits 提交到**本 worktree 分支**。
-- **不要** push、**不要** merge 回 main、**不要**开 PR —— 整合由 captain 完成（见 `000_delegation_guide.md`）。
-- **不要**勾选 `docs/roadmap_zh.md`。
-- 收尾前确保所有改动已提交，避免 worktree 清理时丢失。
+- Commit to **this worktree branch** using Conventional Commits.
+- **Do not** push, **do not** merge into main, **do not** open a PR — the captain integrates (see `000_delegation_guide.md`).
+- **Do not** tick `docs/roadmap_zh.md`.
+- Ensure all changes are committed before finishing, so nothing is lost when the worktree is cleaned up.

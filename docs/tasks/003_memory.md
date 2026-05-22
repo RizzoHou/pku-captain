@@ -1,49 +1,49 @@
-# 任务 003 — 记忆后端 + `MemoryTool`
+# Task 003 — Memory backend + `MemoryTool`
 
-> 委派给 worktree Claude。动手前先读 `CLAUDE.md` 与 `docs/integration_contract_zh.md`。
+> Delegated to a worktree Claude. Before starting, read `CLAUDE.md` and `docs/integration_contract_zh.md`.
 
-## 目标
+## Goal
 
-实现核心功能 #6「持久化个人偏好记忆」：
+Implement core feature #6, "persistent personal-preference memory":
 
-- **记忆后端** —— 跨会话持久化的偏好存储。
-- **`MemoryTool`** —— `Tool` 子类，让 agent 能读写记忆。
+- **Memory backend** — a preference store that persists across sessions.
+- **`MemoryTool`** — a `Tool` subclass letting the agent read and write memory.
 
-## 背景
+## Background
 
-`Tool` 抽象基类在 `src/tools/base.py`，参考子类见 `src/tools/weather.py`。本任务的记忆是**用户偏好**（如「我住在燕园」「我每天 8 点上课」「提醒用中文」），不是对话历史 —— 对话历史由 `Conversation` 管。
+The `Tool` abstract base class is in `src/tools/base.py`; a reference subclass is `src/tools/weather.py`. Memory here means **user preferences** (e.g. "I live in Yan'an Garden", "I have class at 8am daily", "remind me in Chinese") — not conversation history, which `Conversation` already handles.
 
-## 交付物
+## Deliverables
 
-- 新建 `src/core/memory.py` —— 记忆后端：增 / 删 / 改 / 查偏好条目，持久化到本地文件。（记忆是用户偏好，不是 RAG 检索内容，故归 `src/core`，不要放进 `src/rag`。）
-- 新建 `src/tools/memory.py` —— `MemoryTool(Tool)`。
-- 修改 `src/tools/__init__.py` —— 导出 `MemoryTool`。
-- 修改 `src/core/bootstrap.py` —— 在 `_build_tools()` 注册 `MemoryTool`。记忆是纯本地操作，离线安全 —— **在线和离线分支都注册**（放在 `ClockTool` 那一段，不要放进 `if not offline:`）。
-- 若新增数据文件目录（如 `data/`），把它加进 `.gitignore`。
+- New file `src/core/memory.py` — the memory backend: create / read / update / delete preference entries, persisted to a local file. (Memory is user preferences, not RAG-retrieved content, so it belongs in `src/core`, not `src/rag`.)
+- New file `src/tools/memory.py` — `MemoryTool(Tool)`.
+- Edit `src/tools/__init__.py` — export `MemoryTool`.
+- Edit `src/core/bootstrap.py` — register `MemoryTool` in `_build_tools()`. Memory is a purely local operation and offline-safe — **register it in both the online and offline branches** (alongside `ClockTool`, not inside `if not offline:`).
+- If you add a new data directory (e.g. `data/`), add it to `.gitignore`.
 
-## 实现要求
+## Implementation requirements
 
-- 持久化用 SQLite 或 JSON 均可；路径放在仓库内一个 gitignored 目录（如 `data/memory.json`）。条目建议结构化：key、value、写入时间。
-- `MemoryTool` 用一个 `action` 参数分发 `set` / `get` / `list` / `delete`，`parameters_schema` 明确描述每种 action 的参数；`invoke()` 返回 `ToolResult`。
-- 后端与工具分离：后端类不依赖 `Tool`，可被工作流 / 仪表盘直接复用。
-- subclass + register 模式；模块导入零副作用。线程安全：`invoke()` 不共享可变状态（集成契约 §5 要求 Tool 线程安全）。
-- 「记忆偏好融入响应」是第 3 周的事，本任务只做后端 + 工具。
+- Persist with SQLite or JSON, either is fine; place the file in a gitignored directory inside the repo (e.g. `data/memory.json`). Entries should be structured: key, value, write timestamp.
+- `MemoryTool` dispatches on an `action` parameter — `set` / `get` / `list` / `delete` — with `parameters_schema` clearly describing each action's parameters; `invoke()` returns a `ToolResult`.
+- Keep backend and tool separate: the backend class must not depend on `Tool`, so workflows and the dashboard can reuse it directly.
+- Subclass + register pattern; modules side-effect-free on import. Thread-safety: `invoke()` must not share mutable state (integration contract §5 requires Tools to be thread-safe).
+- "Folding memory into responses" is a Week 3 task — this task only delivers the backend + tool.
 
-## 依赖
+## Dependencies
 
-独立任务。
+Independent task.
 
-## 验收
+## Acceptance
 
-- [ ] `find src -name '*.py' -print0 | xargs -0 python -m py_compile` 无报错。
-- [ ] `ruff check src` 通过。
-- [ ] 写入一条偏好 → 新建后端实例 → 能读回（验证持久化）。
-- [ ] 直接构造 `MemoryTool`，`set` / `get` / `list` / `delete` 各 `invoke()` 一次均返回预期结果。
-- [ ] `python -m src.cli --offline` 启动后，`MemoryTool` 出现在工具列表里。
+- [ ] `find src -name '*.py' -print0 | xargs -0 python -m py_compile` passes.
+- [ ] `ruff check src` passes.
+- [ ] Write a preference → construct a fresh backend instance → read it back (verifies persistence).
+- [ ] Construct `MemoryTool` directly and `invoke()` each of `set` / `get` / `list` / `delete` once, with expected results.
+- [ ] After `python -m src.cli --offline` starts, `MemoryTool` appears in the tool list.
 
-## 提交与边界
+## Commit and boundaries
 
-- 用 Conventional Commits 提交到**本 worktree 分支**。
-- **不要** push、**不要** merge 回 main、**不要**开 PR —— 整合由 captain 完成（见 `000_delegation_guide.md`）。
-- **不要**勾选 `docs/roadmap_zh.md`。
-- 收尾前确保所有改动已提交。
+- Commit to **this worktree branch** using Conventional Commits.
+- **Do not** push, **do not** merge into main, **do not** open a PR — the captain integrates (see `000_delegation_guide.md`).
+- **Do not** tick `docs/roadmap_zh.md`.
+- Ensure all changes are committed before finishing.
