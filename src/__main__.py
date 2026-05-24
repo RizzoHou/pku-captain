@@ -2,16 +2,27 @@
 
 from __future__ import annotations
 
+import argparse
 import sys
 
 from PyQt6.QtWidgets import QApplication
 
 from .ui.main_window import MainWindow
+from .ui.styles import apply_app_style
 
 
 def main() -> int:
-    app = QApplication(sys.argv)
-    window = MainWindow()
+    parser = argparse.ArgumentParser(prog="pku-captain")
+    parser.add_argument(
+        "--online",
+        action="store_true",
+        help="Use DeepSeek and real-time tools. Default is offline GUI mode.",
+    )
+    args = parser.parse_args()
+
+    app = QApplication(sys.argv[:1])
+    apply_app_style(app)
+    window = MainWindow(offline=not args.online)
     window.show()
     return app.exec()
 

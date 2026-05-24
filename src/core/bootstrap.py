@@ -25,6 +25,7 @@ from ..tools import (
     MemoryTool,
     PKU3bAnnouncementsTool,
     PKU3bAssignmentsTool,
+    PKU3bCourseTableTool,
     ReminderTool,
     WeatherTool,
 )
@@ -45,7 +46,7 @@ _SYSTEM_PROMPT = (
 )
 
 
-def build_agent(*, offline: bool = False) -> Agent:
+def build_agent(*, offline: bool = False, skip_knowledge: bool = False) -> Agent:
     """Assemble the Agent the GUI runs against.
 
     `offline=True` swaps in `EchoLLMProvider` and drops any tool that
@@ -53,7 +54,7 @@ def build_agent(*, offline: bool = False) -> Agent:
     without an API key or live PKU endpoints.
     """
     llm = _build_llm(offline=offline)
-    tools = _build_tools(offline=offline)
+    tools = _build_tools(offline=offline, skip_knowledge=skip_knowledge)
     workflows = _build_workflows(tools)
 
     conversation = Conversation()
@@ -79,7 +80,7 @@ def _build_llm(*, offline: bool) -> LLMProvider:
     return DeepSeekProvider(api_key=api_key)
 
 
-def _build_tools(*, offline: bool) -> ToolRegistry:
+def _build_tools(*, offline: bool, skip_knowledge: bool = False) -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(ClockTool())
     registry.register(MemoryTool())
@@ -87,8 +88,10 @@ def _build_tools(*, offline: bool) -> ToolRegistry:
     if not offline:
         registry.register(PKU3bAssignmentsTool())
         registry.register(PKU3bAnnouncementsTool())
+        registry.register(PKU3bCourseTableTool())
         registry.register(WeatherTool())
-        registry.register(KnowledgeSearchTool(_build_knowledge_base()))
+        if not skip_knowledge:
+            registry.register(KnowledgeSearchTool(_build_knowledge_base()))
         registry.register(LectureTool())
     return registry
 
