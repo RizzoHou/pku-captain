@@ -28,6 +28,9 @@ debug/
 # Local app data (memory store, reminders, etc.)
 data/
 
+# Project-local toolchains / binaries
+.local/
+
 # Local code-audit artifacts
 docs/code_audit_panel.html
 

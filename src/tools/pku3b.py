@@ -27,9 +27,12 @@ import shutil
 import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
 DEFAULT_EXECUTABLE = "pku3b"
 DEFAULT_TIMEOUT = 60.0
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_LOCAL_EXECUTABLE = _REPO_ROOT / ".local" / "cargo" / "bin" / "pku3b"
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
@@ -63,12 +66,16 @@ def strip_ansi(text: str) -> str:
 def resolve_executable(executable: str = DEFAULT_EXECUTABLE) -> str:
     """Locate the pku3b binary; raise :class:`Pku3bNotFoundError` if missing."""
     found = shutil.which(executable)
-    if not found:
-        raise Pku3bNotFoundError(
-            f"could not find {executable!r} on PATH. "
-            "Install pku3b (https://github.com/IceCodeNew/pku3b) or pass executable=..."
-        )
-    return found
+    if found:
+        return found
+    if executable == DEFAULT_EXECUTABLE and _LOCAL_EXECUTABLE.exists():
+        return str(_LOCAL_EXECUTABLE)
+    raise Pku3bNotFoundError(
+        f"could not find {executable!r} on PATH or at {_LOCAL_EXECUTABLE}. "
+        "Install our fork with: cargo install --git "
+        "https://github.com/RizzoHou/pku3b --branch "
+        "feat/assignment-list-json-output"
+    )
 
 
 def run_pku3b(

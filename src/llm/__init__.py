@@ -1,6 +1,7 @@
 from .base import (
     ChatMessage,
     ChatResponse,
+    ChatStreamEvent,
     LLMProvider,
     LLMProviderRegistry,
     ToolCall,
@@ -12,6 +13,7 @@ from .kimi import KimiAPIError, KimiProvider, image_part, text_part
 __all__ = [
     "ChatMessage",
     "ChatResponse",
+    "ChatStreamEvent",
     "DeepSeekAPIError",
     "DeepSeekProvider",
     "EchoLLMProvider",
