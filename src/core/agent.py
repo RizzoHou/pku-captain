@@ -43,7 +43,20 @@ class Agent:
         tool_schema = self.tools.to_openai_schema()
 
         for _ in range(self.max_tool_iterations):
-            response = self.llm.chat(self.conversation.snapshot(), tools=tool_schema)
+            response = None
+            for stream_event in self.llm.stream_chat(
+                self.conversation.snapshot(),
+                tools=tool_schema,
+            ):
+                if stream_event.delta:
+                    yield AgentEvent(
+                        kind="assistant_delta",
+                        payload={"text": stream_event.delta},
+                    )
+                if stream_event.response is not None:
+                    response = stream_event.response
+            if response is None:
+                response = self.llm.chat(self.conversation.snapshot(), tools=tool_schema)
             yield AgentEvent(kind="llm_response", payload={"text": response.text})
 
             self.conversation.add_assistant(

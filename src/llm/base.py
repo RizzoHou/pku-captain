@@ -8,6 +8,7 @@ treats all providers interchangeably.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any, ClassVar, Literal
 
@@ -51,6 +52,18 @@ class ChatResponse:
     reasoning_content: str | None = None
 
 
+@dataclass(frozen=True)
+class ChatStreamEvent:
+    """Incremental chat output.
+
+    ``delta`` is suitable for live UI rendering. ``response`` is set once at
+    the end and carries tool calls plus the complete assistant message.
+    """
+
+    delta: str = ""
+    response: ChatResponse | None = None
+
+
 class LLMProvider(ABC):
     """Abstract chat-LLM provider."""
 
@@ -63,6 +76,15 @@ class LLMProvider(ABC):
         tools: list[dict[str, Any]] | None = None,
     ) -> ChatResponse:
         """Call the underlying LLM; return text + any tool-call requests."""
+
+    def stream_chat(
+        self,
+        messages: list[ChatMessage],
+        tools: list[dict[str, Any]] | None = None,
+    ) -> Iterator[ChatStreamEvent]:
+        """Stream chat output when supported; default falls back to one call."""
+        response = self.chat(messages, tools=tools)
+        yield ChatStreamEvent(response=response)
 
 
 @dataclass

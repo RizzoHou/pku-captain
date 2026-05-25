@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import re
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QKeyEvent
@@ -27,6 +28,8 @@ class ChatPanel(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.setObjectName("ChatPanel")
+        self._streaming_bubble: QLabel | None = None
+        self._streaming_text = ""
 
         self._message_layout = QVBoxLayout()
         self._message_layout.setSpacing(10)
@@ -77,7 +80,32 @@ class ChatPanel(QWidget):
         self._add_message("你", text, "user")
 
     def add_assistant_message(self, text: str) -> None:
+        if self._streaming_bubble is not None:
+            self._streaming_text = text or self._streaming_text or "（空回复）"
+            self._streaming_bubble.setText(
+                _message_html(self._streaming_text, "assistant")
+            )
+            self._streaming_bubble = None
+            self._streaming_text = ""
+            self._scroll.verticalScrollBar().setValue(self._scroll.verticalScrollBar().maximum())
+            return
         self._add_message("PKU Captain", text or "（空回复）", "assistant")
+
+    def append_assistant_delta(self, text: str) -> None:
+        if not text:
+            return
+        if self._streaming_bubble is None:
+            self._streaming_text = ""
+            self._streaming_bubble = self._add_message(
+                "PKU Captain",
+                "正在生成...",
+                "assistant",
+            )
+        self._streaming_text += text
+        self._streaming_bubble.setText(
+            _message_html(self._streaming_text, "assistant")
+        )
+        self._scroll.verticalScrollBar().setValue(self._scroll.verticalScrollBar().maximum())
 
     def add_system_message(self, text: str) -> None:
         self._add_message("系统", text, "system")
@@ -89,13 +117,29 @@ class ChatPanel(QWidget):
         self._input.clear()
         self.send_requested.emit(text)
 
-    def _add_message(self, author: str, text: str, role: str) -> None:
-        bubble = QLabel()
-        bubble.setTextFormat(bubble.textFormat().RichText)
-        bubble.setWordWrap(True)
-        bubble.setOpenExternalLinks(True)
-        bubble.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-        bubble.setText(_message_html(author, text, role))
+    def _add_message(self, author: str, text: str, role: str) -> QLabel:
+        bubble = QFrame()
+        bubble.setObjectName("MessageBubble")
+        bubble.setProperty("messageRole", role)
+        bubble.setMaximumWidth(720 if role == "assistant" else 440)
+        bubble.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+
+        author_label = QLabel(author)
+        author_label.setObjectName("MessageAuthor")
+
+        body_label = QLabel()
+        body_label.setObjectName("MessageText")
+        body_label.setTextFormat(body_label.textFormat().RichText)
+        body_label.setWordWrap(True)
+        body_label.setOpenExternalLinks(True)
+        body_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        body_label.setText(_message_html(text, role))
+
+        bubble_layout = QVBoxLayout(bubble)
+        bubble_layout.setContentsMargins(10, 8, 10, 8)
+        bubble_layout.setSpacing(4)
+        bubble_layout.addWidget(author_label)
+        bubble_layout.addWidget(body_label)
 
         row = QHBoxLayout()
         if role == "user":
@@ -109,24 +153,169 @@ class ChatPanel(QWidget):
         row_host.setLayout(row)
         self._message_layout.insertWidget(self._message_layout.count() - 1, row_host)
         self._scroll.verticalScrollBar().setValue(self._scroll.verticalScrollBar().maximum())
+        return body_label
 
 
-def _message_html(author: str, text: str, role: str) -> str:
-    body = html.escape(text).replace("\n", "<br>")
-    author_html = html.escape(author)
-    colors = {
-        "user": ("#8c0000", "#ffffff"),
-        "assistant": ("#ffffff", "#1f2937"),
-        "system": ("#fff6ed", "#8c0000"),
-    }
-    background, foreground = colors.get(role, colors["assistant"])
-    return (
-        f"<div style='max-width: 420px; padding: 10px 12px; "
-        f"border-radius: 8px; background: {background}; color: {foreground};'>"
-        f"<div style='font-weight: 600; margin-bottom: 4px;'>{author_html}</div>"
-        f"<div>{body}</div>"
-        "</div>"
+def _message_html(text: str, role: str) -> str:
+    body = _render_message_body(text, role)
+    return body
+
+
+def _render_message_body(text: str, role: str) -> str:
+    if role != "assistant":
+        return html.escape(text).replace("\n", "<br>")
+
+    blocks = re.split(r"(```.*?```)", text, flags=re.DOTALL)
+    rendered: list[str] = []
+    for block in blocks:
+        if block.startswith("```") and block.endswith("```"):
+            code = block.strip("`")
+            lines = code.splitlines()
+            if lines and lines[0].strip().isalpha():
+                lines = lines[1:]
+            rendered.append(
+                "<pre style='white-space: pre-wrap; background: #fffaf7; "
+                "border: 1px solid #eadbd5; border-radius: 6px; "
+                "padding: 8px; margin: 7px 0;'>"
+                f"{html.escape(chr(10).join(lines)).strip()}</pre>"
+            )
+        else:
+            rendered.append(_render_markdownish_text(block))
+    return "".join(rendered) or "（空回复）"
+
+
+def _render_markdownish_text(text: str) -> str:
+    lines = text.splitlines()
+    out: list[str] = []
+    in_list = False
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        stripped = line.strip()
+        if not stripped:
+            if in_list:
+                out.append("</ul>")
+                in_list = False
+            out.append("<br>")
+            index += 1
+            continue
+        if _is_table_start(lines, index):
+            if in_list:
+                out.append("</ul>")
+                in_list = False
+            table_lines = [stripped, lines[index + 1].strip()]
+            index += 2
+            while index < len(lines) and _looks_like_table_row(lines[index].strip()):
+                table_lines.append(lines[index].strip())
+                index += 1
+            out.append(_table_html(table_lines))
+            continue
+        if stripped in {"---", "***", "___"}:
+            if in_list:
+                out.append("</ul>")
+                in_list = False
+            out.append(
+                "<div style='border-top: 1px solid #eadbd5; "
+                "margin: 10px 0; height: 1px;'></div>"
+            )
+            index += 1
+            continue
+        if stripped.startswith(("- ", "* ")):
+            if not in_list:
+                out.append("<ul style='margin: 4px 0 4px 18px; padding: 0;'>")
+                in_list = True
+            out.append(f"<li>{_inline_markdown(stripped[2:])}</li>")
+            index += 1
+            continue
+        if in_list:
+            out.append("</ul>")
+            in_list = False
+        if stripped.startswith("### "):
+            out.append(_heading_html(stripped[4:], weight=700))
+        elif stripped.startswith("## "):
+            out.append(_heading_html(stripped[3:], weight=800))
+        elif stripped.startswith("# "):
+            out.append(_heading_html(stripped[2:], weight=800))
+        else:
+            out.append(f"<div style='margin: 3px 0;'>{_inline_markdown(stripped)}</div>")
+        index += 1
+    if in_list:
+        out.append("</ul>")
+    return "".join(out)
+
+
+def _inline_markdown(text: str) -> str:
+    escaped = html.escape(text)
+    escaped = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", escaped)
+    escaped = re.sub(
+        r"`([^`]+)`",
+        r"<code style='background: #fffaf7; padding: 1px 4px; border-radius: 4px;'>\1</code>",
+        escaped,
     )
+    return escaped
+
+
+def _heading_html(text: str, *, weight: int) -> str:
+    return (
+        f"<div style='font-weight: {weight}; margin-top: 8px;'>"
+        f"{_inline_markdown(text)}</div>"
+    )
+
+
+def _is_table_start(lines: list[str], index: int) -> bool:
+    if index + 1 >= len(lines):
+        return False
+    return (
+        _looks_like_table_row(lines[index].strip())
+        and _looks_like_table_separator(lines[index + 1].strip())
+    )
+
+
+def _looks_like_table_row(line: str) -> bool:
+    return line.startswith("|") and line.endswith("|") and line.count("|") >= 2
+
+
+def _looks_like_table_separator(line: str) -> bool:
+    if not _looks_like_table_row(line):
+        return False
+    cells = _split_table_row(line)
+    return bool(cells) and all(re.fullmatch(r":?-{3,}:?", cell.strip()) for cell in cells)
+
+
+def _split_table_row(line: str) -> list[str]:
+    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+
+def _table_html(lines: list[str]) -> str:
+    headers = _split_table_row(lines[0])
+    rows = [_split_table_row(line) for line in lines[2:]]
+    column_count = max([len(headers), *(len(row) for row in rows)] or [0])
+    if column_count == 0:
+        return ""
+
+    header_cells = "".join(
+        "<th style='background: #fff6ed; color: #650000; "
+        "font-weight: 700; padding: 5px 7px; border: 1px solid #eadbd5;'>"
+        f"{_inline_markdown(_cell_at(headers, column))}</th>"
+        for column in range(column_count)
+    )
+    body_rows = []
+    for row in rows:
+        cells = "".join(
+            "<td style='padding: 5px 7px; border: 1px solid #eadbd5;'>"
+            f"{_inline_markdown(_cell_at(row, column))}</td>"
+            for column in range(column_count)
+        )
+        body_rows.append(f"<tr>{cells}</tr>")
+    return (
+        "<table cellspacing='0' cellpadding='0' "
+        "style='border-collapse: collapse; margin: 8px 0;'>"
+        f"<tr>{header_cells}</tr>{''.join(body_rows)}</table>"
+    )
+
+
+def _cell_at(cells: list[str], index: int) -> str:
+    return cells[index] if index < len(cells) else ""
 
 
 class MessageInput(QPlainTextEdit):

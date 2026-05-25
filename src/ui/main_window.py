@@ -31,7 +31,7 @@ class MainWindow(QMainWindow):
     def __init__(self, *, offline: bool = True) -> None:
         super().__init__()
         self.setWindowTitle("PKU Captain")
-        self.resize(1280, 800)
+        self.resize(1500, 900)
         self.statusBar().showMessage("正在启动 GUI...")
 
         fallback_message = ""
@@ -89,9 +89,9 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self._dashboard)
         splitter.addWidget(self._chat_panel)
         splitter.addWidget(self._tool_trace_panel)
-        splitter.setStretchFactor(0, 3)
-        splitter.setStretchFactor(1, 2)
-        splitter.setStretchFactor(2, 1)
+        splitter.setStretchFactor(0, 6)
+        splitter.setStretchFactor(1, 3)
+        splitter.setStretchFactor(2, 3)
         self.setCentralWidget(splitter)
         self._chat_panel.add_system_message(
             f"GUI 已启动：{mode_label}。仪表盘会直接读取工具数据；对话侧栏用于自然语言查询。"
@@ -129,6 +129,8 @@ class MainWindow(QMainWindow):
                 str(event.payload["name"]),
                 event.payload["result"],
             )
+        elif event.kind == "assistant_delta":
+            self._chat_panel.append_assistant_delta(str(event.payload.get("text") or ""))
         elif event.kind == "final":
             self._chat_panel.add_assistant_message(str(event.payload.get("text") or ""))
 
@@ -159,6 +161,15 @@ class MainWindow(QMainWindow):
 
     def _on_dashboard_item_loaded(self, key: str, data: object) -> None:
         card_key = "schedule" if key == "pku3b_coursetable" else key
+        if key == "pku3b_coursetable" and isinstance(data, dict):
+            self._dashboard.set_schedule(data)
+            return
+        if key == "pku3b_assignments" and isinstance(data, dict):
+            self._dashboard.set_assignments(data)
+            return
+        if key == "weather" and isinstance(data, dict):
+            self._dashboard.set_weather(data)
+            return
         self._dashboard.set_data(card_key, _format_dashboard_data(key, data))
 
     def _on_dashboard_item_error(self, key: str, message: str) -> None:
@@ -215,8 +226,6 @@ class MainWindow(QMainWindow):
 
 
 def _format_dashboard_data(key: str, data: object) -> str:
-    if key == "pku3b_coursetable" and isinstance(data, dict):
-        return _format_schedule(data)
     if key == "weather" and isinstance(data, dict):
         return "{location}：{desc}，{temp}°C，体感 {feels}°C".format(
             location=data.get("location", "未知地点"),
@@ -270,27 +279,6 @@ def _format_dashboard_data(key: str, data: object) -> str:
                 )
         return "\n".join(lines) if lines else "暂无可显示讲座"
     return str(data)
-
-
-def _format_schedule(data: dict[str, object]) -> str:
-    blocks = data.get("blocks")
-    if not isinstance(blocks, list) or not blocks:
-        return "今日暂无课表数据"
-
-    today_key = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"][datetime.now().weekday()]
-    today = [item for item in blocks if isinstance(item, dict) and item.get("day_key") == today_key]
-    source = today if today else [item for item in blocks if isinstance(item, dict)]
-    heading = "今日课表" if today else "完整课表预览"
-    lines = [heading]
-    for item in source[:6]:
-        start = item.get("start_slot", "?")
-        end = item.get("end_slot", start)
-        slot = f"第{start}节" if start == end else f"第{start}-{end}节"
-        day = "" if today else f"{item.get('day_name', '')} "
-        detail = item.get("detail") or ""
-        suffix = f"｜{detail}" if detail else ""
-        lines.append(f"{day}{slot}：{item.get('title', '未命名课程')}{suffix}")
-    return "\n".join(lines)
 
 
 def _startup_diagnostics(*, offline: bool) -> str:
