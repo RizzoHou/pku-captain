@@ -9,11 +9,12 @@ pulling in the `openai` SDK.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from typing import Any, ClassVar
 
 import requests
 
-from .base import ChatMessage, ChatResponse, LLMProvider, ToolCall
+from .base import ChatMessage, ChatResponse, ChatStreamEvent, LLMProvider, ToolCall
 
 
 class DeepSeekAPIError(RuntimeError):
@@ -83,6 +84,68 @@ class DeepSeekProvider(LLMProvider):
         ]
         return ChatResponse(text=text, tool_calls=calls, reasoning_content=reasoning)
 
+    def stream_chat(
+        self,
+        messages: list[ChatMessage],
+        tools: list[dict[str, Any]] | None = None,
+    ) -> Iterator[ChatStreamEvent]:
+        body: dict[str, Any] = {
+            "model": self.model,
+            "messages": [_to_api_message(m) for m in messages],
+            "effort": self.effort,
+            "stream": True,
+        }
+        if tools:
+            body["tools"] = tools
+            body["tool_choice"] = "auto"
+
+        with requests.post(
+            f"{self.base_url}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            data=json.dumps(body),
+            timeout=self.timeout,
+            stream=True,
+        ) as resp:
+            if resp.status_code >= 400:
+                raise DeepSeekAPIError(
+                    f"DeepSeek API {resp.status_code}: {resp.text}"
+                )
+
+            text_parts: list[str] = []
+            reasoning_parts: list[str] = []
+            tool_calls: dict[int, dict[str, Any]] = {}
+            for raw_line in resp.iter_lines(decode_unicode=True):
+                if not raw_line or not raw_line.startswith("data:"):
+                    continue
+                payload = raw_line.removeprefix("data:").strip()
+                if payload == "[DONE]":
+                    break
+                event = json.loads(payload)
+                choices = event.get("choices") or []
+                if not choices:
+                    continue
+                delta = choices[0].get("delta") or {}
+                piece = delta.get("content") or ""
+                if piece:
+                    text_parts.append(piece)
+                    yield ChatStreamEvent(delta=piece)
+                reasoning_piece = delta.get("reasoning_content") or ""
+                if reasoning_piece:
+                    reasoning_parts.append(reasoning_piece)
+                for call_delta in delta.get("tool_calls") or []:
+                    _merge_tool_call_delta(tool_calls, call_delta)
+
+        yield ChatStreamEvent(
+            response=ChatResponse(
+                text="".join(text_parts),
+                tool_calls=_tool_calls_from_stream(tool_calls),
+                reasoning_content="".join(reasoning_parts) or None,
+            )
+        )
+
 
 def _to_api_message(m: ChatMessage) -> dict[str, Any]:
     if m.role == "tool":
@@ -122,3 +185,37 @@ def _parse_arguments(raw: str) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {"_raw": raw}
     return parsed if isinstance(parsed, dict) else {"_value": parsed}
+
+
+def _merge_tool_call_delta(
+    calls: dict[int, dict[str, Any]],
+    delta: dict[str, Any],
+) -> None:
+    index = int(delta.get("index", len(calls)))
+    current = calls.setdefault(
+        index,
+        {"id": "", "name": "", "arguments": ""},
+    )
+    if delta.get("id"):
+        current["id"] += delta["id"]
+    function = delta.get("function") or {}
+    if function.get("name"):
+        current["name"] += function["name"]
+    if function.get("arguments"):
+        current["arguments"] += function["arguments"]
+
+
+def _tool_calls_from_stream(calls: dict[int, dict[str, Any]]) -> list[ToolCall]:
+    out: list[ToolCall] = []
+    for index in sorted(calls):
+        call = calls[index]
+        if not call.get("name"):
+            continue
+        out.append(
+            ToolCall(
+                id=call.get("id") or f"call_{index}",
+                name=call["name"],
+                arguments=_parse_arguments(call.get("arguments", "{}")),
+            )
+        )
+    return out
