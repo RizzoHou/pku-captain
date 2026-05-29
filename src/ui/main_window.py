@@ -298,8 +298,14 @@ def _startup_diagnostics(*, offline: bool) -> str:
 
 
 def _pku3b_configured() -> bool:
-    config_roots = [
-        Path.home() / ".config" / "pku3b",
-        Path.home() / "Library" / "Application Support" / "pku3b",
+    # pku3b stores its config under a reverse-domain dir on macOS
+    # (~/Library/Application Support/org.sshwy.pku3b/cfg.toml) and under
+    # ~/.config/pku3b on Linux. Check for the cfg.toml file itself rather than
+    # bare directory existence, since the dir can exist before first login.
+    support = Path.home() / "Library" / "Application Support"
+    config_files = [
+        Path.home() / ".config" / "pku3b" / "cfg.toml",
+        support / "pku3b" / "cfg.toml",
+        support / "org.sshwy.pku3b" / "cfg.toml",
     ]
-    return any(root.exists() for root in config_roots)
+    return any(f.is_file() for f in config_files)
