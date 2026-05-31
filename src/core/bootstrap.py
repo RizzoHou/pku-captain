@@ -12,6 +12,7 @@ from pathlib import Path
 
 from ..llm import DeepSeekProvider, EchoLLMProvider, LLMProvider
 from ..rag import (
+    APIEmbedder,
     CalendarSource,
     Chunk,
     DeanSource,
@@ -37,6 +38,7 @@ from .conversation import Conversation
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DEEPSEEK_KEY_PATH = _REPO_ROOT / "secrets" / "deepseek_key.txt"
+_EMBEDDING_KEY_PATH = _REPO_ROOT / "secrets" / "embedding_key.txt"
 
 _SYSTEM_PROMPT = (
     "You are PKU Captain, a desktop AI assistant for Peking University "
@@ -46,15 +48,19 @@ _SYSTEM_PROMPT = (
 )
 
 
-def build_agent(*, offline: bool = False, skip_knowledge: bool = False) -> Agent:
+def build_agent(*, offline: bool = False, enable_knowledge: bool = False) -> Agent:
     """Assemble the Agent the GUI runs against.
 
     `offline=True` swaps in `EchoLLMProvider` and drops any tool that
     touches the network or a subprocess, so the GUI lane can develop
     without an API key or live PKU endpoints.
+
+    `enable_knowledge` is opt-in (default off): RAG `knowledge_search`
+    registers only when it is True *and* the agent is online. Leaving it
+    off keeps startup free of any embedding-API calls.
     """
     llm = _build_llm(offline=offline)
-    tools = _build_tools(offline=offline, skip_knowledge=skip_knowledge)
+    tools = _build_tools(offline=offline, enable_knowledge=enable_knowledge)
     workflows = _build_workflows(tools)
 
     conversation = Conversation()
@@ -80,7 +86,7 @@ def _build_llm(*, offline: bool) -> LLMProvider:
     return DeepSeekProvider(api_key=api_key)
 
 
-def _build_tools(*, offline: bool, skip_knowledge: bool = False) -> ToolRegistry:
+def _build_tools(*, offline: bool, enable_knowledge: bool = False) -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(ClockTool())
     registry.register(MemoryTool())
@@ -90,7 +96,7 @@ def _build_tools(*, offline: bool, skip_knowledge: bool = False) -> ToolRegistry
         registry.register(PKU3bAnnouncementsTool())
         registry.register(PKU3bCourseTableTool())
         registry.register(WeatherTool())
-        if not skip_knowledge:
+        if enable_knowledge:
             registry.register(KnowledgeSearchTool(_build_knowledge_base()))
         registry.register(LectureTool())
     return registry
@@ -101,16 +107,27 @@ def _build_knowledge_base() -> KnowledgeBase:
 
     Pulls chunks from every `Source` in `build_source_registry()` so the
     knowledge base retrieves over the same authoritative content the
-    dashboard shows. Indexing here loads the BGE embedding model, which
-    is why the tool is registered online only — offline GUI development
-    never reaches this path.
+    dashboard shows. Embedding goes through the DashScope API (no local
+    model download), so indexing here calls the network — which is why
+    the tool is opt-in (`enable_knowledge`) and online only.
     """
-    knowledge_base = KnowledgeBase()
+    knowledge_base = KnowledgeBase(embedder=_build_embedder())
     chunks: list[Chunk] = []
     for source in build_source_registry().all():
         chunks.extend(source.fetch())
     knowledge_base.index(chunks)
     return knowledge_base
+
+
+def _build_embedder() -> APIEmbedder:
+    """Construct the API embedder from the local key file."""
+    if not _EMBEDDING_KEY_PATH.exists():
+        raise FileNotFoundError(
+            f"Embedding API key not found at {_EMBEDDING_KEY_PATH}. "
+            "RAG knowledge search needs it; omit enable_knowledge to run without RAG."
+        )
+    api_key = _EMBEDDING_KEY_PATH.read_text(encoding="utf-8").strip()
+    return APIEmbedder(api_key=api_key)
 
 
 def _build_workflows(tools: ToolRegistry) -> WorkflowRegistry:
