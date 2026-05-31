@@ -248,12 +248,3 @@ def _to_json(value: Any) -> str:
         return json.dumps(value, ensure_ascii=False, indent=2, default=str)
     except (TypeError, ValueError):
         return str(value)
-
-
-def _escape(value: Any) -> str:
-    return (
-        str(value)
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-    )

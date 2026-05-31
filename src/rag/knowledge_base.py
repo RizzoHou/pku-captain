@@ -20,7 +20,7 @@ from typing import Any
 
 import numpy as np
 
-from .embedder import BGEEmbedder
+from .embedder import APIEmbedder, Embedder
 from .source import Chunk
 
 _SCHEMA = """
@@ -42,9 +42,9 @@ class KnowledgeBase:
     def __init__(
         self,
         db_path: str = ":memory:",
-        embedder: BGEEmbedder | None = None,
+        embedder: Embedder | None = None,
     ) -> None:
-        self.embedder = embedder if embedder is not None else BGEEmbedder()
+        self.embedder = embedder if embedder is not None else APIEmbedder()
         # check_same_thread=False so a KB built on one thread can be queried
         # from the GUI's AgentWorker thread (see integration_contract_zh.md).
         self._conn = sqlite3.connect(db_path, check_same_thread=False)

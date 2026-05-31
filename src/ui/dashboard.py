@@ -323,9 +323,12 @@ class ScheduleCard(QFrame):
         max_slot = max(
             12,
             max(
-                int(item.get("end_slot", 0))
-                for item in blocks
-                if isinstance(item, dict) and isinstance(item.get("end_slot"), int)
+                (
+                    int(item.get("end_slot", 0))
+                    for item in blocks
+                    if isinstance(item, dict) and isinstance(item.get("end_slot"), int)
+                ),
+                default=0,
             ),
         )
         day_columns = {key: index for index, (key, _) in enumerate(self._DAYS, start=1)}

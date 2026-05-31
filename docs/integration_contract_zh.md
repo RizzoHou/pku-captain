@@ -27,7 +27,9 @@ agent = build_agent(offline=True)  # 离线：EchoLLMProvider + 仅 ClockTool
 
 `offline=True` 时挂 `EchoLLMProvider` + 离线工具子集（当前为 `ClockTool`），便于 GUI 在没有 API Key 时也能跑通。GUI 只调 `build_agent()`，不应感知 `DeepSeekProvider`、`PKU3bAssignmentsTool` 等具体子类的存在 —— 这些会在演示窗口内频繁增删。系统提示由 `bootstrap` 注入，GUI 不需要也不应该自行追加。
 
-`build_agent(skip_knowledge=True)` 是一个性能逃生口：跳过 `KnowledgeSearchTool` 的注册，避免首次启动时下载 ~1.3 GB 的 BGE 权重。GUI 在线模式可使用；这是临时妥协，后续 `KnowledgeSearchTool` 自己惰性加载权重后该参数会被移除。
+`build_agent(enable_knowledge=True)` 是 RAG 检索的**显式开关，默认关闭**：仅当它为 True **且**在线时，才注册 `KnowledgeSearchTool`。关闭时启动不会触发任何嵌入 API 调用。嵌入走 DashScope `text-embedding-v4` 云端 API（不再下载本地模型），所以开启需要 `secrets/embedding_key.txt`。GUI 通过 `--rag` 启动标志暴露该开关（`src/__main__.py` → `MainWindow(enable_knowledge=...)`），CLI 同样有 `--rag`。
+
+> **BREAKING: integration contract** —— 旧的 `skip_knowledge`（默认 False、需显式 `=True` 才跳过）已被 `enable_knowledge`（默认 False、需显式 `=True` 才开启）取代，语义反转。GUI 侧 `build_agent(offline=offline, skip_knowledge=True)` 应改为 `build_agent(offline=offline, enable_knowledge=...)`；本仓库内已同步更新。
 
 `Conversation` 对 GUI 是只读的：渲染历史时通过 `for msg in agent.conversation` 或 `agent.conversation.snapshot()` 拿 `ChatMessage` 列表，不要直接调 `add_user / add_assistant / add_tool_result`。所有写入由 `Agent.turn()` 完成。
 
