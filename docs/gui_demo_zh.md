@@ -4,10 +4,11 @@
 
 ## 启动前检查
 
+在仓库根目录执行：
+
 ```bash
-cd /Users/shiyilastime/Desktop/程设大作业/pku-captain
 test -f secrets/deepseek_key.txt && echo "DeepSeek key ready"
-.local/cargo/bin/pku3b --version
+pku3b --version  # 或仓库本地 .local/cargo/bin/pku3b --version
 .venv/bin/python -m src --help
 ```
 

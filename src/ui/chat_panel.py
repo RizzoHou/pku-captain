@@ -107,6 +107,22 @@ class ChatPanel(QWidget):
         )
         self._scroll.verticalScrollBar().setValue(self._scroll.verticalScrollBar().maximum())
 
+    def reset_streaming(self) -> None:
+        """Finalize an in-progress streaming bubble (e.g. after a turn error).
+
+        A turn that ends via an error emits no ``final`` event, so the
+        streaming bubble would otherwise persist and the next turn's first
+        delta would append onto its stale text. Finalize it in place,
+        keeping whatever partial text arrived, and clear the state.
+        """
+        if self._streaming_bubble is None:
+            return
+        self._streaming_bubble.setText(
+            _message_html(self._streaming_text or "（回复中断）", "assistant")
+        )
+        self._streaming_bubble = None
+        self._streaming_text = ""
+
     def add_system_message(self, text: str) -> None:
         self._add_message("系统", text, "system")
 

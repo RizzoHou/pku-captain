@@ -12,10 +12,9 @@ export https_proxy=http://127.0.0.1:7897
 export all_proxy=http://127.0.0.1:7897
 ```
 
-然后启动：
+然后在仓库根目录启动：
 
 ```bash
-cd /Users/shiyilastime/Desktop/程设大作业/pku-captain
 .venv/bin/python -m src --online
 ```
 

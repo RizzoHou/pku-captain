@@ -6,8 +6,9 @@ so the same factory the GUI consumes is exercised — the CLI doubles as a
 contract-conformance probe for `docs/integration_contract_zh.md`.
 
 Run with:
-    python -m src.cli                  # online (DeepSeek + full tool set)
+    python -m src.cli                  # online (DeepSeek + full tool set, RAG off)
     python -m src.cli --offline        # EchoLLMProvider + offline tool subset
+    python -m src.cli --rag            # also register RAG knowledge_search (online)
     python -m src.cli --show-reasoning # dump assistant reasoning_content per turn
 """
 
@@ -89,9 +90,9 @@ def _dump_reasoning(agent: Any, watermark: int) -> None:
             print("  --- end reasoning ---")
 
 
-def run_repl(*, offline: bool, show_reasoning: bool) -> int:
+def run_repl(*, offline: bool, show_reasoning: bool, enable_knowledge: bool = False) -> int:
     try:
-        agent = build_agent(offline=offline)
+        agent = build_agent(offline=offline, enable_knowledge=enable_knowledge)
     except FileNotFoundError as exc:
         print(f"build_agent failed: {exc}", file=sys.stderr)
         print("hint: pass --offline to skip the DeepSeek key requirement.", file=sys.stderr)
@@ -115,7 +116,7 @@ def run_repl(*, offline: bool, show_reasoning: bool) -> int:
             print(_HELP)
             continue
         if line == "/reset":
-            agent = build_agent(offline=offline)
+            agent = build_agent(offline=offline, enable_knowledge=enable_knowledge)
             print("(conversation reset)")
             continue
         if line == "/save" or line.startswith("/save "):
@@ -164,8 +165,17 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Dump assistant reasoning_content after each turn.",
     )
+    parser.add_argument(
+        "--rag",
+        action="store_true",
+        help="Enable RAG knowledge_search (online only; needs secrets/embedding_key.txt).",
+    )
     args = parser.parse_args(argv)
-    return run_repl(offline=args.offline, show_reasoning=args.show_reasoning)
+    return run_repl(
+        offline=args.offline,
+        show_reasoning=args.show_reasoning,
+        enable_knowledge=args.rag,
+    )
 
 
 if __name__ == "__main__":

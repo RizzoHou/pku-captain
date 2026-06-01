@@ -28,7 +28,7 @@ _LOCAL_PKU3B = _REPO_ROOT / ".local" / "cargo" / "bin" / "pku3b"
 class MainWindow(QMainWindow):
     """Top-level window. Layout: dashboard | chat sidebar | tool-call panel."""
 
-    def __init__(self, *, offline: bool = True) -> None:
+    def __init__(self, *, offline: bool = True, enable_knowledge: bool = False) -> None:
         super().__init__()
         self.setWindowTitle("PKU Captain")
         self.resize(1500, 900)
@@ -37,8 +37,8 @@ class MainWindow(QMainWindow):
         fallback_message = ""
         mode_label = "在线模式" if not offline else "离线模式"
         try:
-            agent = build_agent(offline=offline, skip_knowledge=True)
-        except FileNotFoundError as exc:
+            agent = build_agent(offline=offline, enable_knowledge=enable_knowledge)
+        except Exception as exc:  # noqa: BLE001 - any online failure falls back to offline
             agent = build_agent(offline=True)
             mode_label = "离线模式"
             fallback_message = f"在线模式不可用，已切换到离线模式：{exc}"
@@ -65,7 +65,6 @@ class MainWindow(QMainWindow):
                 "weather": {},
                 "lecture": {"limit": 5},
             },
-            args_provider=self._dashboard_args,
         )
         self._dashboard_worker.moveToThread(self._dashboard_thread)
         self._dashboard_worker.item_loaded.connect(self._on_dashboard_item_loaded)
@@ -139,6 +138,9 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Agent 调用失败")
 
     def _on_turn_finished(self) -> None:
+        # Finalize any half-streamed bubble so a turn that ended via error
+        # (no `final` event) doesn't leave it dangling into the next turn.
+        self._chat_panel.reset_streaming()
         self._chat_panel.set_busy(False)
         self.statusBar().showMessage("Agent 回答完成")
 
@@ -153,10 +155,14 @@ class MainWindow(QMainWindow):
             "lecture",
         ):
             self._dashboard.set_loading(key)
+        # Read GUI widgets (the OTP field) here, on the GUI thread, and hand
+        # the snapshot to the worker — the worker must never touch widgets.
+        dynamic_args = {"pku3b_coursetable": self._dashboard_args("pku3b_coursetable")}
         QMetaObject.invokeMethod(
             self._dashboard_worker,
             "refresh",
             Qt.ConnectionType.QueuedConnection,
+            Q_ARG(dict, dynamic_args),
         )
 
     def _on_dashboard_item_loaded(self, key: str, data: object) -> None:
@@ -298,8 +304,14 @@ def _startup_diagnostics(*, offline: bool) -> str:
 
 
 def _pku3b_configured() -> bool:
-    config_roots = [
-        Path.home() / ".config" / "pku3b",
-        Path.home() / "Library" / "Application Support" / "pku3b",
+    # pku3b stores its config under a reverse-domain dir on macOS
+    # (~/Library/Application Support/org.sshwy.pku3b/cfg.toml) and under
+    # ~/.config/pku3b on Linux. Check for the cfg.toml file itself rather than
+    # bare directory existence, since the dir can exist before first login.
+    support = Path.home() / "Library" / "Application Support"
+    config_files = [
+        Path.home() / ".config" / "pku3b" / "cfg.toml",
+        support / "pku3b" / "cfg.toml",
+        support / "org.sshwy.pku3b" / "cfg.toml",
     ]
-    return any(root.exists() for root in config_roots)
+    return any(f.is_file() for f in config_files)
