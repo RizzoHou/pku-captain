@@ -27,7 +27,7 @@ agent = build_agent(offline=True)  # 离线：EchoLLMProvider + 仅 ClockTool
 
 `offline=True` 时挂 `EchoLLMProvider` + 离线工具子集（当前为 `ClockTool`），便于 GUI 在没有 API Key 时也能跑通。GUI 只调 `build_agent()`，不应感知 `DeepSeekProvider`、`PKU3bAssignmentsTool` 等具体子类的存在 —— 这些会在演示窗口内频繁增删。系统提示由 `bootstrap` 注入，GUI 不需要也不应该自行追加。
 
-`build_agent(enable_knowledge=True)` 是 RAG 检索的**显式开关，默认关闭**：仅当它为 True **且**在线时，才注册 `KnowledgeSearchTool`。关闭时启动不会触发任何嵌入 API 调用。嵌入走 DashScope `text-embedding-v4` 云端 API（不再下载本地模型），所以开启需要 `secrets/embedding_key.txt`。GUI 通过 `--rag` 启动标志暴露该开关（`src/__main__.py` → `MainWindow(enable_knowledge=...)`），CLI 同样有 `--rag`。
+`build_agent(enable_knowledge=True)` 是 RAG 检索的**显式开关，默认关闭**：仅当它为 True **且**在线时，才注册 `KnowledgeSearchTool`。关闭时启动不会触发任何嵌入 API 调用。嵌入走 DashScope `text-embedding-v4` 云端 API（不再下载本地模型），所以开启需要 `secrets/api_keys/embedding_key.txt`。GUI 通过 `--rag` 启动标志暴露该开关（`src/__main__.py` → `MainWindow(enable_knowledge=...)`），CLI 同样有 `--rag`。
 
 > **BREAKING: integration contract** —— 旧的 `skip_knowledge`（默认 False、需显式 `=True` 才跳过）已被 `enable_knowledge`（默认 False、需显式 `=True` 才开启）取代，语义反转。GUI 侧 `build_agent(offline=offline, skip_knowledge=True)` 应改为 `build_agent(offline=offline, enable_knowledge=...)`；本仓库内已同步更新。
 
@@ -117,6 +117,10 @@ self.thread.start()
 同样的阻塞 I/O 问题：`Tool.invoke` 与 `Source.fetch` 都可能耗时数秒。Week 1 demo 可以接受启动时一次性同步拉取（loading 几秒）；Week 2 起每个仪表盘 widget 应有自己的 `QThread + worker` 或 `QThreadPool` runnable，由 `QTimer` 按各自节奏触发刷新。
 
 GUI lane 与后端 lane 的接缝：后端保证 `Tool` / `Source` 的 `invoke` / `fetch` 是线程安全的（不共享可变状态），GUI 可以放心在 worker 里调用。
+
+**仪表盘的弹窗也遵守 §1 的工具获取规则**：树洞 / P-Lib / 公告 / 讲座 / 提醒 / 记忆 / 知识库等模态弹窗**不**自行构造 `Tool` 子类，而是从 `DashboardPanel` 注入的同一个 `ToolRegistry` 里按 `name` 取（`tools.find(name)` / `name in tools`）。在线专属入口以“工具是否注册”为唯一的在线判据：离线（`build_agent(offline=True)`）时这些工具不在 registry 中，对应按钮禁用、弹窗入口直接拒绝，所以 GUI 永远不会在离线模式触达网络 / 子进程工具。**唯一例外**是 `TreeholeAuthService`（登录 / 短信验证，不是 `Tool`），它由 `treehole_updates` 是否注册间接 gate。弹窗里任何阻塞调用（P-Lib 搜索 / 下载、公告详情子进程、知识库嵌入 API、树洞登录）都通过 `src/ui/tool_call_worker.py` 的 `run_async(fn, on_done, on_error)` 丢到 `QThreadPool`，回调在 GUI 线程触发——模态 `exec()` 期间事件循环仍在转，所以异步结果照常送达，窗口不冻结。
+
+**窗口布局（2 栏）**：主窗口当前为 `dashboard | chat`（PR #4 起）。工具调用过程不再有独立的右侧面板，而是内联渲染在对话流中（`ChatPanel.add_tool_call` / `update_tool_result` + `InlineToolCall`），复用 `tool_trace_panel.py` 的 `_format_tool_result` / `_to_json` 格式化器。`ToolTracePanel` 类已不再挂载，保留备查。
 
 ## 6. 待定 / 后续
 

@@ -51,6 +51,13 @@ class ToolRegistry:
     def get(self, name: str) -> Tool:
         return self._tools[name]
 
+    def find(self, name: str) -> Tool | None:
+        """Return the tool by name, or None if it is not registered."""
+        return self._tools.get(name)
+
+    def __contains__(self, name: object) -> bool:
+        return name in self._tools
+
     def all(self) -> list[Tool]:
         return list(self._tools.values())
 

@@ -7,7 +7,7 @@
 在仓库根目录执行：
 
 ```bash
-test -f secrets/deepseek_key.txt && echo "DeepSeek key ready"
+test -f secrets/api_keys/deepseek_key.txt && echo "DeepSeek key ready"
 pku3b --version  # 或仓库本地 .local/cargo/bin/pku3b --version
 .venv/bin/python -m src --help
 ```

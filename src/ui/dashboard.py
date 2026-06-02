@@ -27,13 +27,9 @@ from PyQt6.QtWidgets import (
 )
 
 from ..tools.base import Tool, ToolRegistry
-from ..tools.lecture import LectureTool
-from ..tools.memory import MemoryTool
-from ..tools.pku3b_announcements import PKU3bAnnouncementsTool
-from ..tools.plib_materials import PLibMaterialsTool
-from ..tools.reminder import ReminderTool
 from ..tools.treehole_updates import TreeholeAuthService
 from .formatters import parse_datetime, upcoming_assignments
+from .tool_call_worker import run_async
 
 
 class DashboardPanel(QWidget):
@@ -148,6 +144,24 @@ class DashboardPanel(QWidget):
         layout.addLayout(header)
         layout.addWidget(scroll, 1)
 
+        # Online-only entry points are disabled when their tool is not
+        # registered (offline mode), so the GUI never reaches a network /
+        # subprocess tool that the agent factory deliberately left out.
+        self._treehole_button.setEnabled("treehole_updates" in (self._tools or ()))
+        self._knowledge_button.setEnabled("knowledge_search" in (self._tools or ()))
+
+    def _online_tool(self, name: str) -> Tool | None:
+        """Look up a registered tool by name; None if offline / not registered."""
+        return self._tools.find(name) if self._tools is not None else None
+
+    def _require_tool(self, name: str, title: str) -> Tool | None:
+        tool = self._online_tool(name)
+        if tool is None:
+            QMessageBox.information(
+                self, title, "该功能需要在线模式，当前未启用对应工具。"
+            )
+        return tool
+
     def set_loading(self, key: str) -> None:
         if key == "weather":
             self._weather_label.setText("天气加载中...")
@@ -241,51 +255,64 @@ class DashboardPanel(QWidget):
         self._treehole_button.style().polish(self._treehole_button)
 
     def _show_treehole_dialog(self) -> None:
+        if self._require_tool("treehole_updates", "树洞新消息") is None:
+            return
         dialog = TreeholeMessagesDialog(self._treehole_data, self)
         dialog.auth_changed.connect(self.refresh_requested)
         dialog.exec()
 
     def _show_plib_dialog(self) -> None:
-        dialog = PLibSearchDialog(self)
-        dialog.exec()
+        tool = self._require_tool("plib_materials", "P-Lib 资料搜索")
+        if tool is None:
+            return
+        PLibSearchDialog(tool, self).exec()
 
     def _show_plib_login_dialog(self) -> None:
-        dialog = PLibLoginDialog(self)
+        tool = self._require_tool("plib_materials", "P-Lib 登录")
+        if tool is None:
+            return
+        dialog = PLibLoginDialog(tool, self)
         dialog.auth_changed.connect(self.refresh_requested)
         dialog.exec()
 
     def _show_announcement_detail(self, announcement_id: str) -> None:
-        dialog = AnnouncementDetailDialog(announcement_id, self)
-        dialog.exec()
+        tool = self._require_tool("pku3b_announcements", "课程通知详情")
+        if tool is None:
+            return
+        AnnouncementDetailDialog(tool, announcement_id, self).exec()
 
     def _show_lecture_detail(self, lecture: dict[str, object]) -> None:
         dialog = LectureDetailDialog(lecture, self)
         dialog.exec()
 
     def _show_lecture_search_dialog(self) -> None:
-        dialog = LectureSearchDialog(self)
-        dialog.exec()
+        tool = self._require_tool("lecture", "讲座筛选")
+        if tool is None:
+            return
+        LectureSearchDialog(tool, self).exec()
 
     def _show_reminders_dialog(self) -> None:
-        dialog = RemindersDialog(self)
-        dialog.exec()
+        tool = self._require_tool("reminder", "提醒管理")
+        if tool is None:
+            return
+        RemindersDialog(tool, self).exec()
 
     def _show_memory_dialog(self) -> None:
-        dialog = MemoryDialog(self)
-        dialog.exec()
+        tool = self._require_tool("memory", "记忆管理")
+        if tool is None:
+            return
+        MemoryDialog(tool, self).exec()
 
     def _show_knowledge_dialog(self) -> None:
-        if self._tools is None or not any(
-            tool.name == "knowledge_search" for tool in self._tools.all()
-        ):
+        tool = self._online_tool("knowledge_search")
+        if tool is None:
             QMessageBox.information(
                 self,
                 "知识库检索",
                 "知识库检索未开启。请用 --rag 启动，并确认 embedding API key 可用。",
             )
             return
-        dialog = KnowledgeSearchDialog(self._tools.get("knowledge_search"), self)
-        dialog.exec()
+        KnowledgeSearchDialog(tool, self).exec()
 
 
 class DashboardCard(QFrame):
@@ -1065,6 +1092,7 @@ class TreeholeMessagesDialog(QDialog):
         self.setWindowTitle("树洞新消息")
         self.resize(700, 680)
         self._auth = TreeholeAuthService()
+        self._pending: object = None
 
         title = QLabel("树洞新消息")
         title.setObjectName("DialogTitle")
@@ -1187,16 +1215,28 @@ class TreeholeMessagesDialog(QDialog):
         return panel
 
     def _refresh_auth_status(self) -> None:
-        result = self._auth.status()
-        if result.get("ok"):
-            label = "已登录 · {name}".format(
-                name=result.get("name") or "未知用户",
-            )
-            self._auth_status.setProperty("authState", "ok")
+        self._auth_status.setText("正在检查登录状态...")
+        self._pending = run_async(
+            self._auth.status,
+            on_done=self._on_auth_status,
+            on_error=self._on_auth_status_error,
+        )
+
+    def _on_auth_status(self, result: object) -> None:
+        data = result if isinstance(result, dict) else {"ok": False, "message": str(result)}
+        ok = bool(data.get("ok"))
+        if ok:
+            label = "已登录 · {name}".format(name=data.get("name") or "未知用户")
         else:
-            label = str(result.get("message") or "尚未登录树洞")
-        self._auth_status.setText(label)
-        self._auth_status.setProperty("authState", "error" if not result.get("ok") else "ok")
+            label = str(data.get("message") or "尚未登录树洞")
+        self._set_auth_status_text(label, "ok" if ok else "error")
+
+    def _on_auth_status_error(self, message: str) -> None:
+        self._set_auth_status_text(f"无法检查登录状态：{message}", "error")
+
+    def _set_auth_status_text(self, text: str, state: str) -> None:
+        self._auth_status.setText(text)
+        self._auth_status.setProperty("authState", state)
         self._auth_status.style().unpolish(self._auth_status)
         self._auth_status.style().polish(self._auth_status)
 
@@ -1217,20 +1257,29 @@ class TreeholeMessagesDialog(QDialog):
     def _run_auth_action(self, action: Callable[[], dict[str, object]]) -> None:
         self._set_auth_busy(True)
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        try:
-            result = action()
-        finally:
-            QApplication.restoreOverrideCursor()
-            self._set_auth_busy(False)
-        self._auth_status.setText(str(result.get("message") or "操作完成"))
-        if result.get("ok"):
+        self._pending = run_async(
+            action,
+            on_done=self._on_auth_action_done,
+            on_error=self._on_auth_action_error,
+        )
+
+    def _on_auth_action_done(self, result: object) -> None:
+        QApplication.restoreOverrideCursor()
+        self._set_auth_busy(False)
+        data = result if isinstance(result, dict) else {"ok": False, "message": str(result)}
+        self._auth_status.setText(str(data.get("message") or "操作完成"))
+        if data.get("ok"):
             self.auth_changed.emit()
             self._refresh_auth_status()
         else:
-            self._auth_status.setProperty("authState", "error")
-            self._auth_status.style().unpolish(self._auth_status)
-            self._auth_status.style().polish(self._auth_status)
-            QMessageBox.warning(self, "树洞登录", str(result.get("message") or "操作失败"))
+            self._set_auth_status_text(str(data.get("message") or "操作失败"), "error")
+            QMessageBox.warning(self, "树洞登录", str(data.get("message") or "操作失败"))
+
+    def _on_auth_action_error(self, message: str) -> None:
+        QApplication.restoreOverrideCursor()
+        self._set_auth_busy(False)
+        self._set_auth_status_text(message, "error")
+        QMessageBox.warning(self, "树洞登录", message)
 
     def _set_auth_busy(self, busy: bool) -> None:
         for button in self._auth_buttons:
@@ -1257,12 +1306,13 @@ class PLibSearchDialog(QDialog):
         ("最近一年", "year"),
     ]
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, tool: Tool, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("P-Lib 资料搜索")
         self.resize(820, 680)
-        self._tool = PLibMaterialsTool()
+        self._tool = tool
         self._results: list[dict[str, object]] = []
+        self._pending: object = None
 
         title = QLabel("P-Lib 资料搜索")
         title.setObjectName("DialogTitle")
@@ -1340,6 +1390,31 @@ class PLibSearchDialog(QDialog):
         layout.addLayout(actions)
         self._set_selected_actions(False)
 
+    def _run_tool(self, args: dict[str, object], on_success: Callable[[object], None]) -> None:
+        """Invoke the P-Lib tool off the GUI thread, then run on_success."""
+        self._set_busy(True)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        self._on_success: Callable[[object], None] | None = on_success
+        self._pending = run_async(
+            lambda: self._tool.invoke(args),
+            on_done=self._on_tool_done,
+            on_error=self._on_tool_error,
+        )
+
+    def _on_tool_done(self, result: object) -> None:
+        QApplication.restoreOverrideCursor()
+        self._set_busy(False)
+        callback, self._on_success = self._on_success, None
+        if callback is not None:
+            callback(result)
+
+    def _on_tool_error(self, message: str) -> None:
+        QApplication.restoreOverrideCursor()
+        self._set_busy(False)
+        self._on_success = None
+        self._status_label.setStyleSheet("color: #b42318;")
+        self._status_label.setText(f"操作失败：{message}")
+
     def _search(self) -> None:
         query = self._query_input.text().strip()
         if not query:
@@ -1357,17 +1432,12 @@ class PLibSearchDialog(QDialog):
         time_value = str(self._time_combo.currentData() or "")
         if time_value != "all":
             args["time"] = time_value
+        self._run_tool(args, self._on_search_result)
 
-        self._set_busy(True)
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        try:
-            result = self._tool.invoke(args)
-        finally:
-            QApplication.restoreOverrideCursor()
-            self._set_busy(False)
-        if not result.success:
-            self._status_label.setText(f"搜索失败：{result.error}")
+    def _on_search_result(self, result: object) -> None:
+        if not getattr(result, "success", False):
             self._status_label.setStyleSheet("color: #b42318;")
+            self._status_label.setText(f"搜索失败：{getattr(result, 'error', '')}")
             return
         data = result.data if isinstance(result.data, dict) else {}
         results = data.get("results")
@@ -1402,15 +1472,15 @@ class PLibSearchDialog(QDialog):
         material_id = _material_id(material)
         if material_id is None:
             return
-        self._set_busy(True)
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        try:
-            result = self._tool.invoke({"action": "show", "id": material_id})
-        finally:
-            QApplication.restoreOverrideCursor()
-            self._set_busy(False)
-        if not result.success:
-            QMessageBox.warning(self, "P-Lib 详情", str(result.error or "获取详情失败"))
+        self._run_tool(
+            {"action": "show", "id": material_id},
+            lambda result: self._on_show_result(result, material),
+        )
+
+    def _on_show_result(self, result: object, material: dict[str, object]) -> None:
+        if not getattr(result, "success", False):
+            error = str(getattr(result, "error", "") or "获取详情失败")
+            QMessageBox.warning(self, "P-Lib 详情", error)
             return
         detail = result.data if isinstance(result.data, dict) else material
         QMessageBox.information(self, "P-Lib 详情", _plib_detail_text(detail))
@@ -1428,15 +1498,11 @@ class PLibSearchDialog(QDialog):
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
-        self._set_busy(True)
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        try:
-            result = self._tool.invoke({"action": "download", "id": material_id})
-        finally:
-            QApplication.restoreOverrideCursor()
-            self._set_busy(False)
-        if not result.success:
-            QMessageBox.warning(self, "P-Lib 下载", str(result.error or "下载失败"))
+        self._run_tool({"action": "download", "id": material_id}, self._on_download_result)
+
+    def _on_download_result(self, result: object) -> None:
+        if not getattr(result, "success", False):
+            QMessageBox.warning(self, "P-Lib 下载", str(getattr(result, "error", "") or "下载失败"))
             return
         data = result.data if isinstance(result.data, dict) else {}
         QMessageBox.information(self, "P-Lib 下载", _plib_download_text(data))
@@ -1478,11 +1544,12 @@ class PLibLoginDialog(QDialog):
 
     auth_changed = pyqtSignal()
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, tool: Tool, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("P-Lib 登录")
         self.resize(560, 330)
-        self._tool = PLibMaterialsTool()
+        self._tool = tool
+        self._pending: object = None
 
         title = QLabel("P-Lib 登录")
         title.setObjectName("DialogTitle")
@@ -1545,24 +1612,35 @@ class PLibLoginDialog(QDialog):
         self._set_busy(True)
         self._set_status("正在登录 P-Lib...", "pending")
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        try:
-            result = self._tool.invoke(
+        self._pending = run_async(
+            lambda: self._tool.invoke(
                 {"action": "login", "email": email, "password": password}
-            )
-        finally:
-            QApplication.restoreOverrideCursor()
-            self._set_busy(False)
-        if not result.success:
-            self._set_status(str(result.error or "登录失败"), "error")
-            QMessageBox.warning(self, "P-Lib 登录", str(result.error or "登录失败"))
+            ),
+            on_done=self._on_login_result,
+            on_error=self._on_login_error,
+        )
+
+    def _on_login_result(self, result: object) -> None:
+        QApplication.restoreOverrideCursor()
+        self._set_busy(False)
+        if not getattr(result, "success", False):
+            error = str(getattr(result, "error", "") or "登录失败")
+            self._set_status(error, "error")
+            QMessageBox.warning(self, "P-Lib 登录", error)
             return
         data = result.data if isinstance(result.data, dict) else {}
-        remaining = data.get("quota_remaining")
+        remaining = data.get("quota_remaining", data.get("download_remaining"))
         message = "登录成功"
         if remaining is not None:
             message += f" · 今日剩余下载次数：{remaining}"
         self._set_status(message, "ok")
         self.auth_changed.emit()
+
+    def _on_login_error(self, message: str) -> None:
+        QApplication.restoreOverrideCursor()
+        self._set_busy(False)
+        self._set_status(message, "error")
+        QMessageBox.warning(self, "P-Lib 登录", message)
 
     def _set_busy(self, busy: bool) -> None:
         self._email_input.setEnabled(not busy)
@@ -1579,11 +1657,14 @@ class PLibLoginDialog(QDialog):
 class AnnouncementDetailDialog(QDialog):
     """Fetch and display one course announcement."""
 
-    def __init__(self, announcement_id: str, parent: QWidget | None = None) -> None:
+    def __init__(
+        self, tool: Tool, announcement_id: str, parent: QWidget | None = None
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("课程通知详情")
         self.resize(720, 620)
-        self._tool = PKU3bAnnouncementsTool()
+        self._tool = tool
+        self._pending: object = None
 
         title = QLabel("课程通知详情")
         title.setObjectName("DialogTitle")
@@ -1625,12 +1706,21 @@ class AnnouncementDetailDialog(QDialog):
 
     def _load_detail(self, announcement_id: str) -> None:
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        try:
-            result = self._tool.invoke({"announcement_id": announcement_id})
-        finally:
-            QApplication.restoreOverrideCursor()
-        if not result.success:
-            self._body_label.setText(str(result.error or "公告详情加载失败"))
+        self._pending = run_async(
+            lambda: self._tool.invoke({"announcement_id": announcement_id}),
+            on_done=self._on_detail_loaded,
+            on_error=self._on_detail_error,
+        )
+
+    def _on_detail_error(self, message: str) -> None:
+        QApplication.restoreOverrideCursor()
+        self._body_label.setStyleSheet("color: #b42318;")
+        self._body_label.setText(f"公告详情加载失败：{message}")
+
+    def _on_detail_loaded(self, result: object) -> None:
+        QApplication.restoreOverrideCursor()
+        if not getattr(result, "success", False):
+            self._body_label.setText(str(getattr(result, "error", "") or "公告详情加载失败"))
             self._body_label.setStyleSheet("color: #b42318;")
             return
         data = result.data if isinstance(result.data, dict) else {}
@@ -1700,11 +1790,11 @@ class LectureDetailDialog(QDialog):
 class LectureSearchDialog(QDialog):
     """Filter lectures through the existing LectureTool."""
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, tool: Tool, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("讲座筛选")
         self.resize(760, 620)
-        self._tool = LectureTool()
+        self._tool = tool
         self._lectures: list[dict[str, object]] = []
 
         title = QLabel("讲座筛选")
@@ -1819,11 +1909,11 @@ class LectureSearchDialog(QDialog):
 class RemindersDialog(QDialog):
     """Manage reminders stored by ReminderTool."""
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, tool: Tool, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("提醒管理")
         self.resize(760, 620)
-        self._tool = ReminderTool()
+        self._tool = tool
         self._items: list[dict[str, object]] = []
 
         title = QLabel("提醒管理")
@@ -1971,11 +2061,11 @@ class RemindersDialog(QDialog):
 class MemoryDialog(QDialog):
     """Inspect and edit persistent user preferences."""
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, tool: Tool, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("记忆管理")
         self.resize(760, 620)
-        self._tool = MemoryTool()
+        self._tool = tool
         self._items: list[dict[str, object]] = []
 
         title = QLabel("记忆管理")
@@ -2118,6 +2208,7 @@ class KnowledgeSearchDialog(QDialog):
         self.resize(820, 680)
         self._tool = tool
         self._hits: list[dict[str, object]] = []
+        self._pending: object = None
 
         title = QLabel("知识库检索")
         title.setObjectName("DialogTitle")
@@ -2177,14 +2268,25 @@ class KnowledgeSearchDialog(QDialog):
             QMessageBox.warning(self, "知识库检索", "请输入检索关键词。")
             return
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        try:
-            result = self._tool.invoke(
+        self._status_label.setStyleSheet("")
+        self._status_label.setText("检索中...")
+        self._pending = run_async(
+            lambda: self._tool.invoke(
                 {"query": query, "top_k": int(self._top_k_combo.currentText())}
-            )
-        finally:
-            QApplication.restoreOverrideCursor()
-        if not result.success:
-            self._status_label.setText(str(result.error or "检索失败"))
+            ),
+            on_done=self._on_search_result,
+            on_error=self._on_search_error,
+        )
+
+    def _on_search_error(self, message: str) -> None:
+        QApplication.restoreOverrideCursor()
+        self._status_label.setStyleSheet("color: #b42318;")
+        self._status_label.setText(f"检索失败：{message}")
+
+    def _on_search_result(self, result: object) -> None:
+        QApplication.restoreOverrideCursor()
+        if not getattr(result, "success", False):
+            self._status_label.setText(str(getattr(result, "error", "") or "检索失败"))
             self._status_label.setStyleSheet("color: #b42318;")
             return
         data = result.data if isinstance(result.data, list) else []

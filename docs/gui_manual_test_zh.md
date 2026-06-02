@@ -1,6 +1,6 @@
 # GUI 手动测试清单
 
-本清单用于开发机上手动验收 PyQt6 GUI。测试前确认已经完成 `pku3b init`，并存在 `secrets/deepseek_key.txt`。
+本清单用于开发机上手动验收 PyQt6 GUI。测试前确认已经完成 `pku3b init`，并存在 `secrets/api_keys/deepseek_key.txt`。
 
 ## 1. 启动在线 GUI
 

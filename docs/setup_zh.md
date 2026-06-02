@@ -1,11 +1,27 @@
 # 环境配置
 
-## API Keys
+## 密钥与凭据
 
-密钥都放在 `secrets/` 目录下（整个目录已 gitignore），每个文件只存一行密钥：
+所有密钥和账户凭据都放在 `secrets/` 目录下（整个目录已 gitignore），每个文件只存一行内容。当前布局：
 
-- `secrets/deepseek_key.txt`（在线必需）—— DeepSeek 对话模型。缺失时 `--online` 会回退到离线模式（`EchoLLMProvider`）。
-- `secrets/embedding_key.txt`（仅 RAG 需要）—— 阿里云百炼 DashScope 嵌入模型（`text-embedding-v4`，OpenAI 兼容端点）。**只有显式开启 RAG（`--rag`）时才需要**；RAG 默认关闭，不开则启动不读此文件、也不发任何嵌入请求。也支持读取工作区共享路径 `../secrets/api_key.txt`。获取 Key：<https://help.aliyun.com/zh/model-studio/get-api-key>。
+```
+secrets/
+  api_keys/
+    deepseek_key.txt     # 在线必需 —— DeepSeek 对话模型
+    embedding_key.txt    # 仅 RAG 需要 —— 阿里云百炼 DashScope 嵌入模型
+    kimi_key.txt         # 预留 —— Kimi 视觉模型（当前 agent 尚未接入，留作后续视觉功能）
+  plib/
+    email                # P-Lib（PKUHUB）账号邮箱
+    password             # P-Lib 账号密码
+  treehole/
+    id                   # 树洞登录账号（IAAA 学号）
+    password             # 树洞登录密码
+```
+
+- `api_keys/deepseek_key.txt`（在线必需）—— DeepSeek 对话模型。缺失时 `--online` 会回退到离线模式（`EchoLLMProvider`）。也兼容旧布局 `secrets/deepseek_key.txt`。
+- `api_keys/embedding_key.txt`（仅 RAG 需要）—— 阿里云百炼 DashScope 嵌入模型（`text-embedding-v4`，OpenAI 兼容端点）。**只有显式开启 RAG（`--rag`）时才需要**；RAG 默认关闭，不开则启动不读此文件、也不发任何嵌入请求。获取 Key：<https://help.aliyun.com/zh/model-studio/get-api-key>。
+- `plib/{email,password}`（P-Lib 必需）—— `PLibMaterialsTool` 会在每次调用前自动注入为 `PLIB_EMAIL` / `PLIB_PASSWORD` 环境变量，所以 search / quota / download 无需手动 `login`（P-Lib 登录是自愈的）。
+- `treehole/{id,password}`（树洞必需）—— `TreeholeUpdatesTool` / `TreeholeAuthService` 从此目录读取登录凭据；首次在线运行会提示“需要短信验证”，在 GUI 树洞面板完成一次短信验证后会缓存 `secrets/treehole/session.json` 并复用。
 
 ```bash
 python -m src --online          # DeepSeek + 实时工具，RAG 关闭（默认）
@@ -58,3 +74,24 @@ pku3b assignment list --format json | jq .   # 验证 --format json 标志可用
 ### 已知小坑
 
 `pku3b` 的 stdout 在重定向到普通文件时会失败（exit 1，空输出）——这是 compio 轮询后端的已知上游问题。管道是好的（`subprocess.run(capture_output=True)` 用的就是管道），所以 Python 包装层不受影响；如果你想在 shell 里手动调试，用管道（`pku3b ... | jq .`）而不是 `>`。
+
+## P-Lib / plib-cli（P-Lib 资料检索需要）
+
+`PLibMaterialsTool` 通过 [`plib-cli`](https://github.com/RizzoHou/plib-cli) 子进程检索、下载 PKUHUB 课程资料，模式和 `pku3b` 一致：跑 `plib --format json`，再 `json.loads` 它的稳定 JSON 信封。它需要独立 venv 安装，工具会按顺序在 `PATH`、`../plib-cli/.venv/bin/plib`、`<repo>/.local/bin/plib` 查找二进制。
+
+推荐装法（克隆到工作区根目录，与 pku-captain 同级）：
+
+```bash
+cd ..
+git clone https://github.com/RizzoHou/plib-cli
+cd plib-cli
+python3 -m venv .venv && .venv/bin/pip install -e .
+```
+
+P-Lib 账号是 PKUHUB 自注册的邮箱 / 密码（**不是** IAAA），在 <https://pkuhub.cn/register> 注册后把邮箱、密码分别写进 `secrets/plib/email`、`secrets/plib/password`（见上文“密钥与凭据”）。验证：
+
+```bash
+../plib-cli/.venv/bin/plib quota --format json   # 返回 {"ok": true, "data": {"download_remaining": N}}
+```
+
+普通账号每天 10 次下载额度，下载会保存到 `downloads/plib/`。

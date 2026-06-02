@@ -306,8 +306,12 @@ def _format_dashboard_data(key: str, data: object) -> str:
 
 def _startup_diagnostics(*, offline: bool) -> str:
     missing: list[str] = []
-    if not (_REPO_ROOT / "secrets" / "deepseek_key.txt").exists():
-        missing.append("DeepSeek key：缺少 secrets/deepseek_key.txt")
+    deepseek_key_paths = (
+        _REPO_ROOT / "secrets" / "api_keys" / "deepseek_key.txt",
+        _REPO_ROOT / "secrets" / "deepseek_key.txt",
+    )
+    if not any(path.exists() for path in deepseek_key_paths):
+        missing.append("DeepSeek key：缺少 secrets/api_keys/deepseek_key.txt")
     if shutil.which("pku3b") is None and not _LOCAL_PKU3B.exists():
         missing.append("pku3b：未在 PATH 中找到")
     elif not _pku3b_configured():

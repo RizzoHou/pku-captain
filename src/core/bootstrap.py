@@ -39,11 +39,16 @@ from .agent import Agent
 from .conversation import Conversation
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_WORKSPACE_ROOT = _REPO_ROOT.parent
-_DEEPSEEK_KEY_PATH = _REPO_ROOT / "secrets" / "deepseek_key.txt"
+_SECRETS_DIR = _REPO_ROOT / "secrets"
+# Canonical layout: secrets/api_keys/<provider>_key.txt. The flat
+# secrets/<provider>_key.txt paths are kept as a fallback for older checkouts.
+_DEEPSEEK_KEY_PATHS = (
+    _SECRETS_DIR / "api_keys" / "deepseek_key.txt",
+    _SECRETS_DIR / "deepseek_key.txt",
+)
 _EMBEDDING_KEY_PATHS = (
-    _REPO_ROOT / "secrets" / "embedding_key.txt",
-    _WORKSPACE_ROOT / "secrets" / "api_key.txt",
+    _SECRETS_DIR / "api_keys" / "embedding_key.txt",
+    _SECRETS_DIR / "embedding_key.txt",
 )
 
 _SYSTEM_PROMPT = (
@@ -83,12 +88,14 @@ def build_agent(*, offline: bool = False, enable_knowledge: bool = False) -> Age
 def _build_llm(*, offline: bool) -> LLMProvider:
     if offline:
         return EchoLLMProvider()
-    if not _DEEPSEEK_KEY_PATH.exists():
+    key_path = _find_key_path(_DEEPSEEK_KEY_PATHS)
+    if key_path is None:
+        expected = " or ".join(str(path) for path in _DEEPSEEK_KEY_PATHS)
         raise FileNotFoundError(
-            f"DeepSeek API key not found at {_DEEPSEEK_KEY_PATH}. "
+            f"DeepSeek API key not found at {expected}. "
             "Either provide the key file or call build_agent(offline=True)."
         )
-    api_key = _DEEPSEEK_KEY_PATH.read_text(encoding="utf-8").strip()
+    api_key = key_path.read_text(encoding="utf-8").strip()
     return DeepSeekProvider(api_key=api_key)
 
 
@@ -140,11 +147,16 @@ def _build_embedder() -> APIEmbedder:
     return APIEmbedder(api_key=api_key)
 
 
-def _find_embedding_key_path() -> Path | None:
-    for path in _EMBEDDING_KEY_PATHS:
+def _find_key_path(paths: tuple[Path, ...]) -> Path | None:
+    """Return the first existing path in a fallback tuple, else None."""
+    for path in paths:
         if path.exists():
             return path
     return None
+
+
+def _find_embedding_key_path() -> Path | None:
+    return _find_key_path(_EMBEDDING_KEY_PATHS)
 
 
 def _build_workflows(tools: ToolRegistry) -> WorkflowRegistry:

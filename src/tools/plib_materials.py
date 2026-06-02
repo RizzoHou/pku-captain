@@ -21,6 +21,7 @@ DEFAULT_EXECUTABLE = "plib"
 DEFAULT_TIMEOUT = 60.0
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _WORKSPACE_ROOT = _REPO_ROOT.parent
+_PLIB_SECRETS_DIR = _REPO_ROOT / "secrets" / "plib"
 _LOCAL_EXECUTABLES = (
     _WORKSPACE_ROOT / "plib-cli" / ".venv" / "bin" / "plib",
     _REPO_ROOT / ".local" / "bin" / "plib",
@@ -108,9 +109,13 @@ class PLibMaterialsTool(Tool):
         *,
         executable: str = DEFAULT_EXECUTABLE,
         timeout: float = DEFAULT_TIMEOUT,
+        secrets_dir: str | Path | None = None,
     ) -> None:
         self.executable = executable
         self.timeout = timeout
+        self.secrets_dir = (
+            Path(secrets_dir) if secrets_dir is not None else _PLIB_SECRETS_DIR
+        )
 
     def invoke(self, args: dict[str, Any]) -> ToolResult:
         action = str(args.get("action") or "").strip()
@@ -159,6 +164,25 @@ class PLibMaterialsTool(Tool):
         output_dir = str(args.get("output_dir") or (_REPO_ROOT / "downloads" / "plib"))
         return self._run_json(["download", *ids, "-o", output_dir], timeout=180.0)
 
+    def _credentials_env(self) -> dict[str, str]:
+        """Read stored P-Lib credentials so every call self-authenticates.
+
+        plib resolves ``PLIB_EMAIL`` / ``PLIB_PASSWORD`` first, and its auth is
+        self-healing, so injecting the stored account here makes search / quota /
+        download work without a manual ``login`` action.
+        """
+        email = self._read_secret("email")
+        password = self._read_secret("password")
+        if email and password:
+            return {"PLIB_EMAIL": email, "PLIB_PASSWORD": password}
+        return {}
+
+    def _read_secret(self, name: str) -> str:
+        path = self.secrets_dir / name
+        if not path.exists():
+            return ""
+        return path.read_text(encoding="utf-8").strip()
+
     def _run_json(
         self,
         cli_args: Sequence[str],
@@ -166,12 +190,16 @@ class PLibMaterialsTool(Tool):
         timeout: float | None = None,
         env: Mapping[str, str] | None = None,
     ) -> ToolResult:
+        # Stored credentials form the base; an explicit `login` env overrides.
+        merged_env = self._credentials_env()
+        if env:
+            merged_env.update(env)
         try:
             run = run_plib(
                 cli_args,
                 executable=self.executable,
                 timeout=timeout or self.timeout,
-                env=env,
+                env=merged_env or None,
             )
         except PlibNotFoundError as exc:
             return ToolResult(success=False, error=str(exc))

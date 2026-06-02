@@ -25,8 +25,15 @@ from src.workflows.base import WorkflowRegistry
 
 
 def _load_key() -> str:
-    path = REPO_ROOT / "secrets" / "deepseek_key.txt"
-    return path.read_text(encoding="utf-8").strip()
+    candidates = (
+        REPO_ROOT / "secrets" / "api_keys" / "deepseek_key.txt",
+        REPO_ROOT / "secrets" / "deepseek_key.txt",
+    )
+    for path in candidates:
+        if path.exists():
+            return path.read_text(encoding="utf-8").strip()
+    expected = " or ".join(str(path) for path in candidates)
+    raise SystemExit(f"DeepSeek API key not found at {expected}")
 
 
 def probe_plain_chat(provider: DeepSeekProvider) -> None:
