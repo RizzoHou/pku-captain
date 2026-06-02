@@ -57,6 +57,17 @@ def apply_app_style(app: QApplication) -> None:
             padding-top: 2px;
         }}
 
+        QLabel#DialogTitle {{
+            color: {PKU_RED};
+            font-size: 20px;
+            font-weight: 800;
+        }}
+
+        QLabel#DialogSubtitle {{
+            color: {MUTED};
+            font-size: 12px;
+        }}
+
         QLabel#SectionTitle {{
             color: {PKU_RED};
             font-size: 16px;
@@ -140,6 +151,131 @@ def apply_app_style(app: QApplication) -> None:
             text-decoration: underline;
         }}
 
+        QPushButton#HeaderTreeholeButton {{
+            background: #fffaf7;
+            color: {PKU_RED};
+            border-color: #d8b9b5;
+            min-width: 58px;
+        }}
+
+        QPushButton#HeaderTreeholeButton[hasUnread="true"] {{
+            background: {PKU_RED};
+            border-color: {PKU_RED};
+            color: #ffffff;
+        }}
+
+        QPushButton#HeaderTreeholeButton[hasUnread="true"]:hover {{
+            background: {PKU_RED_DARK};
+            border-color: {PKU_RED_DARK};
+            color: #ffffff;
+        }}
+
+        QWidget#TreeholeList {{
+            background: transparent;
+        }}
+
+        QFrame#TreeholeRow,
+        QFrame#TreeholeDetailRow {{
+            background: #fffaf7;
+            border: 1px solid #eadbd5;
+            border-left: 4px solid {PKU_GOLD};
+            border-radius: 7px;
+        }}
+
+        QFrame#TreeholeAuthPanel {{
+            background: {SURFACE};
+            border: 1px solid {BORDER};
+            border-radius: 8px;
+        }}
+
+        QFrame#PLibAuthPanel {{
+            background: {SURFACE};
+            border: 1px solid {BORDER};
+            border-radius: 8px;
+        }}
+
+        QLabel#TreeholeAuthTitle {{
+            color: {PKU_RED_DARK};
+            font-size: 16px;
+            font-weight: 800;
+        }}
+
+        QLabel#TreeholeAuthSubtitle {{
+            color: {MUTED};
+            font-size: 11px;
+        }}
+
+        QLabel#TreeholeAuthStep {{
+            color: {PKU_RED_DARK};
+            font-size: 11px;
+            font-weight: 800;
+            padding-top: 2px;
+        }}
+
+        QLabel#TreeholeAuthStatus {{
+            color: {PKU_RED_DARK};
+            background: #fff6ed;
+            border: 1px solid #eadbd5;
+            border-radius: 8px;
+            padding: 6px 9px;
+            font-size: 11px;
+            font-weight: 700;
+        }}
+
+        QLabel#TreeholeAuthStatus[authState="ok"] {{
+            color: #166534;
+            background: #f0fdf4;
+            border-color: #bbf7d0;
+        }}
+
+        QLabel#TreeholeAuthStatus[authState="error"] {{
+            color: #b42318;
+            background: #fff6ed;
+            border-color: #f4c7c3;
+        }}
+
+        QLabel#PLibAuthStatus {{
+            color: {PKU_RED_DARK};
+            background: #fff6ed;
+            border: 1px solid #eadbd5;
+            border-radius: 8px;
+            padding: 8px 10px;
+            font-size: 12px;
+            font-weight: 700;
+        }}
+
+        QLabel#PLibAuthStatus[authState="ok"] {{
+            color: #166534;
+            background: #f0fdf4;
+            border-color: #bbf7d0;
+        }}
+
+        QLabel#PLibAuthStatus[authState="error"] {{
+            color: #b42318;
+            background: #fff6ed;
+            border-color: #f4c7c3;
+        }}
+
+        QLabel#PLibAuthStatus[authState="pending"] {{
+            color: {PKU_RED_DARK};
+            background: #fffaf7;
+            border-color: #d8b9b5;
+        }}
+
+        QLabel#TreeholePreview {{
+            color: {PKU_RED_DARK};
+            font-size: 11px;
+            font-weight: 600;
+        }}
+
+        QLabel#TreeholeComment {{
+            color: {INK};
+            background: #fffdfb;
+            border: 1px solid #f0e6e2;
+            border-radius: 6px;
+            padding: 7px;
+        }}
+
         QWidget#ScheduleGrid {{
             background: #fffdfb;
         }}
@@ -220,6 +356,34 @@ def apply_app_style(app: QApplication) -> None:
             border-color: #d8b9b5;
         }}
 
+        QPushButton#ListRowButton {{
+            background: #fffaf7;
+            color: {INK};
+            border: 1px solid #eadbd5;
+            border-left: 4px solid {PKU_GOLD};
+            border-radius: 7px;
+            padding: 8px 10px;
+            text-align: left;
+            font-size: 11px;
+            font-weight: 650;
+        }}
+
+        QPushButton#ListRowButton:hover {{
+            background: #fff6ed;
+            color: {PKU_RED_DARK};
+            border-color: #d8b9b5;
+            border-left-color: {PKU_RED};
+        }}
+
+        QLabel#DialogBody {{
+            color: {INK};
+            background: #fffdfb;
+            border: 1px solid #f0e6e2;
+            border-radius: 8px;
+            padding: 10px;
+            line-height: 1.35;
+        }}
+
         QPlainTextEdit {{
             border: 1px solid {BORDER};
             border-radius: 8px;
@@ -244,6 +408,26 @@ def apply_app_style(app: QApplication) -> None:
 
         QScrollArea#DashboardScroll > QWidget > QWidget {{
             background: {BACKGROUND};
+        }}
+
+        QScrollArea#TreeholeMessageScroll {{
+            border: 1px solid {BORDER};
+            border-radius: 8px;
+            background: #fffaf7;
+        }}
+
+        QScrollArea#TreeholeMessageScroll > QWidget > QWidget {{
+            background: #fffaf7;
+        }}
+
+        QScrollArea#DetailScroll {{
+            border: 1px solid {BORDER};
+            border-radius: 8px;
+            background: #fffaf7;
+        }}
+
+        QScrollArea#DetailScroll > QWidget > QWidget {{
+            background: #fffaf7;
         }}
 
         QScrollArea#MessageScroll {{
@@ -287,6 +471,47 @@ def apply_app_style(app: QApplication) -> None:
         QLabel#MessageText {{
             color: {INK};
             line-height: 1.35;
+        }}
+
+        QFrame#InlineToolCall {{
+            border: 1px solid #eadbd5;
+            border-left: 4px solid {PKU_RED};
+            border-radius: 8px;
+            background: #fffaf7;
+        }}
+
+        QFrame#InlineToolCall[traceRole="success"] {{
+            border-left-color: #166534;
+        }}
+
+        QFrame#InlineToolCall[traceRole="error"] {{
+            border-left-color: #b42318;
+        }}
+
+        QLabel#InlineToolName {{
+            color: {INK};
+            font-size: 12px;
+            font-weight: 800;
+        }}
+
+        QLabel#InlineToolStatus {{
+            color: {MUTED};
+            font-size: 11px;
+            font-weight: 800;
+            padding: 2px 6px;
+            background: #fffdfb;
+            border: 1px solid #f0e6e2;
+            border-radius: 6px;
+        }}
+
+        QLabel#InlineToolDetail {{
+            color: #475467;
+            background: #fffdfb;
+            border: 1px solid #f0e6e2;
+            border-radius: 6px;
+            padding: 7px;
+            font-family: Menlo, Monaco, Consolas, monospace;
+            font-size: 10px;
         }}
 
         QFrame#ToolTraceRow {{
@@ -339,6 +564,48 @@ def apply_app_style(app: QApplication) -> None:
 
         QLineEdit:focus {{
             border-color: {PKU_RED};
+        }}
+
+        QComboBox {{
+            border: 1px solid {BORDER};
+            border-radius: 7px;
+            background: #fffdfb;
+            padding: 7px 8px;
+            color: {INK};
+            font-weight: 600;
+        }}
+
+        QComboBox:hover,
+        QComboBox:focus {{
+            border-color: {PKU_RED};
+        }}
+
+        QListWidget#PLibResultList {{
+            border: 1px solid {BORDER};
+            border-radius: 8px;
+            background: #fffaf7;
+            padding: 6px;
+            color: {INK};
+        }}
+
+        QListWidget#PLibResultList::item {{
+            background: #fffdfb;
+            border: 1px solid #f0e6e2;
+            border-left: 4px solid {PKU_GOLD};
+            border-radius: 7px;
+            padding: 9px;
+            margin: 4px 2px;
+        }}
+
+        QListWidget#PLibResultList::item:selected {{
+            border-left-color: {PKU_RED};
+            border-color: #d8b9b5;
+            background: #fff6ed;
+            color: {INK};
+        }}
+
+        QLineEdit#TreeholeAuthInput {{
+            min-height: 18px;
         }}
         """
     )

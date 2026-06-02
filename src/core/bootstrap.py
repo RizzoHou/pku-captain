@@ -27,7 +27,9 @@ from ..tools import (
     PKU3bAnnouncementsTool,
     PKU3bAssignmentsTool,
     PKU3bCourseTableTool,
+    PLibMaterialsTool,
     ReminderTool,
+    TreeholeUpdatesTool,
     WeatherTool,
 )
 from ..tools.base import ToolRegistry
@@ -37,8 +39,12 @@ from .agent import Agent
 from .conversation import Conversation
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+_WORKSPACE_ROOT = _REPO_ROOT.parent
 _DEEPSEEK_KEY_PATH = _REPO_ROOT / "secrets" / "deepseek_key.txt"
-_EMBEDDING_KEY_PATH = _REPO_ROOT / "secrets" / "embedding_key.txt"
+_EMBEDDING_KEY_PATHS = (
+    _REPO_ROOT / "secrets" / "embedding_key.txt",
+    _WORKSPACE_ROOT / "secrets" / "api_key.txt",
+)
 
 _SYSTEM_PROMPT = (
     "You are PKU Captain, a desktop AI assistant for Peking University "
@@ -95,6 +101,8 @@ def _build_tools(*, offline: bool, enable_knowledge: bool = False) -> ToolRegist
         registry.register(PKU3bAssignmentsTool())
         registry.register(PKU3bAnnouncementsTool())
         registry.register(PKU3bCourseTableTool())
+        registry.register(PLibMaterialsTool())
+        registry.register(TreeholeUpdatesTool())
         registry.register(WeatherTool())
         if enable_knowledge:
             registry.register(KnowledgeSearchTool(_build_knowledge_base()))
@@ -121,13 +129,22 @@ def _build_knowledge_base() -> KnowledgeBase:
 
 def _build_embedder() -> APIEmbedder:
     """Construct the API embedder from the local key file."""
-    if not _EMBEDDING_KEY_PATH.exists():
+    key_path = _find_embedding_key_path()
+    if key_path is None:
+        expected = " or ".join(str(path) for path in _EMBEDDING_KEY_PATHS)
         raise FileNotFoundError(
-            f"Embedding API key not found at {_EMBEDDING_KEY_PATH}. "
+            f"Embedding API key not found at {expected}. "
             "RAG knowledge search needs it; omit enable_knowledge to run without RAG."
         )
-    api_key = _EMBEDDING_KEY_PATH.read_text(encoding="utf-8").strip()
+    api_key = key_path.read_text(encoding="utf-8").strip()
     return APIEmbedder(api_key=api_key)
+
+
+def _find_embedding_key_path() -> Path | None:
+    for path in _EMBEDDING_KEY_PATHS:
+        if path.exists():
+            return path
+    return None
 
 
 def _build_workflows(tools: ToolRegistry) -> WorkflowRegistry:

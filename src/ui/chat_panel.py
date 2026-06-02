@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import re
+from typing import Any
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QKeyEvent
@@ -19,6 +20,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from .tool_trace_panel import _format_tool_result, _to_json
+
 
 class ChatPanel(QWidget):
     """Conversation panel that emits user messages and renders final replies."""
@@ -28,8 +31,10 @@ class ChatPanel(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.setObjectName("ChatPanel")
+        self.setMinimumWidth(520)
         self._streaming_bubble: QLabel | None = None
         self._streaming_text = ""
+        self._tool_rows: dict[str, InlineToolCall] = {}
 
         self._message_layout = QVBoxLayout()
         self._message_layout.setSpacing(10)
@@ -41,6 +46,7 @@ class ChatPanel(QWidget):
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setObjectName("MessageScroll")
         scroll.setWidget(message_host)
@@ -126,6 +132,26 @@ class ChatPanel(QWidget):
     def add_system_message(self, text: str) -> None:
         self._add_message("系统", text, "system")
 
+    def add_tool_call(self, call_id: str, name: str, arguments: dict[str, Any]) -> None:
+        row = InlineToolCall()
+        row.set_trace(name, "调用中", _to_json(arguments), "pending")
+        self._tool_rows[call_id] = row
+        self._insert_flow_widget(row)
+
+    def update_tool_result(self, call_id: str, name: str, result: Any) -> None:
+        row = self._tool_rows.get(call_id)
+        if row is None:
+            row = InlineToolCall()
+            self._tool_rows[call_id] = row
+            self._insert_flow_widget(row)
+
+        success = bool(getattr(result, "success", False))
+        body = getattr(result, "data", None) if success else getattr(result, "error", None)
+        status = "完成" if success else "失败"
+        role = "success" if success else "error"
+        row.set_trace(name, status, _format_tool_result(name, body), role)
+        self._scroll.verticalScrollBar().setValue(self._scroll.verticalScrollBar().maximum())
+
     def _emit_send(self) -> None:
         text = self._input.toPlainText().strip()
         if not text:
@@ -167,9 +193,73 @@ class ChatPanel(QWidget):
 
         row_host = QWidget()
         row_host.setLayout(row)
-        self._message_layout.insertWidget(self._message_layout.count() - 1, row_host)
-        self._scroll.verticalScrollBar().setValue(self._scroll.verticalScrollBar().maximum())
+        self._insert_flow_widget(row_host)
         return body_label
+
+    def _insert_flow_widget(self, widget: QWidget) -> None:
+        self._message_layout.insertWidget(self._message_layout.count() - 1, widget)
+        self._scroll.verticalScrollBar().setValue(self._scroll.verticalScrollBar().maximum())
+
+
+class InlineToolCall(QFrame):
+    """Compact tool-call record shown inside the chat flow."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setObjectName("InlineToolCall")
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self.setMaximumWidth(720)
+        self._expanded = False
+
+        self._name_label = QLabel("")
+        self._name_label.setObjectName("InlineToolName")
+        self._name_label.setWordWrap(True)
+        self._status_label = QLabel("")
+        self._status_label.setObjectName("InlineToolStatus")
+
+        self._toggle_button = QPushButton("展开")
+        self._toggle_button.setObjectName("InlineToggleButton")
+        self._toggle_button.clicked.connect(self._toggle_detail)
+
+        header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.setSpacing(8)
+        header.addWidget(self._name_label, 1)
+        header.addWidget(self._status_label, 0)
+        header.addWidget(self._toggle_button, 0)
+
+        self._detail_label = QLabel("")
+        self._detail_label.setObjectName("InlineToolDetail")
+        self._detail_label.setTextInteractionFlags(
+            self._detail_label.textInteractionFlags()
+            | Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        self._detail_label.setWordWrap(True)
+        self._detail_label.hide()
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(6)
+        layout.addLayout(header)
+        layout.addWidget(self._detail_label)
+
+    def set_trace(self, name: str, status: str, detail: str, role: str) -> None:
+        self.setProperty("traceRole", role)
+        self.style().unpolish(self)
+        self.style().polish(self)
+        self._name_label.setText(f"工具 · {name}")
+        self._status_label.setText(status)
+        self._detail_label.setText(detail)
+        self._apply_expanded()
+
+    def _toggle_detail(self) -> None:
+        self._expanded = not self._expanded
+        self._apply_expanded()
+
+    def _apply_expanded(self) -> None:
+        self._detail_label.setVisible(self._expanded)
+        self._toggle_button.setText("收起" if self._expanded else "展开")
 
 
 def _message_html(text: str, role: str) -> str:

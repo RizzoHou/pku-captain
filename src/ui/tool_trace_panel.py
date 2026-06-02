@@ -152,6 +152,10 @@ def _format_tool_result(name: str, body: Any) -> str:
         return _format_announcements(body)
     if name == "pku3b_coursetable" and isinstance(body, dict):
         return _format_course_table(body)
+    if name == "plib_materials" and isinstance(body, dict):
+        return _format_plib_materials(body)
+    if name == "treehole_updates" and isinstance(body, dict):
+        return _format_treehole_updates(body)
     if name == "weather" and isinstance(body, dict):
         return _format_weather(body)
     if name == "lecture" and isinstance(body, list):
@@ -205,6 +209,53 @@ def _format_weather(data: dict[str, Any]) -> str:
         feels=data.get("apparent_temperature_c", "?"),
         humidity=data.get("humidity_percent", "?"),
     )
+
+
+def _format_treehole_updates(data: dict[str, Any]) -> str:
+    message = str(data.get("message") or "暂无树洞新回复")
+    updates = data.get("updates")
+    if not isinstance(updates, list) or not updates:
+        return message
+    lines = [message]
+    for item in updates[:5]:
+        if isinstance(item, dict):
+            lines.append(
+                "- #{pid}：新增 {delta} 条".format(
+                    pid=item.get("pid", "?"),
+                    delta=item.get("delta", 0),
+                )
+            )
+    return "\n".join(lines)
+
+
+def _format_plib_materials(data: dict[str, Any]) -> str:
+    if "download_remaining" in data:
+        return f"P-Lib 今日剩余下载次数：{data.get('download_remaining')}"
+    results = data.get("results")
+    if isinstance(results, list):
+        if not results:
+            return "P-Lib 没有找到匹配资料。"
+        lines = [f"P-Lib 返回 {len(results)} 条资料，展示前 5 条："]
+        for item in results[:5]:
+            if isinstance(item, dict):
+                lines.append(
+                    "- #{id} {title}（{type}，下载 {downloads}）".format(
+                        id=item.get("id", "?"),
+                        title=item.get("title", "未命名资料"),
+                        type=item.get("type", "类型未知"),
+                        downloads=item.get("downloads", "?"),
+                    )
+                )
+        return "\n".join(lines)
+    if "title" in data:
+        return "#{id} {title}\n{desc}".format(
+            id=data.get("id", "?"),
+            title=data.get("title", "未命名资料"),
+            desc=data.get("description") or data.get("course") or "",
+        ).strip()
+    if "downloads" in data:
+        return f"P-Lib 已下载 {len(data.get('downloads') or [])} 个文件。"
+    return _to_json(data)
 
 
 def _format_course_table(data: dict[str, Any]) -> str:
