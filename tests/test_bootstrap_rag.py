@@ -41,3 +41,15 @@ def test_knowledge_opt_in(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda: KnowledgeBase(embedder=_FakeEmbedder()),
     )
     assert "knowledge_search" in _names(offline=False, enable_knowledge=True)
+
+
+def test_embedding_key_falls_back_to_workspace_secret(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project_key = tmp_path / "pku-captain" / "secrets" / "embedding_key.txt"
+    workspace_key = tmp_path / "secrets" / "api_key.txt"
+    workspace_key.parent.mkdir(parents=True)
+    workspace_key.write_text("sk-workspace", encoding="utf-8")
+    monkeypatch.setattr(bootstrap, "_EMBEDDING_KEY_PATHS", (project_key, workspace_key))
+
+    assert bootstrap._find_embedding_key_path() == workspace_key

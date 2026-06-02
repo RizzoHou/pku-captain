@@ -18,20 +18,20 @@ from .chat_panel import ChatPanel
 from .dashboard import DashboardPanel
 from .dashboard_worker import DashboardWorker
 from .formatters import upcoming_assignments
-from .tool_trace_panel import ToolTracePanel
 from .workflow_worker import WorkflowWorker, workflow_summary
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _LOCAL_PKU3B = _REPO_ROOT / ".local" / "cargo" / "bin" / "pku3b"
+_LOCAL_PLIB = _REPO_ROOT.parent / "plib-cli" / ".venv" / "bin" / "plib"
 
 
 class MainWindow(QMainWindow):
-    """Top-level window. Layout: dashboard | chat sidebar | tool-call panel."""
+    """Top-level window. Layout: dashboard | chat with inline tool calls."""
 
     def __init__(self, *, offline: bool = True, enable_knowledge: bool = False) -> None:
         super().__init__()
         self.setWindowTitle("PKU Captain")
-        self.resize(1500, 900)
+        self.resize(1680, 920)
         self.statusBar().showMessage("正在启动 GUI...")
 
         fallback_message = ""
@@ -43,9 +43,8 @@ class MainWindow(QMainWindow):
             mode_label = "离线模式"
             fallback_message = f"在线模式不可用，已切换到离线模式：{exc}"
 
-        self._dashboard = DashboardPanel(mode_label=mode_label)
+        self._dashboard = DashboardPanel(mode_label=mode_label, tools=agent.tools)
         self._chat_panel = ChatPanel()
-        self._tool_trace_panel = ToolTracePanel()
 
         self._agent_thread = QThread(self)
         self._agent_worker = AgentWorker(agent)
@@ -62,6 +61,8 @@ class MainWindow(QMainWindow):
                 "pku3b_coursetable": {},
                 "pku3b_assignments": {},
                 "pku3b_announcements": {"limit": 5},
+                "treehole_updates": {"limit": 5},
+                "plib_materials": {"action": "quota"},
                 "weather": {},
                 "lecture": {"limit": 5},
             },
@@ -87,10 +88,8 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._dashboard)
         splitter.addWidget(self._chat_panel)
-        splitter.addWidget(self._tool_trace_panel)
-        splitter.setStretchFactor(0, 6)
-        splitter.setStretchFactor(1, 3)
-        splitter.setStretchFactor(2, 3)
+        splitter.setStretchFactor(0, 5)
+        splitter.setStretchFactor(1, 5)
         self.setCentralWidget(splitter)
         self._chat_panel.add_system_message(
             f"GUI 已启动：{mode_label}。仪表盘会直接读取工具数据；对话侧栏用于自然语言查询。"
@@ -105,7 +104,6 @@ class MainWindow(QMainWindow):
 
     def _send_message(self, text: str) -> None:
         self._chat_panel.add_user_message(text)
-        self._tool_trace_panel.clear()
         self._chat_panel.set_busy(True)
         self.statusBar().showMessage("Agent 正在处理问题...")
         QMetaObject.invokeMethod(
@@ -117,13 +115,13 @@ class MainWindow(QMainWindow):
 
     def _on_agent_event(self, event: AgentEvent) -> None:
         if event.kind == "tool_call":
-            self._tool_trace_panel.add_tool_call(
+            self._chat_panel.add_tool_call(
                 str(event.payload["id"]),
                 str(event.payload["name"]),
                 dict(event.payload.get("arguments") or {}),
             )
         elif event.kind == "tool_result":
-            self._tool_trace_panel.update_tool_result(
+            self._chat_panel.update_tool_result(
                 str(event.payload["id"]),
                 str(event.payload["name"]),
                 event.payload["result"],
@@ -151,6 +149,8 @@ class MainWindow(QMainWindow):
             "schedule",
             "pku3b_assignments",
             "pku3b_announcements",
+            "treehole_updates",
+            "plib_materials",
             "weather",
             "lecture",
         ):
@@ -173,8 +173,20 @@ class MainWindow(QMainWindow):
         if key == "pku3b_assignments" and isinstance(data, dict):
             self._dashboard.set_assignments(data)
             return
+        if key == "pku3b_announcements" and isinstance(data, dict):
+            self._dashboard.set_announcements(data)
+            return
+        if key == "treehole_updates" and isinstance(data, dict):
+            self._dashboard.set_treehole_updates(data)
+            return
+        if key == "plib_materials" and isinstance(data, dict):
+            self._dashboard.set_plib_materials(data)
+            return
         if key == "weather" and isinstance(data, dict):
             self._dashboard.set_weather(data)
+            return
+        if key == "lecture" and isinstance(data, list):
+            self._dashboard.set_lectures(data)
             return
         self._dashboard.set_data(card_key, _format_dashboard_data(key, data))
 
@@ -271,6 +283,11 @@ def _format_dashboard_data(key: str, data: object) -> str:
                     )
                 )
         return "\n".join(lines) if lines else "暂无可显示通知"
+    if key == "treehole_updates" and isinstance(data, dict):
+        return str(data.get("message") or "暂无树洞新回复")
+    if key == "plib_materials" and isinstance(data, dict):
+        remaining = data.get("download_remaining")
+        return "今日剩余下载次数：未知" if remaining is None else f"今日剩余下载次数：{remaining}"
     if key == "lecture" and isinstance(data, list):
         if not data:
             return "近期暂无讲座"
@@ -295,6 +312,8 @@ def _startup_diagnostics(*, offline: bool) -> str:
         missing.append("pku3b：未在 PATH 中找到")
     elif not _pku3b_configured():
         missing.append("pku3b：已安装，但尚未完成首次登录配置")
+    if shutil.which("plib") is None and not _LOCAL_PLIB.exists():
+        missing.append("plib：未在 PATH 中找到，P-Lib 搜索不可用")
 
     if not missing:
         return ""
