@@ -27,19 +27,30 @@ class DashboardWorker(QObject):
         self._tool_args = dict(tool_args)
         self._busy = False
 
-    @pyqtSlot(dict)
-    def refresh(self, dynamic_args: dict[str, dict[str, Any]] | None = None) -> None:
-        """Refresh all cards. `dynamic_args` carries per-tool extras the GUI
-        thread snapshotted from widgets (e.g. the OTP field) — the worker
-        never reads widgets itself.
+    @pyqtSlot(dict, list)
+    def refresh(
+        self,
+        dynamic_args: dict[str, dict[str, Any]] | None = None,
+        keys: list[str] | None = None,
+    ) -> None:
+        """Refresh dashboard cards by invoking registered tools.
+
+        `dynamic_args` carries per-tool extras the GUI thread snapshotted from
+        widgets (e.g. the OTP field) — the worker never reads widgets itself.
+        `keys` scopes the refresh to those tools; an empty/None list refreshes
+        all, so a single card's refresh button only reloads its own data and
+        does not fan out into a full-dashboard reload.
         """
         if self._busy:
             return
         self._busy = True
         dynamic_args = dynamic_args or {}
+        selected = set(keys or ())
         try:
             registered = {tool.name for tool in self._tools.all()}
             for name, args in self._tool_args.items():
+                if selected and name not in selected:
+                    continue
                 if name not in registered:
                     self.item_error.emit(name, "当前模式未注册该工具")
                     continue

@@ -37,6 +37,7 @@ class DashboardPanel(QWidget):
 
     morning_briefing_requested = pyqtSignal()
     refresh_requested = pyqtSignal()
+    partial_refresh_requested = pyqtSignal(list)
 
     def __init__(self, *, mode_label: str, tools: ToolRegistry | None = None) -> None:
         super().__init__()
@@ -106,21 +107,29 @@ class DashboardPanel(QWidget):
         treehole_card = self._cards["treehole_updates"]
         if isinstance(treehole_card, TreeholeMessagesCard):
             treehole_card.view_requested.connect(self._show_treehole_dialog)
-            treehole_card.refresh_requested.connect(self.refresh_requested)
+            treehole_card.refresh_requested.connect(
+                self._partial_refresh_emitter("treehole_updates")
+            )
         plib_card = self._cards["plib_materials"]
         if isinstance(plib_card, PLibMaterialsCard):
             plib_card.login_requested.connect(self._show_plib_login_dialog)
             plib_card.search_requested.connect(self._show_plib_dialog)
-            plib_card.refresh_requested.connect(self.refresh_requested)
+            plib_card.refresh_requested.connect(
+                self._partial_refresh_emitter("plib_materials")
+            )
         announcements_card = self._cards["pku3b_announcements"]
         if isinstance(announcements_card, AnnouncementsCard):
             announcements_card.detail_requested.connect(self._show_announcement_detail)
-            announcements_card.refresh_requested.connect(self.refresh_requested)
+            announcements_card.refresh_requested.connect(
+                self._partial_refresh_emitter("pku3b_announcements")
+            )
         lecture_card = self._cards["lecture"]
         if isinstance(lecture_card, LecturesCard):
             lecture_card.detail_requested.connect(self._show_lecture_detail)
             lecture_card.search_requested.connect(self._show_lecture_search_dialog)
-            lecture_card.refresh_requested.connect(self.refresh_requested)
+            lecture_card.refresh_requested.connect(
+                self._partial_refresh_emitter("lecture")
+            )
 
         grid_host = QWidget()
         grid = QGridLayout(grid_host)
@@ -149,6 +158,13 @@ class DashboardPanel(QWidget):
         # subprocess tool that the agent factory deliberately left out.
         self._treehole_button.setEnabled("treehole_updates" in (self._tools or ()))
         self._knowledge_button.setEnabled("knowledge_search" in (self._tools or ()))
+
+    def _partial_refresh_emitter(self, *keys: str) -> Callable[[], None]:
+        """Build a slot that requests a refresh scoped to the given tool keys,
+        so a single card's refresh button reloads only its own data instead of
+        triggering a full-dashboard refresh."""
+        scoped = list(keys)
+        return lambda: self.partial_refresh_requested.emit(scoped)
 
     def _online_tool(self, name: str) -> Tool | None:
         """Look up a registered tool by name; None if offline / not registered."""
@@ -258,7 +274,7 @@ class DashboardPanel(QWidget):
         if self._require_tool("treehole_updates", "树洞新消息") is None:
             return
         dialog = TreeholeMessagesDialog(self._treehole_data, self)
-        dialog.auth_changed.connect(self.refresh_requested)
+        dialog.auth_changed.connect(self._partial_refresh_emitter("treehole_updates"))
         dialog.exec()
 
     def _show_plib_dialog(self) -> None:
@@ -272,7 +288,7 @@ class DashboardPanel(QWidget):
         if tool is None:
             return
         dialog = PLibLoginDialog(tool, self)
-        dialog.auth_changed.connect(self.refresh_requested)
+        dialog.auth_changed.connect(self._partial_refresh_emitter("plib_materials"))
         dialog.exec()
 
     def _show_announcement_detail(self, announcement_id: str) -> None:

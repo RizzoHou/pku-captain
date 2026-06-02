@@ -84,6 +84,7 @@ class MainWindow(QMainWindow):
         self._chat_panel.send_requested.connect(self._send_message)
         self._dashboard.morning_briefing_requested.connect(self._run_morning_briefing)
         self._dashboard.refresh_requested.connect(self._refresh_dashboard)
+        self._dashboard.partial_refresh_requested.connect(self._refresh_dashboard_subset)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._dashboard)
@@ -142,19 +143,35 @@ class MainWindow(QMainWindow):
         self._chat_panel.set_busy(False)
         self.statusBar().showMessage("Agent 回答完成")
 
+    # Tool keys the dashboard refreshes, in `DashboardWorker._tool_args` terms.
+    # Only `pku3b_coursetable` differs from its card key (`schedule`).
+    _ALL_TOOL_KEYS = (
+        "pku3b_coursetable",
+        "pku3b_assignments",
+        "pku3b_announcements",
+        "treehole_updates",
+        "plib_materials",
+        "weather",
+        "lecture",
+    )
+
     def _refresh_dashboard(self) -> None:
+        """Refresh every dashboard card (header 刷新 button / startup)."""
+        self._start_refresh([])
+
+    def _refresh_dashboard_subset(self, keys: list) -> None:
+        """Refresh only the given tools, so a single card's refresh button does
+        not trigger a full-dashboard reload."""
+        self._start_refresh([str(key) for key in keys])
+
+    def _start_refresh(self, tool_keys: list[str]) -> None:
+        """Reload `tool_keys` (empty list means all). Sets only the targeted
+        cards to a loading state and scopes the worker to the same set."""
         self._dashboard.set_refresh_busy(True)
         self.statusBar().showMessage("正在刷新仪表盘...")
-        for key in (
-            "schedule",
-            "pku3b_assignments",
-            "pku3b_announcements",
-            "treehole_updates",
-            "plib_materials",
-            "weather",
-            "lecture",
-        ):
-            self._dashboard.set_loading(key)
+        for name in tool_keys or self._ALL_TOOL_KEYS:
+            card_key = "schedule" if name == "pku3b_coursetable" else name
+            self._dashboard.set_loading(card_key)
         # Read GUI widgets (the OTP field) here, on the GUI thread, and hand
         # the snapshot to the worker — the worker must never touch widgets.
         dynamic_args = {"pku3b_coursetable": self._dashboard_args("pku3b_coursetable")}
@@ -163,6 +180,7 @@ class MainWindow(QMainWindow):
             "refresh",
             Qt.ConnectionType.QueuedConnection,
             Q_ARG(dict, dynamic_args),
+            Q_ARG(list, list(tool_keys)),
         )
 
     def _on_dashboard_item_loaded(self, key: str, data: object) -> None:
