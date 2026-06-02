@@ -116,6 +116,10 @@ class MainWindow(QMainWindow):
 
     def _on_agent_event(self, event: AgentEvent) -> None:
         if event.kind == "tool_call":
+            # Close out the assistant text that preceded this tool call so the
+            # next iteration's text becomes its own bubble below the tool rows,
+            # instead of overwriting this one.
+            self._chat_panel.finalize_assistant_segment()
             self._chat_panel.add_tool_call(
                 str(event.payload["id"]),
                 str(event.payload["name"]),

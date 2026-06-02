@@ -121,10 +121,26 @@ class ChatPanel(QWidget):
         delta would append onto its stale text. Finalize it in place,
         keeping whatever partial text arrived, and clear the state.
         """
+        self._finalize_streaming("（回复中断）")
+
+    def finalize_assistant_segment(self) -> None:
+        """Lock in the current streaming bubble as one complete segment.
+
+        A single agent turn can interleave assistant text with tool calls
+        (text → tool call → more text → ...), one segment per LLM iteration.
+        Each text run must be its own bubble; call this before rendering a
+        tool call so the current run is finalized and the next run starts a
+        fresh bubble *below* the tool rows. Without it, later segments would
+        overwrite the first bubble (the cause of a later message replacing
+        an earlier one, displayed above its tool calls instead of below).
+        """
+        self._finalize_streaming("（空回复）")
+
+    def _finalize_streaming(self, empty_fallback: str) -> None:
         if self._streaming_bubble is None:
             return
         self._streaming_bubble.setText(
-            _message_html(self._streaming_text or "（回复中断）", "assistant")
+            _message_html(self._streaming_text or empty_fallback, "assistant")
         )
         self._streaming_bubble = None
         self._streaming_text = ""
