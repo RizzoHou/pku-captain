@@ -38,3 +38,6 @@ docs/code_audit_panel.html
 .DS_Store
 .idea/
 .vscode/
+
+# Temporary files
+tmp/
