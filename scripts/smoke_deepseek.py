@@ -5,7 +5,7 @@ Runs two probes:
   2. agent turn with ClockTool — verifies tool-call serialization, tool
      dispatch, and follow-up assistant turn all survive a real round-trip.
 
-Reads the key from secrets/deepseek_key.txt (gitignored). Not part of
+Reads the key from secrets/api_keys/deepseek_key.txt (gitignored). Not part of
 pytest because it costs tokens and needs network.
 """
 

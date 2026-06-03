@@ -168,7 +168,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--rag",
         action="store_true",
-        help="Enable RAG knowledge_search (online only; needs secrets/embedding_key.txt).",
+        help="Enable RAG knowledge_search (online only; needs secrets/api_keys/embedding_key.txt).",
     )
     args = parser.parse_args(argv)
     return run_repl(
