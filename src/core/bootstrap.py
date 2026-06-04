@@ -20,6 +20,7 @@ from ..rag import (
     SourceRegistry,
 )
 from ..tools import (
+    CalendarReminderTool,
     ClockTool,
     KnowledgeSearchTool,
     LectureTool,
@@ -109,6 +110,7 @@ def _build_tools(*, offline: bool, enable_knowledge: bool = False) -> ToolRegist
         registry.register(PKU3bCourseTableTool())
         registry.register(PLibMaterialsTool())
         registry.register(TreeholeUpdatesTool())
+        registry.register(CalendarReminderTool())
         if enable_knowledge:
             registry.register(KnowledgeSearchTool(_build_knowledge_base()))
         registry.register(LectureTool())

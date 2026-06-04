@@ -67,10 +67,61 @@ def test_all_dialogs_construct_with_injected_tool(
     dashboard.AnnouncementDetailDialog(tool, "id-1")
     dashboard.LectureSearchDialog(tool)
     dashboard.RemindersDialog(tool)
+    dashboard.CalendarReminderDialog(tool, [])
     dashboard.MemoryDialog(tool)
     dashboard.KnowledgeSearchDialog(tool)
     dashboard.TreeholeMessagesDialog({"message": "x", "updates": []})
     _drain()  # let any __init__-launched async calls settle
+
+
+def test_calendar_candidates_filters_and_sorts(app: QApplication) -> None:
+    candidates = dashboard._calendar_candidates(
+        [
+            {"title": "晚", "course_name": "C", "deadline_iso": "2099-02-01T10:00:00"},
+            {"title": "早", "course_name": "C", "deadline_iso": "2099-01-01T10:00:00"},
+            {
+                "title": "完成",
+                "course_name": "C",
+                "deadline_iso": "2099-01-01T10:00:00",
+                "completed": True,
+            },
+            {"title": "无期限", "course_name": "C", "deadline_iso": None},
+            {"title": "过期", "course_name": "C", "deadline_iso": "2000-01-01T10:00:00"},
+        ]
+    )
+    # Only future + incomplete + deadline-bearing survive, soonest first.
+    assert [c["summary"] for c in candidates] == ["C｜早", "C｜晚"]
+    assert candidates[0]["deadline_iso"] == "2099-01-01T10:00:00"
+    assert "由 PKU Captain 添加" in candidates[0]["notes"]
+
+
+def test_calendar_dialog_adds_selected_and_marks_rows(
+    app: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The modal info/warning boxes would block a headless run — stub them.
+    monkeypatch.setattr(dashboard.QMessageBox, "information", lambda *a, **k: None)
+    monkeypatch.setattr(dashboard.QMessageBox, "warning", lambda *a, **k: None)
+
+    summary = "测试课｜作业X"
+    tool = FakeTool(
+        {
+            "calendar": "PKU Captain",
+            "added": [{"title": summary, "when": "2099-01-01 10:00"}],
+            "failed": [],
+        }
+    )
+    dialog = dashboard.CalendarReminderDialog(
+        tool,
+        [{"title": "作业X", "course_name": "测试课", "deadline_iso": "2099-01-01T10:00:00"}],
+    )
+    assert dialog._list.count() == 1
+
+    dialog._add_selected()  # checked by default -> run_async -> tool.invoke
+    _drain()
+
+    item = dialog._list.item(0)
+    assert "已添加" in item.text()
+    assert not (item.flags() & dashboard.Qt.ItemFlag.ItemIsUserCheckable)
 
 
 def test_plib_search_dialog_runs_async_end_to_end(app: QApplication) -> None:
