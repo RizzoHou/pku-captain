@@ -70,6 +70,21 @@ def test_all_dialogs_construct_with_injected_tool(
     dashboard.MemoryDialog(tool)
     dashboard.KnowledgeSearchDialog(tool)
     dashboard.TreeholeMessagesDialog({"message": "x", "updates": []})
+
+    # Notification dialog takes an injected service so it stays hermetic
+    # (its real service would read the host's LaunchAgents on construct).
+    class FakeNotifyService:
+        def status(self) -> dict[str, object]:
+            return {
+                "supported": True,
+                "binary_available": True,
+                "logged_in": True,
+                "enabled": False,
+                "interval": 60,
+                "message": "通知未开启",
+            }
+
+    dashboard.TreeholeNotificationDialog(service=FakeNotifyService())
     _drain()  # let any __init__-launched async calls settle
 
 
