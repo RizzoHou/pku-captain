@@ -48,7 +48,7 @@ class DeepSeekProvider(LLMProvider):
         body: dict[str, Any] = {
             "model": self.model,
             "messages": [_to_api_message(m) for m in messages],
-            "effort": self.effort,
+            "reasoning_effort": self.effort,
         }
         if tools:
             body["tools"] = tools
@@ -92,7 +92,7 @@ class DeepSeekProvider(LLMProvider):
         body: dict[str, Any] = {
             "model": self.model,
             "messages": [_to_api_message(m) for m in messages],
-            "effort": self.effort,
+            "reasoning_effort": self.effort,
             "stream": True,
         }
         if tools:
