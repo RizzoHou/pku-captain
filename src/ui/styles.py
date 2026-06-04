@@ -50,13 +50,6 @@ def apply_app_style(app: QApplication) -> None:
             color: {MUTED};
         }}
 
-        QLabel#HeaderWeather {{
-            color: {PKU_RED_DARK};
-            font-size: 13px;
-            font-weight: 700;
-            padding-top: 2px;
-        }}
-
         QLabel#DialogTitle {{
             color: {PKU_RED};
             font-size: 20px;

@@ -63,7 +63,6 @@ class MainWindow(QMainWindow):
                 "pku3b_announcements": {"limit": 5},
                 "treehole_updates": {"limit": 5},
                 "plib_materials": {"action": "quota"},
-                "weather": {},
                 "lecture": {"limit": 5},
             },
         )
@@ -155,7 +154,6 @@ class MainWindow(QMainWindow):
         "pku3b_announcements",
         "treehole_updates",
         "plib_materials",
-        "weather",
         "lecture",
     )
 
@@ -203,9 +201,6 @@ class MainWindow(QMainWindow):
             return
         if key == "plib_materials" and isinstance(data, dict):
             self._dashboard.set_plib_materials(data)
-            return
-        if key == "weather" and isinstance(data, dict):
-            self._dashboard.set_weather(data)
             return
         if key == "lecture" and isinstance(data, list):
             self._dashboard.set_lectures(data)
@@ -266,13 +261,6 @@ class MainWindow(QMainWindow):
 
 
 def _format_dashboard_data(key: str, data: object) -> str:
-    if key == "weather" and isinstance(data, dict):
-        return "{location}：{desc}，{temp}°C，体感 {feels}°C".format(
-            location=data.get("location", "未知地点"),
-            desc=data.get("weather_description", "未知"),
-            temp=data.get("temperature_c", "?"),
-            feels=data.get("apparent_temperature_c", "?"),
-        )
     if key == "pku3b_assignments" and isinstance(data, dict):
         assignments = data.get("assignments", [])
         if not assignments:

@@ -9,7 +9,6 @@ from .pku3b_coursetable import PKU3bCourseTableTool
 from .plib_materials import PLibMaterialsTool
 from .reminder import ReminderTool
 from .treehole_updates import TreeholeAuthService, TreeholeUpdatesTool
-from .weather import WeatherTool
 
 __all__ = [
     "ClockTool",
@@ -26,5 +25,4 @@ __all__ = [
     "ToolResult",
     "TreeholeAuthService",
     "TreeholeUpdatesTool",
-    "WeatherTool",
 ]

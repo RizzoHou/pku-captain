@@ -1,15 +1,15 @@
 """MorningBriefingWorkflow — compose tools into a daily morning briefing.
 
-Aggregates today's assignment deadlines, recent course announcements,
-upcoming campus lectures, and current weather into one human-readable
-briefing. Part of core feature #4 (multi-step workflows); extends the
-single-tool `HelloWorkflow` shape into multi-tool orchestration.
+Aggregates today's assignment deadlines, recent course announcements, and
+upcoming campus lectures into one human-readable briefing. Part of core
+feature #4 (multi-step workflows); extends the single-tool `HelloWorkflow`
+shape into multi-tool orchestration.
 
 Graceful degradation is a hard requirement: each section is independent.
-A tool that is not registered (e.g. `weather` / `pku3b_*` / `lecture` in
-offline mode) or whose `invoke()` fails is noted in the briefing and
-skipped — the workflow reports `success=False` only when no data source
-is reachable at all.
+A tool that is not registered (e.g. `pku3b_*` / `lecture` in offline mode)
+or whose `invoke()` fails is noted in the briefing and skipped — the
+workflow reports `success=False` only when no data source is reachable at
+all.
 """
 
 from __future__ import annotations
@@ -29,19 +29,17 @@ class MorningBriefingWorkflow(Workflow):
     name: ClassVar[str] = "morning_briefing"
     description: ClassVar[str] = (
         "Compose a morning briefing: today's assignment deadlines, recent "
-        "course announcements, upcoming campus lectures, and current weather."
+        "course announcements, and upcoming campus lectures."
     )
 
     def run(self, args: dict[str, Any] | None = None) -> WorkflowResult:
-        args = args or {}
         today = self._today()
 
         details: dict[str, Any] = {}
         sections: list[str] = []
-        # Count the four real data sources (clock is only the date source).
+        # Count the three real data sources (clock is only the date source).
         reachable = 0
 
-        reachable += self._weather_section(args, details, sections)
         reachable += self._assignments_section(today, details, sections)
         reachable += self._announcements_section(details, sections)
         reachable += self._lectures_section(today, details, sections)
@@ -62,29 +60,6 @@ class MorningBriefingWorkflow(Workflow):
     # Each `_*_section` appends exactly one block to `sections` (so the
     # summary always carries every section, available or not) and returns
     # 1 if its data source produced usable data, else 0.
-
-    def _weather_section(
-        self, args: dict[str, Any], details: dict[str, Any], sections: list[str]
-    ) -> int:
-        result = self._invoke("weather", {"city": args.get("city", "")})
-        if result is None:
-            sections.append("【天气】当前不可用（offline 模式未注册 weather 工具）")
-            return 0
-        if not result.success:
-            sections.append(f"【天气】获取失败：{result.error}")
-            return 0
-        details["weather"] = result.data
-        data = result.data if isinstance(result.data, dict) else {}
-        sections.append(
-            "【天气】{location} {desc} {temp}°C（体感 {feels}°C，湿度 {hum}%）".format(
-                location=data.get("location", "未知地点"),
-                desc=data.get("weather_description", "未知"),
-                temp=_fmt(data.get("temperature_c")),
-                feels=_fmt(data.get("apparent_temperature_c")),
-                hum=_fmt(data.get("humidity_percent")),
-            )
-        )
-        return 1
 
     def _assignments_section(
         self, today: date, details: dict[str, Any], sections: list[str]
@@ -215,8 +190,3 @@ def _falls_on(iso: Any, day: date) -> bool:
         return datetime.fromisoformat(iso).date() == day
     except ValueError:
         return False
-
-
-def _fmt(value: Any) -> str:
-    """Render a numeric field, falling back to ``?`` when missing."""
-    return "?" if value is None else str(value)

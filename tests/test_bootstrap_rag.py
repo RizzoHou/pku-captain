@@ -26,7 +26,7 @@ def _names(offline: bool, enable_knowledge: bool) -> set[str]:
 def test_knowledge_off_by_default() -> None:
     names = _names(offline=False, enable_knowledge=False)
     assert "knowledge_search" not in names
-    assert "weather" in names  # other online tools still register
+    assert "pku3b_assignments" in names  # other online tools still register
 
 
 def test_knowledge_never_registers_offline() -> None:

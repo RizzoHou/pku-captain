@@ -42,7 +42,7 @@ def app() -> QApplication:
 
 
 def _make_worker() -> tuple[DashboardWorker, dict[str, _RecordingTool]]:
-    names = ("treehole_updates", "plib_materials", "pku3b_announcements", "lecture", "weather")
+    names = ("treehole_updates", "plib_materials", "pku3b_announcements", "lecture")
     tools = {name: _RecordingTool(name) for name in names}
     registry = ToolRegistry()
     for tool in tools.values():

@@ -156,8 +156,6 @@ def _format_tool_result(name: str, body: Any) -> str:
         return _format_plib_materials(body)
     if name == "treehole_updates" and isinstance(body, dict):
         return _format_treehole_updates(body)
-    if name == "weather" and isinstance(body, dict):
-        return _format_weather(body)
     if name == "lecture" and isinstance(body, list):
         return _format_lectures(body)
     return _to_json(body)
@@ -199,16 +197,6 @@ def _format_announcements(data: dict[str, Any]) -> str:
                 )
             )
     return "\n".join(lines)
-
-
-def _format_weather(data: dict[str, Any]) -> str:
-    return "{location}：{desc}，{temp}°C，体感 {feels}°C，湿度 {humidity}%".format(
-        location=data.get("location", "未知地点"),
-        desc=data.get("weather_description", "未知"),
-        temp=data.get("temperature_c", "?"),
-        feels=data.get("apparent_temperature_c", "?"),
-        humidity=data.get("humidity_percent", "?"),
-    )
 
 
 def _format_treehole_updates(data: dict[str, Any]) -> str:

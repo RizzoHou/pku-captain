@@ -80,8 +80,8 @@ def test_segments_split_into_distinct_bubbles_around_tool_call(app: QApplication
             AgentEvent(kind="assistant_delta", payload={"text": "First "}),
             AgentEvent(kind="assistant_delta", payload={"text": "answer."}),
             AgentEvent(kind="llm_response", payload={"text": "First answer."}),
-            _call("weather"),
-            _ok("weather", {"temp": 20}),
+            _call("clock"),
+            _ok("clock", {"now": "noon"}),
             AgentEvent(kind="assistant_delta", payload={"text": "Second "}),
             AgentEvent(kind="assistant_delta", payload={"text": "answer."}),
             AgentEvent(kind="llm_response", payload={"text": "Second answer."}),
@@ -104,8 +104,8 @@ def test_parallel_tool_calls_share_one_preceding_bubble(app: QApplication) -> No
         [
             AgentEvent(kind="assistant_delta", payload={"text": "Checking."}),
             AgentEvent(kind="llm_response", payload={"text": "Checking."}),
-            _call("weather"),
-            _ok("weather", {"temp": 20}),
+            _call("lecture"),
+            _ok("lecture", {"items": []}),
             _call("clock"),
             _ok("clock", {"now": "noon"}),
             AgentEvent(kind="assistant_delta", payload={"text": "Done."}),
@@ -127,8 +127,8 @@ def test_tool_only_iteration_creates_no_empty_bubble(app: QApplication) -> None:
         [
             # First iteration emits a tool call with no prose (no deltas).
             AgentEvent(kind="llm_response", payload={"text": ""}),
-            _call("weather"),
-            _ok("weather", {"temp": 20}),
+            _call("clock"),
+            _ok("clock", {"now": "noon"}),
             AgentEvent(kind="assistant_delta", payload={"text": "Here."}),
             AgentEvent(kind="llm_response", payload={"text": "Here."}),
             AgentEvent(kind="final", payload={"text": "Here."}),

@@ -50,8 +50,6 @@ class DashboardPanel(QWidget):
         subtitle.setObjectName("DashboardSubtitle")
         self._updated_label = QLabel("尚未刷新")
         self._updated_label.setObjectName("DashboardSubtitle")
-        self._weather_label = QLabel("天气加载中...")
-        self._weather_label.setObjectName("HeaderWeather")
         self._treehole_data: dict[str, object] = {
             "status": "loading",
             "message": "树洞消息加载中...",
@@ -86,8 +84,7 @@ class DashboardPanel(QWidget):
         header = QGridLayout()
         header.addWidget(title, 0, 0)
         header.addWidget(subtitle, 1, 0)
-        header.addWidget(self._weather_label, 2, 0)
-        header.addWidget(self._updated_label, 3, 0)
+        header.addWidget(self._updated_label, 2, 0)
         header.addWidget(self._otp_input, 0, 1, 2, 1, Qt.AlignmentFlag.AlignRight)
         header.addWidget(self._refresh_button, 0, 2, 2, 1, Qt.AlignmentFlag.AlignRight)
         header.addWidget(self._briefing_button, 0, 3, 2, 1, Qt.AlignmentFlag.AlignRight)
@@ -179,9 +176,6 @@ class DashboardPanel(QWidget):
         return tool
 
     def set_loading(self, key: str) -> None:
-        if key == "weather":
-            self._weather_label.setText("天气加载中...")
-            return
         if key in self._cards:
             self._cards[key].set_body("加载中...", "loading")
         if key == "treehole_updates":
@@ -225,13 +219,7 @@ class DashboardPanel(QWidget):
         if isinstance(card, PLibMaterialsCard):
             card.set_quota(data)
 
-    def set_weather(self, data: dict[str, object]) -> None:
-        self._weather_label.setText(_weather_text(data))
-
     def set_error(self, key: str, message: str) -> None:
-        if key == "weather":
-            self._weather_label.setText(f"天气不可用：{message}")
-            return
         if key == "treehole_updates":
             data = {
                 "status": "error",
@@ -2524,31 +2512,3 @@ def _deadline_text(item: dict[str, object]) -> str:
     if days <= 7:
         return f"{days} 天后 · {date_text}"
     return date_text
-
-
-def _weather_text(data: dict[str, object]) -> str:
-    desc = str(data.get("weather_description") or "未知")
-    return "{icon} {location}：{desc}，{temp}°C，体感 {feels}°C".format(
-        icon=_weather_icon(desc),
-        location=data.get("location", "未知地点"),
-        desc=desc,
-        temp=data.get("temperature_c", "?"),
-        feels=data.get("apparent_temperature_c", "?"),
-    )
-
-
-def _weather_icon(desc: str) -> str:
-    lowered = desc.lower()
-    if "雷" in desc or "thunder" in lowered:
-        return "⛈️"
-    if "雪" in desc or "snow" in lowered:
-        return "❄️"
-    if "雨" in desc or "rain" in lowered or "shower" in lowered:
-        return "🌧️"
-    if "阴" in desc or "cloud" in lowered or "overcast" in lowered:
-        return "☁️"
-    if "雾" in desc or "霾" in desc or "fog" in lowered or "haze" in lowered:
-        return "🌫️"
-    if "晴" in desc or "clear" in lowered or "sun" in lowered:
-        return "☀️"
-    return "🌤️"
