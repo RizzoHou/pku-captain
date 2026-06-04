@@ -152,6 +152,7 @@ class DeepSeekProvider(LLMProvider):
                 reasoning_piece = delta.get("reasoning_content") or ""
                 if reasoning_piece:
                     reasoning_parts.append(reasoning_piece)
+                    yield ChatStreamEvent(reasoning_delta=reasoning_piece)
                 for call_delta in delta.get("tool_calls") or []:
                     _merge_tool_call_delta(tool_calls, call_delta)
 

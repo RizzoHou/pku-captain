@@ -176,6 +176,8 @@ class MainWindow(QMainWindow):
                 str(event.payload["name"]),
                 event.payload["result"],
             )
+        elif event.kind == "reasoning_delta":
+            self._chat_panel.append_reasoning_delta(str(event.payload.get("text") or ""))
         elif event.kind == "assistant_delta":
             self._chat_panel.append_assistant_delta(str(event.payload.get("text") or ""))
         elif event.kind == "final":

@@ -26,7 +26,9 @@ from .memory import MemoryStore, render_memory_context
 class AgentEvent:
     """Emitted as the agent processes a turn."""
 
-    kind: str  # "llm_response" | "tool_call" | "tool_result" | "final"
+    # "assistant_delta" | "reasoning_delta" | "llm_response"
+    # | "tool_call" | "tool_result" | "final"
+    kind: str
     payload: dict[str, Any]
 
 
@@ -50,6 +52,11 @@ class Agent:
                 self._messages_for_llm(),
                 tools=tool_schema,
             ):
+                if stream_event.reasoning_delta:
+                    yield AgentEvent(
+                        kind="reasoning_delta",
+                        payload={"text": stream_event.reasoning_delta},
+                    )
                 if stream_event.delta:
                     yield AgentEvent(
                         kind="assistant_delta",

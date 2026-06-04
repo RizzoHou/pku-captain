@@ -7,7 +7,7 @@ import re
 from typing import Any
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QKeyEvent
+from PyQt6.QtGui import QKeyEvent, QTextCursor
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -39,6 +39,12 @@ class ChatPanel(QWidget):
         self._streaming_bubble: QLabel | None = None
         self._streaming_text = ""
         self._tool_rows: dict[str, InlineToolCall] = {}
+        # Chain-of-thought ("thinking") display, off by default. When off we
+        # drop reasoning_delta events outright rather than building hidden
+        # widgets — a max-effort CoT can be very long.
+        self._show_thinking = False
+        self._streaming_thinking: InlineThinking | None = None
+        self._thinking_rows: list[InlineThinking] = []
 
         self._message_layout = QVBoxLayout()
         self._message_layout.setSpacing(10)
@@ -73,6 +79,12 @@ class ChatPanel(QWidget):
 
         title = QLabel("对话")
         title.setObjectName("SectionTitle")
+        self._thinking_toggle = QPushButton("💭 思考")
+        self._thinking_toggle.setObjectName("SecondaryButton")
+        self._thinking_toggle.setCheckable(True)
+        self._thinking_toggle.setChecked(False)
+        self._thinking_toggle.setToolTip("显示 / 隐藏模型的思考过程（默认隐藏）")
+        self._thinking_toggle.toggled.connect(self._on_thinking_toggled)
         self._new_chat_button = QPushButton("＋ 新对话")
         self._new_chat_button.setObjectName("SecondaryButton")
         self._new_chat_button.clicked.connect(lambda: self.new_chat_requested.emit())
@@ -84,6 +96,7 @@ class ChatPanel(QWidget):
         header_row.setSpacing(8)
         header_row.addWidget(title)
         header_row.addStretch()
+        header_row.addWidget(self._thinking_toggle)
         header_row.addWidget(self._new_chat_button)
         header_row.addWidget(self._history_button)
 
@@ -108,6 +121,8 @@ class ChatPanel(QWidget):
         self._add_message("你", text, "user")
 
     def add_assistant_message(self, text: str) -> None:
+        # The visible answer means this segment's thinking is complete.
+        self._finish_thinking()
         if self._streaming_bubble is not None:
             self._streaming_text = text or self._streaming_text or "（空回复）"
             self._streaming_bubble.setText(
@@ -122,6 +137,8 @@ class ChatPanel(QWidget):
     def append_assistant_delta(self, text: str) -> None:
         if not text:
             return
+        # First answer token: the model has stopped thinking for this segment.
+        self._finish_thinking()
         if self._streaming_bubble is None:
             self._streaming_text = ""
             self._streaming_bubble = self._add_message(
@@ -134,6 +151,60 @@ class ChatPanel(QWidget):
             _message_html(self._streaming_text, "assistant")
         )
         self._scroll.verticalScrollBar().setValue(self._scroll.verticalScrollBar().maximum())
+
+    def append_reasoning_delta(self, text: str) -> None:
+        """Stream a chain-of-thought token into the current thinking window.
+
+        No-op when the thinking toggle is off — we deliberately don't build
+        hidden widgets for a long CoT. When on, the first delta of a segment
+        creates an `InlineThinking` window above the answer bubble; later
+        deltas append to it.
+        """
+        if not text or not self._show_thinking:
+            return
+        if self._streaming_thinking is None:
+            # Collapse earlier segments' thinking so a multi-tool turn keeps
+            # only the active window open — bounding the *stack* of windows the
+            # same way each window bounds its own height. A single-answer turn
+            # never triggers this, so its thinking stays open while read.
+            for row in self._thinking_rows:
+                row.collapse()
+            self._streaming_thinking = InlineThinking()
+            self._thinking_rows.append(self._streaming_thinking)
+            self._insert_flow_widget(self._streaming_thinking)
+        self._streaming_thinking.append(text)
+        self._scroll.verticalScrollBar().setValue(self._scroll.verticalScrollBar().maximum())
+
+    def set_show_thinking(self, show: bool) -> None:
+        """Toggle thinking visibility (also reflected on the header button)."""
+        if self._thinking_toggle.isChecked() != show:
+            self._thinking_toggle.setChecked(show)
+        else:
+            self._on_thinking_toggled(show)
+
+    def _on_thinking_toggled(self, checked: bool) -> None:
+        self._show_thinking = checked
+        # Hide/reveal already-rendered windows so the toggle affects the
+        # current view, not just future segments. Reasoning that arrived while
+        # off was dropped and can't be recovered.
+        for row in self._thinking_rows:
+            row.setVisible(checked)
+
+    def _finish_thinking(self) -> None:
+        """Lock in the in-progress thinking window (stop auto-follow, retitle)."""
+        if self._streaming_thinking is not None:
+            self._streaming_thinking.mark_done()
+            self._streaming_thinking = None
+
+    def _add_finalized_thinking(self, text: str) -> None:
+        """Render a complete (non-streaming) thinking window, e.g. on history
+        load, where the full `reasoning_content` is already known."""
+        row = InlineThinking()
+        row.set_text(text)
+        row.mark_done()
+        row.collapse()  # restored reasoning is past context — keep it compact
+        self._thinking_rows.append(row)
+        self._insert_flow_widget(row)
 
     def reset_streaming(self) -> None:
         """Finalize an in-progress streaming bubble (e.g. after a turn error).
@@ -159,6 +230,10 @@ class ChatPanel(QWidget):
         self._finalize_streaming("（空回复）")
 
     def _finalize_streaming(self, empty_fallback: str) -> None:
+        # Lock in the thinking window first so it sits above the tool row a
+        # tool-only iteration is about to render (no answer token will arrive
+        # to finalize it otherwise).
+        self._finish_thinking()
         if self._streaming_bubble is None:
             return
         self._streaming_bubble.setText(
@@ -205,6 +280,8 @@ class ChatPanel(QWidget):
         self._streaming_bubble = None
         self._streaming_text = ""
         self._tool_rows = {}
+        self._streaming_thinking = None
+        self._thinking_rows = []
 
     def load_history(self, messages: list[ChatMessage]) -> None:
         """Re-render a saved conversation, reproducing the live flow order.
@@ -222,6 +299,9 @@ class ChatPanel(QWidget):
             if msg.role == "user":
                 self.add_user_message(msg.content)
             elif msg.role == "assistant":
+                # Thinking precedes the answer in live flow; replay it first.
+                if self._show_thinking and msg.reasoning_content:
+                    self._add_finalized_thinking(msg.reasoning_content)
                 if msg.content.strip():
                     self.add_assistant_message(msg.content)
                 for call in msg.tool_calls:
@@ -354,6 +434,82 @@ class InlineToolCall(QFrame):
 
     def _apply_expanded(self) -> None:
         self._detail_label.setVisible(self._expanded)
+        self._toggle_button.setText("收起" if self._expanded else "展开")
+
+
+class InlineThinking(QFrame):
+    """Bounded, auto-scrolling view of the model's chain-of-thought.
+
+    The body is a read-only, fixed-max-height text box. As reasoning streams
+    in it auto-scrolls to the bottom — a sliding window that shows the latest
+    thinking while a long chain-of-thought stays capped instead of flooding
+    the chat. Streaming uses ``insertPlainText`` (O(delta), not O(total)) so
+    a very long CoT renders cheaply. The header toggle collapses the body.
+    """
+
+    _MAX_HEIGHT = 160
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setObjectName("InlineThinking")
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self.setMaximumWidth(720)
+        self._expanded = True
+        self._follow = True  # auto-scroll to newest while streaming
+
+        self._title_label = QLabel("💭 思考中…")
+        self._title_label.setObjectName("InlineThinkingTitle")
+        self._toggle_button = QPushButton("收起")
+        self._toggle_button.setObjectName("InlineToggleButton")
+        self._toggle_button.clicked.connect(self._toggle_detail)
+
+        header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.setSpacing(8)
+        header.addWidget(self._title_label, 1)
+        header.addWidget(self._toggle_button, 0)
+
+        self._body = QPlainTextEdit()
+        self._body.setObjectName("InlineThinkingBody")
+        self._body.setReadOnly(True)
+        self._body.setFrameShape(QFrame.Shape.NoFrame)
+        self._body.setMaximumHeight(self._MAX_HEIGHT)
+        self._body.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self._body.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(6)
+        layout.addLayout(header)
+        layout.addWidget(self._body)
+
+    def append(self, text: str) -> None:
+        self._body.moveCursor(QTextCursor.MoveOperation.End)
+        self._body.insertPlainText(text)
+        # Cursor sits at the new end; ensureCursorVisible pins the window to the
+        # newest thinking without depending on a (possibly stale) scrollbar max.
+        if self._follow:
+            self._body.ensureCursorVisible()
+
+    def set_text(self, text: str) -> None:
+        """Replace the whole body (history load — full text known up front)."""
+        self._body.setPlainText(text)
+
+    def mark_done(self) -> None:
+        """Stop auto-following and retitle once the segment's CoT is complete."""
+        self._follow = False
+        self._title_label.setText("💭 思考过程")
+
+    def collapse(self) -> None:
+        """Hide the body, leaving a one-line '思考过程 [展开]' header."""
+        self._expanded = False
+        self._body.setVisible(False)
+        self._toggle_button.setText("展开")
+
+    def _toggle_detail(self) -> None:
+        self._expanded = not self._expanded
+        self._body.setVisible(self._expanded)
         self._toggle_button.setText("收起" if self._expanded else "展开")
 
 

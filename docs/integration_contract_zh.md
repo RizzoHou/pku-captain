@@ -89,6 +89,7 @@ self.thread.start()
 | kind | payload 字段 | 触发时机 | GUI 行为 |
 | --- | --- | --- | --- |
 | `assistant_delta` | `text: str` | LLM 流式输出每收到一段 token 即触发；同一 turn 内可能 yield 多次 | 把 `text` 追加到当前正在生成的 assistant 气泡（"打字机"效果）；`final` 到达时收尾 |
+| `reasoning_delta` | `text: str` | 思考模型（DeepSeek thinking）流式输出每段思维链 token 即触发，出现在同一段回答的 `assistant_delta` 之前 | 追加到该段的"思考过程"窗口（一个定高、自动滚到底的滑动窗口，避免长 CoT 淹没回答）；GUI 默认隐藏，由对话表头的「💭 思考」开关控制。非思考 provider（Echo / `thinking=False`）不会 yield 此事件 |
 | `llm_response` | `text: str` | 每次 LLM 回复完成后立即触发，包括携带 tool_calls 的中间回复 | 累计或暂存；最终展示由 `final` 决定 |
 | `tool_call` | `id: str`, `name: str`, `arguments: dict` | LLM 请求调用某个工具时 | 在工具调用面板新增一行（"调用中"） |
 | `tool_result` | `id: str`, `name: str`, `result: ToolResult` | 工具执行完毕（成功或失败均会触发） | 用 `id` 匹配上面的行，渲染 `result.data` 或 `result.error` |

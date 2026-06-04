@@ -56,11 +56,16 @@ class ChatResponse:
 class ChatStreamEvent:
     """Incremental chat output.
 
-    ``delta`` is suitable for live UI rendering. ``response`` is set once at
-    the end and carries tool calls plus the complete assistant message.
+    ``delta`` is the visible-answer token stream, suitable for live UI
+    rendering. ``reasoning_delta`` is the chain-of-thought token stream from
+    reasoning models (DeepSeek thinking mode) — emitted before the answer and
+    rendered separately so a long CoT doesn't flood the answer view.
+    ``response`` is set once at the end and carries tool calls plus the
+    complete assistant message (text + accumulated ``reasoning_content``).
     """
 
     delta: str = ""
+    reasoning_delta: str = ""
     response: ChatResponse | None = None
 
 

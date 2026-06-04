@@ -507,6 +507,27 @@ def apply_app_style(app: QApplication) -> None:
             font-size: 10px;
         }}
 
+        QFrame#InlineThinking {{
+            border: 1px dashed #d8c4be;
+            border-left: 4px solid {PKU_GOLD};
+            border-radius: 8px;
+            background: #fbf7f4;
+        }}
+
+        QLabel#InlineThinkingTitle {{
+            color: {MUTED};
+            font-size: 11px;
+            font-weight: 800;
+        }}
+
+        QPlainTextEdit#InlineThinkingBody {{
+            background: transparent;
+            border: none;
+            padding: 0;
+            color: #6b6259;
+            font-size: 11px;
+        }}
+
         QFrame#ToolTraceRow {{
             border: 1px solid #eadbd5;
             border-radius: 8px;
