@@ -31,6 +31,7 @@ class DeepSeekProvider(LLMProvider):
         effort: str = "max",
         base_url: str = "https://api.deepseek.com/v1",
         timeout: float = 120.0,
+        thinking: bool = True,
     ) -> None:
         if not api_key:
             raise ValueError("api_key is required")
@@ -39,20 +40,44 @@ class DeepSeekProvider(LLMProvider):
         self.effort = effort
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        self.thinking = thinking
+
+    def _build_body(
+        self,
+        messages: list[ChatMessage],
+        tools: list[dict[str, Any]] | None,
+        *,
+        stream: bool,
+    ) -> dict[str, Any]:
+        """Assemble the request body.
+
+        With `thinking=True` (the default), this is byte-identical to the
+        historical body (`{model, messages, effort, [stream], [tools]}`) so
+        the GUI's main render path is unchanged. With `thinking=False` (the
+        flash titler), `effort` is dropped in favour of the non-think toggle
+        `{"thinking": {"type": "disabled"}}`.
+        """
+        body: dict[str, Any] = {
+            "model": self.model,
+            "messages": [_to_api_message(m) for m in messages],
+        }
+        if self.thinking:
+            body["effort"] = self.effort
+        else:
+            body["thinking"] = {"type": "disabled"}
+        if stream:
+            body["stream"] = True
+        if tools:
+            body["tools"] = tools
+            body["tool_choice"] = "auto"
+        return body
 
     def chat(
         self,
         messages: list[ChatMessage],
         tools: list[dict[str, Any]] | None = None,
     ) -> ChatResponse:
-        body: dict[str, Any] = {
-            "model": self.model,
-            "messages": [_to_api_message(m) for m in messages],
-            "effort": self.effort,
-        }
-        if tools:
-            body["tools"] = tools
-            body["tool_choice"] = "auto"
+        body = self._build_body(messages, tools, stream=False)
 
         resp = requests.post(
             f"{self.base_url}/chat/completions",
@@ -89,15 +114,7 @@ class DeepSeekProvider(LLMProvider):
         messages: list[ChatMessage],
         tools: list[dict[str, Any]] | None = None,
     ) -> Iterator[ChatStreamEvent]:
-        body: dict[str, Any] = {
-            "model": self.model,
-            "messages": [_to_api_message(m) for m in messages],
-            "effort": self.effort,
-            "stream": True,
-        }
-        if tools:
-            body["tools"] = tools
-            body["tool_choice"] = "auto"
+        body = self._build_body(messages, tools, stream=True)
 
         with requests.post(
             f"{self.base_url}/chat/completions",

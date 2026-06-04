@@ -70,6 +70,17 @@ class Conversation:
     def reset(self) -> None:
         self._messages.clear()
 
+    def load_messages(self, messages: Iterable[ChatMessage]) -> None:
+        """Replace the history in place (keeps this object's identity).
+
+        Used when restoring a saved session or resetting for a new chat.
+        Replacing the list rather than swapping the `Conversation` instance
+        keeps the reference `AgentWorker` already holds (`agent.conversation`)
+        valid. The caller is responsible for any system-prompt seeding —
+        this is a low-level primitive that `bootstrap` wraps.
+        """
+        self._messages = list(messages)
+
     def _pending_call_id(self, call_id: str) -> bool:
         for msg in reversed(self._messages):
             if msg.role == "assistant" and any(

@@ -9,8 +9,9 @@ into the GUI lane.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
-from ..llm import DeepSeekProvider, EchoLLMProvider, LLMProvider
+from ..llm import ChatMessage, DeepSeekProvider, EchoLLMProvider, LLMProvider
 from ..rag import (
     APIEmbedder,
     CalendarSource,
@@ -37,6 +38,12 @@ from ..workflows import HelloWorkflow, MorningBriefingWorkflow
 from ..workflows.base import WorkflowRegistry
 from .agent import Agent
 from .conversation import Conversation
+from .session_store import (
+    SessionStore,
+    deserialize_messages,
+    drop_incomplete_tool_calls,
+)
+from .session_titler import SessionTitler
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SECRETS_DIR = _REPO_ROOT / "secrets"
@@ -82,6 +89,56 @@ def build_agent(*, offline: bool = False, enable_knowledge: bool = False) -> Age
         tools=tools,
         workflows=workflows,
         conversation=conversation,
+    )
+
+
+def build_session_store() -> SessionStore:
+    """Construct the session store the GUI persists conversations through."""
+    return SessionStore()
+
+
+def build_session_titler(*, offline: bool) -> SessionTitler:
+    """Construct the auto-namer for chat sessions.
+
+    Online → a lightweight `deepseek-v4-flash` provider in non-think mode
+    (cheap, fast, no reasoning). Offline, or when the DeepSeek key is
+    missing, → a provider-less titler that falls back to a heuristic title
+    (so it never raises and never routes through `EchoLLMProvider`).
+    """
+    if offline:
+        return SessionTitler(None)
+    key_path = _find_key_path(_DEEPSEEK_KEY_PATHS)
+    if key_path is None:
+        return SessionTitler(None)
+    api_key = key_path.read_text(encoding="utf-8").strip()
+    return SessionTitler(
+        DeepSeekProvider(api_key=api_key, model="deepseek-v4-flash", thinking=False)
+    )
+
+
+def reset_conversation(agent: Agent) -> None:
+    """Reset the agent's conversation to a fresh, system-seeded state.
+
+    Centralises the write so the GUI never calls `Conversation.add_*`
+    directly (integration contract §1).
+    """
+    agent.conversation.load_messages([])
+    agent.conversation.add_system(_SYSTEM_PROMPT)
+
+
+def restore_conversation(agent: Agent, raw_messages: list[dict[str, Any]]) -> None:
+    """Load a saved session (stored JSON message dicts) into the conversation.
+
+    Deserialization stays in `core` so the GUI never touches the wire
+    format. Any persisted `system` message is dropped and the *current*
+    `_SYSTEM_PROMPT` is re-seeded, so reopening an old session runs under
+    today's instructions rather than a stale saved prompt. After this, the
+    GUI renders history from `agent.conversation.snapshot()`.
+    """
+    restored = drop_incomplete_tool_calls(deserialize_messages(raw_messages))
+    body = [m for m in restored if m.role != "system"]
+    agent.conversation.load_messages(
+        [ChatMessage(role="system", content=_SYSTEM_PROMPT), *body]
     )
 
 

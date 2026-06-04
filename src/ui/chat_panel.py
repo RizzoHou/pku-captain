@@ -20,6 +20,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ..llm.base import ChatMessage
+from ..tools.base import ToolResult
 from .tool_trace_panel import _format_tool_result, _to_json
 
 
@@ -27,6 +29,8 @@ class ChatPanel(QWidget):
     """Conversation panel that emits user messages and renders final replies."""
 
     send_requested = pyqtSignal(str)
+    new_chat_requested = pyqtSignal()
+    history_requested = pyqtSignal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -67,12 +71,26 @@ class ChatPanel(QWidget):
         input_row.addWidget(self._input, 1)
         input_row.addWidget(self._send_button)
 
+        title = QLabel("对话")
+        title.setObjectName("SectionTitle")
+        self._new_chat_button = QPushButton("＋ 新对话")
+        self._new_chat_button.setObjectName("SecondaryButton")
+        self._new_chat_button.clicked.connect(lambda: self.new_chat_requested.emit())
+        self._history_button = QPushButton("历史会话")
+        self._history_button.setObjectName("SecondaryButton")
+        self._history_button.clicked.connect(lambda: self.history_requested.emit())
+
+        header_row = QHBoxLayout()
+        header_row.setSpacing(8)
+        header_row.addWidget(title)
+        header_row.addStretch()
+        header_row.addWidget(self._new_chat_button)
+        header_row.addWidget(self._history_button)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(12)
-        title = QLabel("对话")
-        title.setObjectName("SectionTitle")
-        layout.addWidget(title)
+        layout.addLayout(header_row)
         layout.addWidget(scroll, 1)
         layout.addLayout(input_row)
 
@@ -81,6 +99,10 @@ class ChatPanel(QWidget):
         self._input.setEnabled(not busy)
         self._send_button.setEnabled(not busy)
         self._send_button.setText("处理中" if busy else "发送")
+        # Block session switching mid-turn so the conversation isn't swapped
+        # while the worker thread is still appending to it.
+        self._new_chat_button.setEnabled(not busy)
+        self._history_button.setEnabled(not busy)
 
     def add_user_message(self, text: str) -> None:
         self._add_message("你", text, "user")
@@ -168,6 +190,50 @@ class ChatPanel(QWidget):
         row.set_trace(name, status, _format_tool_result(name, body), role)
         self._scroll.verticalScrollBar().setValue(self._scroll.verticalScrollBar().maximum())
 
+    def clear(self) -> None:
+        """Remove every message and reset streaming/tool state.
+
+        Used when starting a new chat or loading a saved one. Keeps the
+        trailing stretch (always the last layout item) so new messages still
+        flow from the top.
+        """
+        while self._message_layout.count() > 1:
+            item = self._message_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        self._streaming_bubble = None
+        self._streaming_text = ""
+        self._tool_rows = {}
+
+    def load_history(self, messages: list[ChatMessage]) -> None:
+        """Re-render a saved conversation, reproducing the live flow order.
+
+        The persisted flat message list already interleaves correctly
+        (assistant-segment → its tool calls → tool results → next segment),
+        so a single in-order pass reproduces what the event stream rendered.
+        An assistant message that only made tool calls has empty content and
+        must render no bubble (matching the live path). Tool messages are
+        plain strings; reconstruct a `ToolResult` from the `ERROR: ` prefix
+        convention `Agent` writes (`str(result.data)` vs `f"ERROR: {error}"`).
+        """
+        self.clear()
+        for msg in messages:
+            if msg.role == "user":
+                self.add_user_message(msg.content)
+            elif msg.role == "assistant":
+                if msg.content.strip():
+                    self.add_assistant_message(msg.content)
+                for call in msg.tool_calls:
+                    self.add_tool_call(call.id, call.name, dict(call.arguments))
+            elif msg.role == "tool":
+                self.update_tool_result(
+                    msg.tool_call_id or "",
+                    msg.name or "",
+                    _tool_result_from_content(msg.content),
+                )
+            # system messages are not rendered
+
     def _emit_send(self) -> None:
         text = self._input.toPlainText().strip()
         if not text:
@@ -215,6 +281,19 @@ class ChatPanel(QWidget):
     def _insert_flow_widget(self, widget: QWidget) -> None:
         self._message_layout.insertWidget(self._message_layout.count() - 1, widget)
         self._scroll.verticalScrollBar().setValue(self._scroll.verticalScrollBar().maximum())
+
+
+def _tool_result_from_content(content: str) -> ToolResult:
+    """Rebuild a `ToolResult` from a persisted `tool` message string.
+
+    `Agent` stores `str(result.data)` on success and `f"ERROR: {error}"` on
+    failure, so the prefix is the only signal of which it was. Structured
+    `data` is not recoverable (only its string form was saved) — replayed
+    tool rows therefore show the stringified blob; see the v1 limitation note.
+    """
+    if content.startswith("ERROR: "):
+        return ToolResult(success=False, error=content[len("ERROR: ") :])
+    return ToolResult(success=True, data=content)
 
 
 class InlineToolCall(QFrame):
