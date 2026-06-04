@@ -1,4 +1,4 @@
-"""WeatherTool unit tests — no network; a captured 中国天气网 payload is fed
+"""WeatherTool unit tests — no network; a captured wttr.in j1 payload is fed
 through a monkeypatched `_fetch` so we exercise parsing + the output-dict
 contract the GUI/workflow consumers depend on."""
 
@@ -7,50 +7,51 @@ from __future__ import annotations
 import pytest
 
 from src.tools.weather import (
-    PKU_CITY_CODE,
     PKU_LABEL,
     WeatherTool,
-    apparent_temperature_c,
-    resolve_city_code,
+    describe_weather_code,
 )
 
-# Trimmed but real-shaped 中国天气网 envelope (Haidian).
+# Trimmed but real-shaped wttr.in ?format=j1 envelope.
 SAMPLE = {
-    "message": "success",
-    "status": 200,
-    "cityInfo": {
-        "city": "海淀区",
-        "citykey": "101010200",
-        "parent": "北京市",
-        "updateTime": "18:17",
-    },
-    "data": {
-        "shidu": "44%",
-        "pm25": 13.0,
-        "pm10": 23.0,
-        "quality": "优",
-        "wendu": "22.6",
-        "ganmao": "各类人群可自由活动",
-        "forecast": [
-            {"type": "大雨", "fx": "东北风", "fl": "2级", "high": "高温 31℃", "low": "低温 21℃"},
-        ],
-    },
+    "current_condition": [
+        {
+            "temp_C": "18",
+            "FeelsLikeC": "17",
+            "humidity": "83",
+            "weatherCode": "308",
+            "weatherDesc": [{"value": "Heavy rain"}],
+            "windspeedKmph": "12",
+            "winddir16Point": "E",
+            "observation_time": "01:40 PM",
+            "precipMM": "2.1",
+            "visibility": "8",
+            "pressure": "1009",
+            "uvIndex": "0",
+            "cloudcover": "75",
+        }
+    ],
+    "nearest_area": [
+        {
+            "areaName": [{"value": "Haidian"}],
+            "region": [{"value": "Beijing"}],
+        }
+    ],
 }
 
 
 @pytest.fixture
 def tool(monkeypatch: pytest.MonkeyPatch) -> WeatherTool:
     t = WeatherTool()
-    monkeypatch.setattr(t, "_fetch", lambda code: SAMPLE)
+    monkeypatch.setattr(t, "_fetch", lambda query: SAMPLE)
     return t
 
 
-def test_resolve_city_code_default_is_pku() -> None:
-    assert resolve_city_code("") == PKU_CITY_CODE
-    assert resolve_city_code("海淀区") == PKU_CITY_CODE
-    assert resolve_city_code("北京大学") == PKU_CITY_CODE
-    assert resolve_city_code("上海市") == "101020100"
-    assert resolve_city_code("不存在xyz") is None
+def test_describe_weather_code() -> None:
+    assert describe_weather_code("113") == "晴"
+    assert describe_weather_code(308) == "大雨"
+    assert describe_weather_code(99999, fallback="Clear") == "Clear"
+    assert describe_weather_code(None) == "未知"
 
 
 def test_invoke_default_shapes_contract_keys(tool: WeatherTool) -> None:
@@ -69,38 +70,37 @@ def test_invoke_default_shapes_contract_keys(tool: WeatherTool) -> None:
     ):
         assert key in data
     assert data["location"] == PKU_LABEL  # empty city -> friendly PKU label
-    assert data["temperature_c"] == 22.6
-    assert data["humidity_percent"] == 44.0
-    assert data["weather_description"] == "大雨"
-    assert data["wind"] == "东北风 2级"
-    assert data["weather_code"] is None
-    assert isinstance(data["apparent_temperature_c"], float)
+    assert data["temperature_c"] == 18.0
+    assert data["apparent_temperature_c"] == 17.0  # wttr.in feels-like, not derived
+    assert data["humidity_percent"] == 83.0
+    assert data["weather_code"] == 308
+    assert data["weather_description"] == "大雨"  # mapped from WWO code
+    assert data["wind"] == "E 12km/h"
 
 
-def test_invoke_named_city_uses_api_city_name(tool: WeatherTool) -> None:
+def test_invoke_named_city_echoes_input(tool: WeatherTool) -> None:
     result = tool.invoke({"city": "海淀"})
     assert result.success
-    assert result.data["location"] == "海淀区"  # not the PKU label
+    assert result.data["location"] == "海淀"  # echoes user input, not the PKU label
 
 
-def test_invoke_unknown_city_fails_cleanly() -> None:
-    result = WeatherTool().invoke({"city": "不存在xyz"})
-    assert not result.success
-    assert "暂不支持" in (result.error or "")
-
-
-def test_bad_status_payload_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_unknown_code_falls_back_to_english_desc(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = {
+        "current_condition": [
+            {"temp_C": "20", "weatherCode": "99999", "weatherDesc": [{"value": "Sandstorm"}]}
+        ]
+    }
     t = WeatherTool()
-    monkeypatch.setattr(t, "_fetch", lambda code: {"status": 500, "message": "boom"})
+    monkeypatch.setattr(t, "_fetch", lambda query: payload)
     result = t.invoke({})
+    assert result.success
+    assert result.data["weather_description"] == "Sandstorm"
+    assert result.data["weather_code"] == 99999  # raw WWO code kept even when unmapped
+
+
+def test_empty_conditions_fails_cleanly(monkeypatch: pytest.MonkeyPatch) -> None:
+    t = WeatherTool()
+    monkeypatch.setattr(t, "_fetch", lambda query: {"current_condition": []})
+    result = t.invoke({"city": "Nowhereville"})
     assert not result.success
-    assert "天气数据异常" in (result.error or "")
-
-
-def test_apparent_temperature_formula() -> None:
-    assert apparent_temperature_c(None, 50.0, 1.0) is None
-    # Warmer + humid reads hotter than dry; both finite floats.
-    humid = apparent_temperature_c(30.0, 80.0, 0.0)
-    dry = apparent_temperature_c(30.0, 20.0, 0.0)
-    assert humid is not None and dry is not None
-    assert humid > dry
+    assert "找不到" in (result.error or "")

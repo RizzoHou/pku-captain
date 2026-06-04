@@ -1,181 +1,123 @@
-"""WeatherTool — current weather for PKU campus (or a named city).
+"""WeatherTool — real-time weather for PKU campus (or a named city).
 
-Uses the free, key-less 中国天气网 (China Weather) JSON API mirrored by
-sojson/itboy. It is China-hosted, so it stays reachable from the campus
-network where the previous source (Open-Meteo, EU-hosted) returned 502 /
-timed out:
+Uses wttr.in's key-less JSON API (``?format=j1``), which exposes a genuine
+**current** observation (``current_condition``) rather than a daily forecast.
+The previous 中国天气网 mirror served today's daytime forecast as "current",
+so it would report e.g. 大雨 on a dry afternoon; wttr.in fixes that.
 
-  - http://t.weather.itboy.net/api/weather/city/{code}   (primary)
-  - http://t.weather.sojson.com/api/weather/city/{code}  (fallback)
+  - Default (no city): pinned to PKU coordinates so it resolves to Haidian.
+  - ``city``: passed straight to wttr.in, which geocodes Chinese or English
+    names ("上海" / "Shanghai" both work).
 
-`code` is a 中国天气网 city id (e.g. Haidian = ``101010200``). We default to
-Haidian — PKU's district — so the common case ("北京今天天气怎么样？" while
-the agent already knows the user is at PKU) returns useful data. Pass
-``city`` to look elsewhere up; only major cities and Beijing districts are
-mapped (see ``CITY_CODES``).
+Tradeoffs (accepted, see CLAUDE.md): wttr.in is a foreign-hosted hobby
+service backed by a global weather model, so it is less precise for China
+than a paid station feed (和风 / 高德) and can occasionally rate-limit — we
+retry once. It reachable from the campus network where Open-Meteo is not.
 
-Caveats of this source vs a paid station feed: it is HTTP-only (no HTTPS),
-and the condition / wind come from today's daytime *forecast* rather than a
-live observation — only temperature and humidity (``data.wendu`` /
-``data.shidu``) are real-time. Feels-like is derived locally via the
-Australian apparent-temperature formula.
+Conditions arrive as numeric WWO weather codes, which we map to Chinese so
+the dashboard icon logic (keyed on 雨/雪/雷/晴/… in the text) keeps working.
 """
 
 from __future__ import annotations
 
-import math
-import re
 from typing import Any, ClassVar
 
 import requests
 
 from .base import Tool, ToolResult
 
-PKU_CITY_CODE = "101010200"  # Haidian district — PKU's home district.
+PKU_LATITUDE = 39.9904
+PKU_LONGITUDE = 116.3076
 PKU_LABEL = "北京大学"
 
-API_HOSTS = (
-    "http://t.weather.itboy.net",
-    "http://t.weather.sojson.com",
-)
-API_PATH = "/api/weather/city/{code}"
-DEFAULT_TIMEOUT = 10.0
+WTTR_URL = "https://wttr.in/{location}"
+DEFAULT_TIMEOUT = 15.0
+_RETRIES = 1  # wttr.in occasionally rate-limits; one retry covers transient 5xx.
 
-# 中国天气网 city ids. Verified live against the API. Beijing districts plus
-# municipalities and provincial capitals; lookup also strips 市/区/省 suffixes
-# so "北京市" / "海淀区" resolve too.
-CITY_CODES: dict[str, str] = {
-    # Beijing + districts (PKU-relevant)
-    "北京": "101010100",
-    "海淀": PKU_CITY_CODE,
-    "北大": PKU_CITY_CODE,
-    "北京大学": PKU_CITY_CODE,
-    "朝阳": "101010300",
-    "顺义": "101010400",
-    "怀柔": "101010500",
-    "通州": "101010600",
-    "昌平": "101010700",
-    "延庆": "101010800",
-    "丰台": "101010900",
-    "石景山": "101011000",
-    "大兴": "101011100",
-    "房山": "101011200",
-    "密云": "101011300",
-    "门头沟": "101011400",
-    "平谷": "101011500",
-    # Municipalities
-    "上海": "101020100",
-    "天津": "101030100",
-    "重庆": "101040100",
-    # Provincial capitals / major cities
-    "广州": "101280101",
-    "深圳": "101280601",
-    "杭州": "101210101",
-    "南京": "101190101",
-    "成都": "101270101",
-    "武汉": "101200101",
-    "西安": "101110101",
-    "济南": "101120101",
-    "郑州": "101180101",
-    "长沙": "101250101",
-    "福州": "101230101",
-    "哈尔滨": "101050101",
-    "沈阳": "101070101",
-    "长春": "101060101",
-    "石家庄": "101090101",
-    "太原": "101100101",
-    "合肥": "101220101",
-    "南昌": "101240101",
-    "南宁": "101300101",
-    "海口": "101310101",
-    "贵阳": "101260101",
-    "昆明": "101290101",
-    "拉萨": "101140101",
-    "兰州": "101160101",
-    "西宁": "101150101",
-    "银川": "101170101",
-    "乌鲁木齐": "101130101",
-    "呼和浩特": "101080101",
-}
-
-# Beaufort wind force (级) -> approximate wind speed (m/s), scale midpoints.
-_BEAUFORT_MS: dict[int, float] = {
-    0: 0.0,
-    1: 0.9,
-    2: 2.5,
-    3: 4.4,
-    4: 6.7,
-    5: 9.4,
-    6: 12.3,
-    7: 15.5,
-    8: 18.9,
-    9: 22.6,
-    10: 26.5,
-    11: 30.6,
-    12: 34.0,
+# WWO weather codes -> Chinese. Strings are chosen so the dashboard's
+# `_weather_icon` keyword match (雷 > 雪 > 雨 > 阴 > 雾 > 晴) lands sensibly.
+_WWO_CODES_ZH: dict[int, str] = {
+    113: "晴",
+    116: "晴间多云",
+    119: "多云",
+    122: "阴",
+    143: "薄雾",
+    176: "局部有雨",
+    179: "局部有雪",
+    182: "局部雨夹雪",
+    185: "局部冻毛毛雨",
+    200: "局部雷阵雨",
+    227: "吹雪",
+    230: "暴雪",
+    248: "雾",
+    260: "冻雾",
+    263: "局部小毛毛雨",
+    266: "小毛毛雨",
+    281: "冻毛毛雨",
+    284: "强冻毛毛雨",
+    293: "局部小雨",
+    296: "小雨",
+    299: "间歇中雨",
+    302: "中雨",
+    305: "间歇大雨",
+    308: "大雨",
+    311: "小冻雨",
+    314: "中到大冻雨",
+    317: "小雨夹雪",
+    320: "中到大雨夹雪",
+    323: "局部小雪",
+    326: "小雪",
+    329: "局部中雪",
+    332: "中雪",
+    335: "局部大雪",
+    338: "大雪",
+    350: "冰粒",
+    353: "小阵雨",
+    356: "中到大阵雨",
+    359: "暴雨",
+    362: "小阵雨夹雪",
+    365: "中到大阵雨夹雪",
+    368: "小阵雪",
+    371: "中到大阵雪",
+    374: "小冰粒阵雨",
+    377: "中到大冰粒阵雨",
+    386: "局部雷阵雨",
+    389: "强雷阵雨",
+    392: "局部雷雪",
+    395: "强雷雪",
 }
 
 
-def resolve_city_code(city: str) -> str | None:
-    """Map a free-text city name to a 中国天气网 id, or None if unknown."""
-    name = (city or "").strip()
-    if not name:
-        return PKU_CITY_CODE
-    if name in CITY_CODES:
-        return CITY_CODES[name]
-    trimmed = name.rstrip("市区省")
-    if trimmed in CITY_CODES:
-        return CITY_CODES[trimmed]
-    for key, code in CITY_CODES.items():
-        if key in name or name in key:
-            return code
-    return None
-
-
-def _beaufort_to_ms(force_text: str | None) -> float:
-    """Parse a wind-force string like '2级' / '3-4级' to a wind speed (m/s)."""
-    if not force_text:
-        return 0.0
-    levels = [int(n) for n in re.findall(r"\d+", force_text)]
-    if not levels:
-        return 0.0
-    level = max(levels)
-    if level >= 12:
-        return _BEAUFORT_MS[12]
-    return _BEAUFORT_MS.get(level, 0.0)
-
-
-def apparent_temperature_c(
-    temp_c: float | None, humidity_percent: float | None, wind_ms: float
-) -> float | None:
-    """Australian (shade) apparent temperature — needs only T, RH, wind.
-
-    AT = T + 0.33*e - 0.70*ws - 4.00, with e the water-vapour pressure (hPa).
-    Returns None if temperature is unavailable.
-    """
-    if temp_c is None:
-        return None
-    rh = humidity_percent if humidity_percent is not None else 0.0
-    e = (rh / 100.0) * 6.105 * math.exp(17.27 * temp_c / (237.7 + temp_c))
-    at = temp_c + 0.33 * e - 0.70 * wind_ms - 4.00
-    return round(at, 1)
+def describe_weather_code(code: Any, fallback: str = "未知") -> str:
+    """Map a WWO weather code to Chinese, falling back to a supplied string."""
+    try:
+        return _WWO_CODES_ZH.get(int(code), fallback)
+    except (TypeError, ValueError):
+        return fallback
 
 
 def _to_float(value: Any) -> float | None:
     if value is None:
         return None
     try:
-        return float(str(value).strip().rstrip("%℃°C "))
+        return float(str(value).strip())
     except (TypeError, ValueError):
         return None
+
+
+def _first_value(items: Any) -> str | None:
+    """wttr.in nests labels as ``[{"value": ...}]``; pull the first value."""
+    if isinstance(items, list) and items and isinstance(items[0], dict):
+        return items[0].get("value")
+    return None
 
 
 class WeatherTool(Tool):
     name: ClassVar[str] = "weather"
     description: ClassVar[str] = (
-        "Return the current weather (temperature, condition, wind, humidity, air "
-        "quality) for PKU campus (Haidian) by default, or for a named Chinese city "
-        "when `city` is provided. Data source: 中国天气网 (no API key)."
+        "Return the current real-time weather (temperature, condition, feels-like, "
+        "wind, humidity) for PKU campus by default, or for a named city when `city` "
+        "is provided. Data source: wttr.in (no API key)."
     )
     parameters_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
@@ -183,9 +125,8 @@ class WeatherTool(Tool):
             "city": {
                 "type": "string",
                 "description": (
-                    "Chinese city or Beijing district name (e.g. 上海, 海淀). "
-                    "Defaults to PKU campus (Haidian) if omitted or empty. Only "
-                    "major cities and Beijing districts are supported."
+                    "City name to look up (Chinese or English, e.g. 上海 / Shanghai). "
+                    "Defaults to PKU campus (Haidian) if omitted or empty."
                 ),
             }
         },
@@ -197,71 +138,68 @@ class WeatherTool(Tool):
 
     def invoke(self, args: dict[str, Any]) -> ToolResult:
         city = (args.get("city") or "").strip()
-        code = resolve_city_code(city)
-        if code is None:
-            return ToolResult(
-                success=False,
-                error=f"暂不支持的城市：{city}（仅支持主要城市与北京各区，默认北大）",
-            )
+        query = city if city else f"{PKU_LATITUDE},{PKU_LONGITUDE}"
         try:
-            payload = self._fetch(code)
+            payload = self._fetch(query)
         except requests.RequestException as exc:
             return ToolResult(success=False, error=f"网络错误：{exc}")
 
-        if not isinstance(payload, dict) or payload.get("status") != 200:
-            msg = payload.get("message") if isinstance(payload, dict) else None
-            return ToolResult(success=False, error=f"天气数据异常：{msg or '未知错误'}")
+        conditions = payload.get("current_condition") if isinstance(payload, dict) else None
+        if not isinstance(conditions, list) or not conditions:
+            return ToolResult(success=False, error=f"找不到城市或天气数据：{city or 'PKU'}")
 
-        return ToolResult(success=True, data=self._shape(city, payload))
+        return ToolResult(success=True, data=self._shape(city, payload, conditions[0]))
 
-    def _fetch(self, code: str) -> dict[str, Any]:
-        """Try each host in turn; raise the last error only if all fail."""
+    def _fetch(self, query: str) -> dict[str, Any]:
+        url = WTTR_URL.format(location=query)
         last_exc: requests.RequestException | None = None
-        for host in API_HOSTS:
-            url = host + API_PATH.format(code=code)
+        for _ in range(_RETRIES + 1):
             try:
-                resp = requests.get(url, timeout=self.timeout)
+                resp = requests.get(
+                    url,
+                    params={"format": "j1"},
+                    timeout=self.timeout,
+                    headers={"User-Agent": "curl/8"},  # wttr.in serves JSON to curl-like UAs.
+                )
                 resp.raise_for_status()
                 return resp.json()
             except requests.RequestException as exc:
                 last_exc = exc
-                continue
         assert last_exc is not None
         raise last_exc
 
-    def _shape(self, city: str, payload: dict[str, Any]) -> dict[str, Any]:
-        data = payload.get("data") or {}
-        city_info = payload.get("cityInfo") or {}
-        forecast = data.get("forecast") or []
-        today = forecast[0] if forecast else {}
+    def _shape(
+        self, city: str, payload: dict[str, Any], current: dict[str, Any]
+    ) -> dict[str, Any]:
+        # Echo the user's city (keeps Chinese input intact) — wttr.in's
+        # nearest_area name is English ("上海" -> "Pootung"), poor for a
+        # Chinese-facing product. Default (no city) uses the friendly label.
+        location = city if city else PKU_LABEL
 
-        # Default (no city) keeps the friendly PKU label; otherwise use the
-        # API's own district/city name.
-        location = PKU_LABEL if not city else (city_info.get("city") or city)
-
-        temp_c = _to_float(data.get("wendu"))
-        humidity = _to_float(data.get("shidu"))
-        wind_text = " ".join(
-            part for part in (today.get("fx"), today.get("fl")) if part
-        ).strip()
-        wind_ms = _beaufort_to_ms(today.get("fl"))
+        code = current.get("weatherCode")
+        wind_dir = current.get("winddir16Point")
+        wind_kmh = _to_float(current.get("windspeedKmph"))
+        wind = (
+            f"{wind_dir} {wind_kmh:g}km/h"
+            if wind_dir and wind_kmh is not None
+            else None
+        )
 
         return {
             "location": location,
-            "observation_time": city_info.get("updateTime"),
-            "temperature_c": temp_c,
-            "apparent_temperature_c": apparent_temperature_c(
-                temp_c, humidity, wind_ms
+            "observation_time": current.get("observation_time"),
+            "temperature_c": _to_float(current.get("temp_C")),
+            "apparent_temperature_c": _to_float(current.get("FeelsLikeC")),
+            "humidity_percent": _to_float(current.get("humidity")),
+            "wind_speed_kmh": wind_kmh,
+            "wind": wind,
+            "weather_code": int(code) if str(code).isdigit() else None,
+            "weather_description": describe_weather_code(
+                code, fallback=_first_value(current.get("weatherDesc")) or "未知"
             ),
-            "humidity_percent": humidity,
-            "wind_speed_kmh": round(wind_ms * 3.6, 1) if wind_text else None,
-            "wind": wind_text or None,
-            "weather_code": None,  # WMO codes no longer apply; condition is text.
-            "weather_description": today.get("type") or "未知",
-            "air_quality": data.get("quality"),
-            "pm25": data.get("pm25"),
-            "pm10": data.get("pm10"),
-            "advice": data.get("ganmao"),
-            "today_high": today.get("high"),
-            "today_low": today.get("low"),
+            "precip_mm": _to_float(current.get("precipMM")),
+            "visibility_km": _to_float(current.get("visibility")),
+            "pressure_hpa": _to_float(current.get("pressure")),
+            "uv_index": _to_float(current.get("uvIndex")),
+            "cloud_cover_percent": _to_float(current.get("cloudcover")),
         }
