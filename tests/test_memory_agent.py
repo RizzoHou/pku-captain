@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.core import build_agent
 from src.core.agent import Agent
 from src.core.conversation import Conversation
 from src.core.memory import MemoryStore
@@ -113,6 +114,15 @@ def test_learned_fact_folds_forward_within_turn(tmp_path) -> None:
     assert sum(1 for m in llm.calls[1] if m.role == "system") == 1
     # Turn still completed normally.
     assert events[-1].kind == "final"
+
+
+def test_build_agent_shares_one_memory_store() -> None:
+    # The load-bearing wiring: the Agent and the MemoryTool must hold the
+    # *same* store, else mid-session writes never reach the next injection
+    # and the whole feature silently no-ops. Offline so no API key is needed.
+    agent = build_agent(offline=True)
+    assert agent.memory is not None
+    assert agent.memory is agent.tools.get("memory")._store
 
 
 def test_memory_block_never_persists_to_conversation(tmp_path) -> None:
