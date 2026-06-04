@@ -1,14 +1,18 @@
-"""DashboardWorker.refresh must scope to the requested tool keys.
+"""DashboardWorker.refresh must scope to the requested tool keys and run them
+in parallel.
 
 A per-card refresh button (e.g. treehole 刷新, P-Lib 刷新额度) passes a single
 key, and the worker must invoke only that tool — not fan out into a full
 reload of every card. Empty keys preserve the global header-button behavior of
-refreshing everything. Runs headless via Qt's offscreen platform.
+refreshing everything. The selected tools must run concurrently (cards block on
+subprocess/network I/O, so serial loading is the startup-latency bug this guards
+against). Runs headless via Qt's offscreen platform.
 """
 
 from __future__ import annotations
 
 import os
+import threading
 from typing import Any
 
 import pytest
@@ -75,3 +79,42 @@ def test_refresh_empty_keys_refreshes_all(app: QApplication) -> None:
 
     assert set(loaded) == set(tools)
     assert all(tool.calls == 1 for tool in tools.values())
+
+
+class _BarrierTool(Tool):
+    """Each invoke blocks until every sibling has also entered invoke().
+
+    Under parallel execution all N tools reach the barrier and pass; under
+    serial execution the first tool blocks forever (siblings never start) and
+    the barrier times out into BrokenBarrierError — so this test fails if the
+    refresh ever regresses to a sequential loop.
+    """
+
+    description = "barrier tool"
+    parameters_schema: dict[str, Any] = {}
+
+    def __init__(self, name: str, barrier: threading.Barrier) -> None:
+        self.name = name
+        self._barrier = barrier
+
+    def invoke(self, args: dict[str, Any]) -> ToolResult:
+        self._barrier.wait(timeout=5.0)
+        return ToolResult(success=True, data={"name": self.name})
+
+
+def test_refresh_runs_tools_in_parallel(app: QApplication) -> None:
+    names = ("treehole_updates", "plib_materials", "pku3b_announcements", "lecture")
+    barrier = threading.Barrier(len(names))
+    registry = ToolRegistry()
+    for name in names:
+        registry.register(_BarrierTool(name, barrier))
+    worker = DashboardWorker(registry, {name: {} for name in names})
+    loaded: list[str] = []
+    errored: list[str] = []
+    worker.item_loaded.connect(lambda key, _data: loaded.append(key))
+    worker.item_error.connect(lambda key, _msg: errored.append(key))
+
+    worker.refresh({}, [])
+
+    assert errored == []
+    assert set(loaded) == set(names)
