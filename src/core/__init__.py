@@ -25,6 +25,7 @@ from .memory_learn import MemoryLearnResult, MemoryLearnService
 if TYPE_CHECKING:
     from .bootstrap import (
         build_agent,
+        build_dashboard_cache,
         build_session_store,
         build_session_titler,
         build_source_registry,
@@ -39,6 +40,7 @@ __all__ = [
     "MemoryLearnResult",
     "MemoryLearnService",
     "build_agent",
+    "build_dashboard_cache",
     "build_session_store",
     "build_session_titler",
     "build_source_registry",
@@ -49,6 +51,7 @@ __all__ = [
 _LAZY = frozenset(
     {
         "build_agent",
+        "build_dashboard_cache",
         "build_session_store",
         "build_session_titler",
         "build_source_registry",

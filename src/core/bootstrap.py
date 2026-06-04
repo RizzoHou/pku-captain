@@ -38,6 +38,7 @@ from ..workflows import HelloWorkflow, MorningBriefingWorkflow
 from ..workflows.base import WorkflowRegistry
 from .agent import Agent
 from .conversation import Conversation
+from .dashboard_cache import DashboardCache
 from .memory import MemoryStore
 from .session_store import (
     SessionStore,
@@ -114,6 +115,11 @@ def build_agent(*, offline: bool = False, enable_knowledge: bool = False) -> Age
 def build_session_store() -> SessionStore:
     """Construct the session store the GUI persists conversations through."""
     return SessionStore()
+
+
+def build_dashboard_cache() -> DashboardCache:
+    """Construct the per-card cache the dashboard saves/restores its data through."""
+    return DashboardCache()
 
 
 def build_session_titler(*, offline: bool) -> SessionTitler:

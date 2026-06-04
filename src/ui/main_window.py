@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -18,6 +19,7 @@ from ..core import (
     AgentEvent,
     MemoryLearnService,
     build_agent,
+    build_dashboard_cache,
     build_session_store,
     build_session_titler,
     reset_conversation,
@@ -40,6 +42,30 @@ _TZ = ZoneInfo("Asia/Shanghai")
 
 def _now_iso() -> str:
     return datetime.now(_TZ).isoformat(timespec="seconds")
+
+
+def _signature(data: object) -> str:
+    """Canonical JSON of a card payload, for change detection.
+
+    ``sort_keys`` makes dict ordering irrelevant and serializing through JSON
+    absorbs the round-trip type drift a cache reload introduces (a tuple and a
+    list both become a JSON array), so re-fetched data that is semantically
+    unchanged compares equal to the cached copy and the card is not repainted.
+    """
+    return json.dumps(data, sort_keys=True, ensure_ascii=False, default=str)
+
+
+def _should_render(loading: bool, current_sig: str | None, fresh_sig: str) -> bool:
+    """Decide whether a freshly-fetched card payload should be repainted.
+
+    A card we put into the ``加载中...`` state must always render, or it is
+    stranded on the spinner forever. Otherwise the cached data is still
+    visible, so repaint only when the data actually changed — this is what
+    makes a silent startup refresh flicker-free.
+    """
+    if loading:
+        return True
+    return current_sig != fresh_sig
 
 
 class MainWindow(QMainWindow):
@@ -75,6 +101,17 @@ class MainWindow(QMainWindow):
             mode_label=mode_label, tools=agent.tools, memory_learner=memory_learner
         )
         self._chat_panel = ChatPanel()
+
+        # Per-card download cache: the dashboard paints from saved state on
+        # launch, then a silent background refresh updates only the cards whose
+        # data changed. `_cached_data` / `_cached_sig` mirror what each card is
+        # currently showing (tool-key keyed); `_loading_keys` are the cards put
+        # into the spinner state by the in-flight refresh — those must render
+        # when their result lands (`_should_render`).
+        self._dashboard_cache = build_dashboard_cache()
+        self._cached_data: dict[str, object] = {}
+        self._cached_sig: dict[str, str] = {}
+        self._loading_keys: set[str] = set()
 
         # Multi-session state. The startup session id lives in memory only;
         # nothing is written to disk until the first real user turn, so a
@@ -144,7 +181,10 @@ class MainWindow(QMainWindow):
         diagnostics = _startup_diagnostics(offline=offline)
         if diagnostics:
             self._chat_panel.add_system_message(diagnostics)
-        self._refresh_dashboard()
+        # Paint instantly from the saved cards, then fetch live data in the
+        # background and update only the cards that changed.
+        self._seed_dashboard_from_cache()
+        self._start_refresh([], silent=True)
         self.statusBar().showMessage(f"{mode_label} · 就绪")
 
     def _send_message(self, text: str) -> None:
@@ -300,8 +340,27 @@ class MainWindow(QMainWindow):
         "lecture",
     )
 
+    def _seed_dashboard_from_cache(self) -> None:
+        """Paint each card from its saved download, before any live fetch.
+
+        Renders raw cached payloads and records what each card now shows so the
+        background refresh can skip the cards whose data is unchanged. A
+        malformed cache entry is skipped (never crashes startup) and gets
+        repainted by the refresh once live data arrives.
+        """
+        for key, data in self._dashboard_cache.load_all().items():
+            try:
+                self._render_dashboard_item(key, data)
+            except Exception:  # noqa: BLE001 - a bad cache entry must not abort startup
+                continue
+            self._cached_data[key] = data
+            self._cached_sig[key] = _signature(data)
+        stamp = self._dashboard_cache.newest_timestamp()
+        if stamp:
+            self._dashboard.set_updated_text(f"上次保存：{stamp}")
+
     def _refresh_dashboard(self) -> None:
-        """Refresh every dashboard card (header 刷新 button / startup)."""
+        """Refresh every dashboard card (header 刷新 button)."""
         self._start_refresh([])
 
     def _refresh_dashboard_subset(self, keys: list) -> None:
@@ -309,14 +368,26 @@ class MainWindow(QMainWindow):
         not trigger a full-dashboard reload."""
         self._start_refresh([str(key) for key in keys])
 
-    def _start_refresh(self, tool_keys: list[str]) -> None:
-        """Reload `tool_keys` (empty list means all). Sets only the targeted
-        cards to a loading state and scopes the worker to the same set."""
+    def _start_refresh(self, tool_keys: list[str], *, silent: bool = False) -> None:
+        """Reload `tool_keys` (empty list means all) and scope the worker to the
+        same set.
+
+        `silent` is the startup pass: a card that already shows cached data
+        keeps it (no spinner) and is repainted only if its fresh data differs.
+        An explicit refresh (`silent=False`, header / per-card buttons) always
+        shows the spinner and always repaints, so a click gives visible
+        feedback even when nothing changed. A card put into the loading state
+        is recorded in `_loading_keys`, which guarantees it gets rendered when
+        its result arrives (`_should_render`).
+        """
         self._dashboard.set_refresh_busy(True)
         self.statusBar().showMessage("正在刷新仪表盘...")
         for name in tool_keys or self._ALL_TOOL_KEYS:
+            if silent and name in self._cached_sig:
+                continue  # keep cached content visible, no spinner flicker
             card_key = "schedule" if name == "pku3b_coursetable" else name
             self._dashboard.set_loading(card_key)
+            self._loading_keys.add(name)
         # Read GUI widgets (the OTP field) here, on the GUI thread, and hand
         # the snapshot to the worker — the worker must never touch widgets.
         dynamic_args = {"pku3b_coursetable": self._dashboard_args("pku3b_coursetable")}
@@ -329,6 +400,18 @@ class MainWindow(QMainWindow):
         )
 
     def _on_dashboard_item_loaded(self, key: str, data: object) -> None:
+        loading = key in self._loading_keys
+        self._loading_keys.discard(key)
+        fresh_sig = _signature(data)
+        if not _should_render(loading, self._cached_sig.get(key), fresh_sig):
+            return  # cached card unchanged since last save — no repaint
+        self._render_dashboard_item(key, data)
+        self._cached_data[key] = data
+        self._cached_sig[key] = fresh_sig
+        self._dashboard_cache.save(key, data)
+
+    def _render_dashboard_item(self, key: str, data: object) -> None:
+        """Dispatch one card's raw payload to its setter (no cache write)."""
         card_key = "schedule" if key == "pku3b_coursetable" else key
         if key == "pku3b_coursetable" and isinstance(data, dict):
             self._dashboard.set_schedule(data)
@@ -351,7 +434,17 @@ class MainWindow(QMainWindow):
         self._dashboard.set_data(card_key, _format_dashboard_data(key, data))
 
     def _on_dashboard_item_error(self, key: str, message: str) -> None:
+        loading = key in self._loading_keys
+        self._loading_keys.discard(key)
         card_key = "schedule" if key == "pku3b_coursetable" else key
+        if key in self._cached_data:
+            # Keep the last-good cached download visible rather than wiping a
+            # card to an error. An explicit refresh blanked it to the spinner,
+            # so repaint the cache; a silent pass never touched it.
+            if loading:
+                self._render_dashboard_item(key, self._cached_data[key])
+            self.statusBar().showMessage(f"{card_key} 刷新失败，继续显示缓存：{message}")
+            return
         self._dashboard.set_error(card_key, message)
 
     def _dashboard_args(self, name: str) -> dict[str, object]:
