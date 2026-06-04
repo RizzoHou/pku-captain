@@ -1,6 +1,7 @@
 from .base import Tool, ToolRegistry, ToolResult
 from .calendar_reminder import CalendarReminderTool
 from .clock import ClockTool
+from .dean_resources import DeanResourcesTool
 from .knowledge_search import KnowledgeSearchTool
 from .lecture import LectureTool
 from .memory import MemoryTool
@@ -14,6 +15,7 @@ from .treehole_updates import TreeholeAuthService, TreeholeUpdatesTool
 __all__ = [
     "CalendarReminderTool",
     "ClockTool",
+    "DeanResourcesTool",
     "KnowledgeSearchTool",
     "LectureTool",
     "MemoryTool",
