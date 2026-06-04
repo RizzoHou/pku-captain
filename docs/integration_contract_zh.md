@@ -31,7 +31,11 @@ agent = build_agent(offline=True)  # 离线：EchoLLMProvider + 仅 ClockTool
 
 > **BREAKING: integration contract** —— 旧的 `skip_knowledge`（默认 False、需显式 `=True` 才跳过）已被 `enable_knowledge`（默认 False、需显式 `=True` 才开启）取代，语义反转。GUI 侧 `build_agent(offline=offline, skip_knowledge=True)` 应改为 `build_agent(offline=offline, enable_knowledge=...)`；本仓库内已同步更新。
 
-`Conversation` 对 GUI 是只读的：渲染历史时通过 `for msg in agent.conversation` 或 `agent.conversation.snapshot()` 拿 `ChatMessage` 列表，不要直接调 `add_user / add_assistant / add_tool_result`。所有写入由 `Agent.turn()` 完成。
+`Conversation` 对 GUI 是只读的：渲染历史时通过 `for msg in agent.conversation` 或 `agent.conversation.snapshot()` 拿 `ChatMessage` 列表，不要直接调 `add_user / add_assistant / add_tool_result`。所有写入由 `Agent.turn()` 完成（多会话的重置 / 恢复写入也走 `src.core` 的工厂，见下）。
+
+**多会话持久化（新增）**：`src.core` 额外懒加载暴露 `build_session_store()`、`build_session_titler(*, offline)`、`reset_conversation(agent)`、`restore_conversation(agent, raw_messages)`（与 `build_agent` 同一 PEP 562 机制）。GUI 经 `build_session_store()` 拿到 `SessionStore`——每个会话一份 `data/sessions/<id>.json`（完整消息历史 + 标题 + `created_at/updated_at` + `offline`），在每个 turn 结束和窗口关闭时写盘（仅当已有用户消息，避免空会话留下垃圾文件）。`build_session_titler` 用轻量 `deepseek-v4-flash`**非思考模式**（请求体 `{"thinking": {"type": "disabled"}}`，由 `DeepSeekProvider(thinking=False)` 产生）异步生成会话标题；离线或无 key 时回退到启发式标题（首条用户消息截断），**绝不**经 `EchoLLMProvider`。新建 / 切换会话**不**直接写 `Conversation`：`reset_conversation` 重置为系统提示；`restore_conversation` 反序列化存档消息、剥离旧 `system` 后重新注入当前 `_SYSTEM_PROMPT`，加载后由 `ChatPanel.load_history(agent.conversation.snapshot())` 重绘，**不**重新触发 `final` 事件。GUI 入口为对话面板表头的「＋新对话」「历史会话」两个按钮（后者打开 `SessionHistoryDialog` 模态列表），turn 进行中禁用以避免在 worker 线程仍在写 `Conversation` 时换底。
+
+> **BREAKING: integration contract** —— 本次新增上述 `src.core` 多会话符号，并落实 §6 的「持久化 `Conversation`」待定项（加载经 `ChatPanel.load_history` 重绘，不重发 `final`）。`DeepSeekProvider` 新增可选参数 `thinking: bool = True`，默认路径请求体与此前逐字节一致，仅供标题器以 `thinking=False` 走非思考模式。
 
 ## 2. 线程模型
 
@@ -128,7 +132,7 @@ GUI lane 与后端 lane 的接缝：后端保证 `Tool` / `Source` 的 `invoke` 
 
 - **turn 取消**：v1 不支持。如果加，需要在 `Agent.turn()` 中检查取消标记，并在 worker 层提供 `cancel()` 槽。
 - **多 Agent 并发**：当前一个窗口一个 `Agent`。多 Agent（例如同时跑工作流 + 对话）需要重新设计 worker / signal 路由。
-- **持久化 `Conversation`**：当前在内存里。落盘后 GUI 需要新增"加载历史"入口，约定加载后是否触发 `final` 事件以重绘。
+- ~~**持久化 `Conversation`**~~（**已实现**，见 §1「多会话持久化」）：落盘到 `data/sessions/<id>.json`，GUI 经「历史会话」弹窗加载；加载后通过 `ChatPanel.load_history` 重绘，**不**重新触发 `final` 事件。已知 v1 限制：`tool` 消息只存了 `str(result.data)`，重绘的工具行展示字符串化结果而非结构化渲染。
 - **Workflow 事件流**：`Workflow.run()` 当前一次性返回 `WorkflowResult`，没有事件流。如果 GUI 要展示工作流的中间步骤，需要参照 `Agent.turn()` 改成生成器并扩展 `AgentEvent` 或新增 `WorkflowEvent`。
 
 ---

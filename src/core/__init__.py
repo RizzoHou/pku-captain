@@ -22,17 +22,37 @@ from .agent import Agent, AgentEvent
 from .conversation import Conversation
 
 if TYPE_CHECKING:
-    from .bootstrap import build_agent, build_source_registry
+    from .bootstrap import (
+        build_agent,
+        build_session_store,
+        build_session_titler,
+        build_source_registry,
+        reset_conversation,
+        restore_conversation,
+    )
 
 __all__ = [
     "Agent",
     "AgentEvent",
     "Conversation",
     "build_agent",
+    "build_session_store",
+    "build_session_titler",
     "build_source_registry",
+    "reset_conversation",
+    "restore_conversation",
 ]
 
-_LAZY = frozenset({"build_agent", "build_source_registry"})
+_LAZY = frozenset(
+    {
+        "build_agent",
+        "build_session_store",
+        "build_session_titler",
+        "build_source_registry",
+        "reset_conversation",
+        "restore_conversation",
+    }
+)
 
 
 def __getattr__(name: str) -> Any:

@@ -5,24 +5,40 @@ from __future__ import annotations
 import shutil
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from PyQt6.QtCore import Q_ARG, QMetaObject, Qt, QThread
 from PyQt6.QtWidgets import (
+    QDialog,
     QMainWindow,
     QSplitter,
 )
 
-from ..core import AgentEvent, build_agent
+from ..core import (
+    AgentEvent,
+    build_agent,
+    build_session_store,
+    build_session_titler,
+    reset_conversation,
+    restore_conversation,
+)
 from .agent_worker import AgentWorker
 from .chat_panel import ChatPanel
 from .dashboard import DashboardPanel
 from .dashboard_worker import DashboardWorker
 from .formatters import upcoming_assignments
+from .session_history_dialog import SessionHistoryDialog
+from .tool_call_worker import run_async
 from .workflow_worker import WorkflowWorker, workflow_summary
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _LOCAL_PKU3B = _REPO_ROOT / ".local" / "cargo" / "bin" / "pku3b"
 _LOCAL_PLIB = _REPO_ROOT.parent / "plib-cli" / ".venv" / "bin" / "plib"
+_TZ = ZoneInfo("Asia/Shanghai")
+
+
+def _now_iso() -> str:
+    return datetime.now(_TZ).isoformat(timespec="seconds")
 
 
 class MainWindow(QMainWindow):
@@ -36,15 +52,31 @@ class MainWindow(QMainWindow):
 
         fallback_message = ""
         mode_label = "在线模式" if not offline else "离线模式"
+        effective_offline = offline
         try:
             agent = build_agent(offline=offline, enable_knowledge=enable_knowledge)
         except Exception as exc:  # noqa: BLE001 - any online failure falls back to offline
             agent = build_agent(offline=True)
+            effective_offline = True
             mode_label = "离线模式"
             fallback_message = f"在线模式不可用，已切换到离线模式：{exc}"
 
+        self._agent = agent
         self._dashboard = DashboardPanel(mode_label=mode_label, tools=agent.tools)
         self._chat_panel = ChatPanel()
+
+        # Multi-session state. The startup session id lives in memory only;
+        # nothing is written to disk until the first real user turn, so a
+        # window that's opened and closed without chatting leaves no junk file.
+        self._effective_offline = effective_offline
+        self._session_store = build_session_store()
+        self._session_titler = build_session_titler(offline=effective_offline)
+        self._busy = False
+        self._current_session_id = self._session_store.new_id()
+        self._current_title: str | None = None
+        self._session_created_at = _now_iso()
+        self._titled = False
+        self._pending_title_sid = ""
 
         self._agent_thread = QThread(self)
         self._agent_worker = AgentWorker(agent)
@@ -81,6 +113,8 @@ class MainWindow(QMainWindow):
         self._workflow_thread.start()
 
         self._chat_panel.send_requested.connect(self._send_message)
+        self._chat_panel.new_chat_requested.connect(self._on_new_chat)
+        self._chat_panel.history_requested.connect(self._on_open_history)
         self._dashboard.morning_briefing_requested.connect(self._run_morning_briefing)
         self._dashboard.refresh_requested.connect(self._refresh_dashboard)
         self._dashboard.partial_refresh_requested.connect(self._refresh_dashboard_subset)
@@ -103,6 +137,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"{mode_label} · 就绪")
 
     def _send_message(self, text: str) -> None:
+        self._busy = True
         self._chat_panel.add_user_message(text)
         self._chat_panel.set_busy(True)
         self.statusBar().showMessage("Agent 正在处理问题...")
@@ -144,7 +179,104 @@ class MainWindow(QMainWindow):
         # (no `final` event) doesn't leave it dangling into the next turn.
         self._chat_panel.reset_streaming()
         self._chat_panel.set_busy(False)
+        self._busy = False
         self.statusBar().showMessage("Agent 回答完成")
+        # The turn is done and the worker thread has stopped mutating the
+        # conversation, so reading + saving on the GUI thread is race-free.
+        self._persist_current_session()
+        self._maybe_autoname()
+
+    def _persist_current_session(self) -> None:
+        """Write the current conversation through to disk (write-through).
+
+        No-ops until there's at least one user message, so an untouched
+        startup/new session never creates a file. Keeps the existing title
+        if set, else stamps a network-free provisional one.
+        """
+        snapshot = self._agent.conversation.snapshot()
+        if not any(m.role == "user" for m in snapshot):
+            return
+        title = self._current_title or self._session_titler.heuristic(snapshot)
+        self._session_store.save(
+            self._current_session_id,
+            messages=snapshot,
+            title=title,
+            created_at=self._session_created_at,
+            offline=self._effective_offline,
+        )
+
+    def _maybe_autoname(self) -> None:
+        """Fire the flash-model titler once, after the first real exchange.
+
+        Skips error turns (a user message with no assistant reply). The
+        title is written to the captured session id — never "current" — so a
+        late result can't stamp onto a session the user has since switched
+        away from.
+        """
+        if self._titled:
+            return
+        snapshot = self._agent.conversation.snapshot()
+        if not any(m.role == "user" for m in snapshot):
+            return
+        if not any(m.role == "assistant" and m.content.strip() for m in snapshot):
+            return
+        self._titled = True  # optimistic: fire exactly once per session
+        self._pending_title_sid = self._current_session_id
+        run_async(
+            lambda: self._session_titler.generate(snapshot),
+            on_done=self._on_title_ready,
+            on_error=self._on_title_error,
+        )
+
+    def _on_title_ready(self, title: object) -> None:
+        text = str(title).strip()
+        if not text:
+            return
+        sid = self._pending_title_sid
+        self._session_store.update_title(sid, text)
+        if sid == self._current_session_id:
+            self._current_title = text
+            self.setWindowTitle(f"PKU Captain · {text}")
+
+    def _on_title_error(self, _message: str) -> None:
+        # Titling is best-effort; the provisional title already on disk stays.
+        pass
+
+    def _on_new_chat(self) -> None:
+        if self._busy:
+            return
+        self._persist_current_session()
+        reset_conversation(self._agent)
+        self._chat_panel.clear()
+        self._current_session_id = self._session_store.new_id()
+        self._current_title = None
+        self._session_created_at = _now_iso()
+        self._titled = False
+        self.setWindowTitle("PKU Captain")
+        self.statusBar().showMessage("已开始新对话")
+
+    def _on_open_history(self) -> None:
+        if self._busy:
+            return
+        self._persist_current_session()
+        dialog = SessionHistoryDialog(
+            self._session_store, current_id=self._current_session_id, parent=self
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted or not dialog.selected_id:
+            return
+        record = self._session_store.load(dialog.selected_id)
+        if record is None:
+            self.statusBar().showMessage("会话加载失败")
+            return
+        restore_conversation(self._agent, record.get("messages", []))
+        self._chat_panel.load_history(self._agent.conversation.snapshot())
+        self._current_session_id = str(record.get("id", dialog.selected_id))
+        self._current_title = record.get("title") or None
+        self._session_created_at = str(record.get("created_at") or _now_iso())
+        self._titled = True
+        display_title = self._current_title or "历史会话"
+        self.setWindowTitle(f"PKU Captain · {display_title}")
+        self.statusBar().showMessage(f"已打开会话：{display_title}")
 
     # Tool keys the dashboard refreshes, in `DashboardWorker._tool_args` terms.
     # Only `pku3b_coursetable` differs from its card key (`schedule`).
@@ -251,6 +383,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("今日简报失败")
 
     def closeEvent(self, event: object) -> None:  # noqa: N802 - Qt override name.
+        self._persist_current_session()
         self._agent_thread.quit()
         self._dashboard_thread.quit()
         self._workflow_thread.quit()
