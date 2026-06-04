@@ -21,19 +21,30 @@ class MemoryTool(Tool):
         "Persistent store for user preferences (e.g. where the user lives, "
         "their class schedule, preferred reply language). Use it to remember "
         "facts the user states about themselves and to recall them later. "
-        "Dispatches on `action`: set / get / list / delete."
+        "Dispatches on `action`: remember / set / get / list / delete. "
+        "Prefer `remember` (just a free-text fact, no key) for things you "
+        "learn in conversation; use `set` only when overwriting a known key."
     )
     parameters_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["set", "get", "list", "delete"],
+                "enum": ["remember", "set", "get", "list", "delete"],
                 "description": (
-                    "set: store/overwrite a preference (needs key + value). "
+                    "remember: store a free-text fact, key auto-derived "
+                    "(needs text). "
+                    "set: store/overwrite under an explicit key (needs key + value). "
                     "get: read one preference (needs key). "
                     "list: return all stored preferences (no other args). "
                     "delete: remove a preference (needs key)."
+                ),
+            },
+            "text": {
+                "type": "string",
+                "description": (
+                    "A natural-language fact about the user to remember, "
+                    "e.g. '住在燕园'. Required for remember."
                 ),
             },
             "key": {
@@ -57,6 +68,8 @@ class MemoryTool(Tool):
 
     def invoke(self, args: dict[str, Any]) -> ToolResult:
         action = (args.get("action") or "").strip()
+        if action == "remember":
+            return self._remember(args)
         if action == "set":
             return self._set(args)
         if action == "get":
@@ -67,8 +80,18 @@ class MemoryTool(Tool):
             return self._delete(args)
         return ToolResult(
             success=False,
-            error=f"unknown action: {action!r} (expected set/get/list/delete)",
+            error=(
+                f"unknown action: {action!r} "
+                "(expected remember/set/get/list/delete)"
+            ),
         )
+
+    def _remember(self, args: dict[str, Any]) -> ToolResult:
+        text = (args.get("text") or "").strip()
+        if not text:
+            return ToolResult(success=False, error="`remember` requires non-empty `text`")
+        entry = self._store.remember(text)
+        return ToolResult(success=True, data=entry.to_dict())
 
     def _set(self, args: dict[str, Any]) -> ToolResult:
         key = (args.get("key") or "").strip()

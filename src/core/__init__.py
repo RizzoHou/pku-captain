@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 from .agent import Agent, AgentEvent
 from .conversation import Conversation
+from .memory_learn import MemoryLearnResult, MemoryLearnService
 
 if TYPE_CHECKING:
     from .bootstrap import (
@@ -35,6 +36,8 @@ __all__ = [
     "Agent",
     "AgentEvent",
     "Conversation",
+    "MemoryLearnResult",
+    "MemoryLearnService",
     "build_agent",
     "build_session_store",
     "build_session_titler",

@@ -139,6 +139,71 @@ def test_calendar_dialog_adds_selected_and_marks_rows(
     assert not (item.flags() & dashboard.Qt.ItemFlag.ItemIsUserCheckable)
 
 
+class RecordingTool(Tool):
+    """Records invocations; serves `list` from what `remember` stored."""
+
+    name = "memory"
+    description = "memory"
+    parameters_schema: dict[str, Any] = {"type": "object", "properties": {}}
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+        self._entries: list[dict[str, str]] = []
+
+    def invoke(self, args: dict[str, Any]) -> ToolResult:
+        self.calls.append(args)
+        if args.get("action") == "remember":
+            self._entries.append({"key": "note-x", "value": args.get("text", "")})
+            return ToolResult(success=True, data=self._entries[-1])
+        if args.get("action") == "list":
+            return ToolResult(success=True, data=list(self._entries))
+        return ToolResult(success=True, data={})
+
+
+def test_memory_dialog_remembers_free_text(app: QApplication) -> None:
+    # No learner (offline): the sentence is stored verbatim via the keyless
+    # `remember` action, synchronously — no worker thread.
+    tool = RecordingTool()
+    dialog = dashboard.MemoryDialog(tool)
+    dialog._note_input.setText("我住在燕园")
+    dialog._remember()
+
+    remember_calls = [c for c in tool.calls if c.get("action") == "remember"]
+    assert remember_calls == [{"action": "remember", "text": "我住在燕园"}]
+    assert dialog._note_input.text() == ""  # cleared after save
+    assert dialog._list.count() == 1  # reloaded list shows the new note
+
+
+def test_memory_dialog_learner_splits_into_facts(
+    app: QApplication, tmp_path: Any
+) -> None:
+    # With a learner (online), the typed sentence is split into clean facts
+    # by the LLM and each is stored — driven end-to-end through run_async.
+    from src.core.memory import MemoryStore
+    from src.core.memory_learn import MemoryLearnService
+    from src.llm.base import ChatResponse, LLMProvider
+    from src.tools.memory import MemoryTool
+
+    class SplitLLM(LLMProvider):
+        name = "split"
+
+        def chat(self, messages: Any, tools: Any = None) -> ChatResponse:
+            return ChatResponse(text='["住在燕园", "喜欢用中文交流"]')
+
+    store = MemoryStore(tmp_path / "memory.json")
+    tool = MemoryTool(store=store)
+    learner = MemoryLearnService(SplitLLM(), store)
+    dialog = dashboard.MemoryDialog(tool, learner=learner)
+
+    dialog._note_input.setText("我住在燕园，喜欢用中文交流")
+    dialog._remember()
+    _drain()
+
+    assert dialog._list.count() == 2  # one row per extracted fact
+    assert "已记住 2 条" in dialog._status_label.text()
+    assert dialog._note_input.text() == ""
+
+
 def test_plib_search_dialog_runs_async_end_to_end(app: QApplication) -> None:
     tool = FakeTool(
         {

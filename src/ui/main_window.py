@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
 
 from ..core import (
     AgentEvent,
+    MemoryLearnService,
     build_agent,
     build_session_store,
     build_session_titler,
@@ -62,7 +63,17 @@ class MainWindow(QMainWindow):
             fallback_message = f"在线模式不可用，已切换到离线模式：{exc}"
 
         self._agent = agent
-        self._dashboard = DashboardPanel(mode_label=mode_label, tools=agent.tools)
+        # Lets the dashboard 记忆 box split a typed sentence into clean facts
+        # via the same LLM the chat uses; degrades to verbatim when offline.
+        # Shares agent.memory so dashboard- and chat-learned facts coincide.
+        memory_learner = (
+            MemoryLearnService(agent.llm, agent.memory)
+            if agent.memory is not None
+            else None
+        )
+        self._dashboard = DashboardPanel(
+            mode_label=mode_label, tools=agent.tools, memory_learner=memory_learner
+        )
         self._chat_panel = ChatPanel()
 
         # Multi-session state. The startup session id lives in memory only;

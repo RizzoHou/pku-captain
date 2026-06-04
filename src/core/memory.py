@@ -16,6 +16,7 @@ contract's Tool thread-safety requirement.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import threading
 from dataclasses import asdict, dataclass
@@ -99,6 +100,23 @@ class MemoryStore:
             self._flush()
             return entry
 
+    def remember(self, text: str) -> MemoryEntry:
+        """Store a free-text fact, auto-deriving a stable handle key.
+
+        Lets the user (or agent) save a natural description without
+        inventing a key — the user types a sentence and it becomes memory.
+        The handle is a content hash, so re-saving identical text is
+        idempotent (same key, no duplicate). Semantic preferences that
+        should overwrite when they change (e.g. `home_location`) still use
+        `set` with an explicit key; `remember` is the keyless producer of
+        the same entries, not a separate kind.
+        """
+        text = text.strip()
+        if not text:
+            raise ValueError("memory text must be a non-empty string")
+        handle = "note-" + hashlib.sha1(text.encode("utf-8")).hexdigest()[:8]
+        return self.set(handle, text)
+
     def get(self, key: str) -> MemoryEntry | None:
         """Return the entry for `key`, or None if absent."""
         with self._lock:
@@ -116,3 +134,20 @@ class MemoryStore:
             if existed:
                 self._flush()
             return existed
+
+
+_MEMORY_HEADER = "Known facts about the user (from long-term memory):"
+
+
+def render_memory_context(entries: list[MemoryEntry]) -> str:
+    """Render stored entries as a system-prompt block, or "" if empty.
+
+    Folded into the leading system message at each turn so the agent's
+    replies reflect what it already knows about the user without having
+    to call the `memory` tool first. Pure (no I/O) so it is trivially
+    unit-testable in isolation.
+    """
+    if not entries:
+        return ""
+    lines = [f"- {entry.key}: {entry.value}" for entry in entries]
+    return _MEMORY_HEADER + "\n" + "\n".join(lines)
