@@ -27,7 +27,11 @@ from PyQt6.QtWidgets import (
 )
 
 from ..tools.base import Tool, ToolRegistry
-from ..tools.treehole_updates import TreeholeAuthService
+from ..tools.treehole_updates import (
+    DEFAULT_NOTIFY_INTERVAL,
+    TreeholeAuthService,
+    TreeholeNotificationService,
+)
 from .formatters import parse_datetime, upcoming_assignments
 from .tool_call_worker import run_async
 
@@ -1167,9 +1171,20 @@ class TreeholeMessagesDialog(QDialog):
 
         auth_panel = self._build_auth_panel()
 
+        notify_button = QPushButton("消息通知")
+        notify_button.setObjectName("SecondaryButton")
+        notify_button.setToolTip("设置 macOS 后台消息通知与检查间隔")
+        notify_button.clicked.connect(self._open_notification_settings)
         close_button = QPushButton("关闭")
         close_button.setObjectName("PrimaryButton")
         close_button.clicked.connect(self.accept)
+
+        button_row = QHBoxLayout()
+        button_row.setContentsMargins(0, 0, 0, 0)
+        button_row.setSpacing(10)
+        button_row.addWidget(notify_button, 0, Qt.AlignmentFlag.AlignLeft)
+        button_row.addStretch()
+        button_row.addWidget(close_button, 0, Qt.AlignmentFlag.AlignRight)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -1178,9 +1193,12 @@ class TreeholeMessagesDialog(QDialog):
         layout.addWidget(message)
         layout.addWidget(auth_panel)
         layout.addWidget(scroll, 1)
-        layout.addWidget(close_button, 0, Qt.AlignmentFlag.AlignRight)
+        layout.addLayout(button_row)
 
         self._refresh_auth_status()
+
+    def _open_notification_settings(self) -> None:
+        TreeholeNotificationDialog(parent=self).exec()
 
     def _build_auth_panel(self) -> QFrame:
         panel = QFrame()
@@ -1325,6 +1343,173 @@ class TreeholeMessagesDialog(QDialog):
     def _set_auth_busy(self, busy: bool) -> None:
         for button in self._auth_buttons:
             button.setEnabled(not busy)
+
+
+class TreeholeNotificationDialog(QDialog):
+    """Enable/disable macOS desktop notifications for treehole replies and set
+    the background poll interval.
+
+    Drives `TreeholeNotificationService`, which manages a per-user LaunchAgent.
+    macOS-only: off macOS (or without the treehole binary) the controls disable
+    with an explanatory status. launchctl calls block, so they run via
+    `run_async`; the file-only `status()` is read inline.
+    """
+
+    _INTERVAL_PRESETS = [
+        ("每 1 分钟", 60),
+        ("每 5 分钟", 300),
+        ("每 10 分钟", 600),
+        ("每 30 分钟", 1800),
+        ("每 1 小时", 3600),
+    ]
+
+    def __init__(
+        self,
+        service: TreeholeNotificationService | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("树洞消息通知")
+        self.resize(560, 380)
+        self._service = service if service is not None else TreeholeNotificationService()
+        self._pending: object = None
+
+        title = QLabel("树洞消息通知")
+        title.setObjectName("DialogTitle")
+        subtitle = QLabel("在 macOS 后台定时检查关注的树洞，有新回复时推送系统通知。")
+        subtitle.setObjectName("DialogSubtitle")
+        subtitle.setWordWrap(True)
+
+        self._status_label = QLabel("正在检查通知状态...")
+        self._status_label.setObjectName("TreeholeAuthStatus")
+        self._status_label.setWordWrap(True)
+
+        interval_label = QLabel("检查间隔")
+        interval_label.setObjectName("TreeholeAuthStep")
+        self._interval_combo = QComboBox()
+        for text, value in self._INTERVAL_PRESETS:
+            self._interval_combo.addItem(text, value)
+
+        self._enable_button = QPushButton("开启通知")
+        self._enable_button.setObjectName("PrimaryButton")
+        self._enable_button.clicked.connect(self._enable)
+        self._disable_button = QPushButton("关闭通知")
+        self._disable_button.setObjectName("SecondaryButton")
+        self._disable_button.clicked.connect(self._disable)
+        close_button = QPushButton("关闭")
+        close_button.setObjectName("InlineToggleButton")
+        close_button.clicked.connect(self.accept)
+        self._action_buttons = [self._enable_button, self._disable_button]
+
+        note = QLabel(
+            "首次通知前需在「系统设置 › 通知」中允许“Script Editor”发送通知；"
+            "通知由 osascript 发送，会显示为 Script Editor 图标。后台进程独立于本应用运行，"
+            "关闭窗口后仍会按间隔检查。"
+        )
+        note.setObjectName("CardBody")
+        note.setWordWrap(True)
+
+        controls = QHBoxLayout()
+        controls.setContentsMargins(0, 0, 0, 0)
+        controls.setSpacing(10)
+        controls.addWidget(interval_label)
+        controls.addWidget(self._interval_combo, 1)
+
+        buttons = QHBoxLayout()
+        buttons.setContentsMargins(0, 0, 0, 0)
+        buttons.setSpacing(10)
+        buttons.addWidget(self._enable_button)
+        buttons.addWidget(self._disable_button)
+        buttons.addStretch()
+        buttons.addWidget(close_button)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+        layout.addWidget(title)
+        layout.addWidget(subtitle)
+        layout.addWidget(self._status_label)
+        layout.addLayout(controls)
+        layout.addWidget(note)
+        layout.addStretch()
+        layout.addLayout(buttons)
+
+        self._refresh_status()
+
+    def _refresh_status(self) -> None:
+        self._apply_status(self._service.status())
+
+    def _apply_status(self, status: dict[str, object]) -> None:
+        supported = bool(status.get("supported"))
+        binary = bool(status.get("binary_available"))
+        enabled = bool(status.get("enabled"))
+        message = str(status.get("message") or "")
+        if supported and binary and not status.get("logged_in"):
+            message += "\n尚未登录树洞，后台通知将无法获取消息，请先在「树洞账户」中登录。"
+        if enabled:
+            state = "ok"
+        elif not (supported and binary):
+            state = "error"
+        else:
+            state = ""
+        self._set_status_text(message, state)
+        self._select_interval(int(status.get("interval") or DEFAULT_NOTIFY_INTERVAL))
+
+        can_configure = supported and binary
+        self._interval_combo.setEnabled(can_configure)
+        self._enable_button.setEnabled(can_configure)
+        self._enable_button.setText("更新设置" if enabled else "开启通知")
+        self._disable_button.setEnabled(supported and enabled)
+
+    def _set_status_text(self, text: str, state: str) -> None:
+        self._status_label.setText(text)
+        self._status_label.setProperty("authState", state)
+        self._status_label.style().unpolish(self._status_label)
+        self._status_label.style().polish(self._status_label)
+
+    def _select_interval(self, value: int) -> None:
+        index = self._interval_combo.findData(value)
+        if index < 0:
+            self._interval_combo.addItem(f"每 {value} 秒", value)
+            index = self._interval_combo.findData(value)
+        self._interval_combo.setCurrentIndex(index)
+
+    def _enable(self) -> None:
+        interval = int(self._interval_combo.currentData())
+        self._run_action(lambda: self._service.enable(interval))
+
+    def _disable(self) -> None:
+        self._run_action(self._service.disable)
+
+    def _run_action(self, action: Callable[[], dict[str, object]]) -> None:
+        self._set_busy(True)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        self._pending = run_async(
+            action,
+            on_done=self._on_action_done,
+            on_error=self._on_action_error,
+        )
+
+    def _on_action_done(self, result: object) -> None:
+        QApplication.restoreOverrideCursor()
+        self._set_busy(False)
+        data = result if isinstance(result, dict) else {"ok": False, "message": str(result)}
+        self._refresh_status()
+        if not data.get("ok"):
+            QMessageBox.warning(self, "树洞消息通知", str(data.get("message") or "操作失败"))
+        elif data.get("message"):
+            self._set_status_text(str(data["message"]), "ok")
+
+    def _on_action_error(self, message: str) -> None:
+        QApplication.restoreOverrideCursor()
+        self._set_busy(False)
+        self._refresh_status()
+        QMessageBox.warning(self, "树洞消息通知", message)
+
+    def _set_busy(self, busy: bool) -> None:
+        for button in self._action_buttons:
+            button.setEnabled(not busy)
+        self._interval_combo.setEnabled(not busy)
 
 
 class PLibSearchDialog(QDialog):

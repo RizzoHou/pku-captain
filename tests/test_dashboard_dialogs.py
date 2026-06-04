@@ -71,6 +71,21 @@ def test_all_dialogs_construct_with_injected_tool(
     dashboard.MemoryDialog(tool)
     dashboard.KnowledgeSearchDialog(tool)
     dashboard.TreeholeMessagesDialog({"message": "x", "updates": []})
+
+    # Notification dialog takes an injected service so it stays hermetic
+    # (its real service would read the host's LaunchAgents on construct).
+    class FakeNotifyService:
+        def status(self) -> dict[str, object]:
+            return {
+                "supported": True,
+                "binary_available": True,
+                "logged_in": True,
+                "enabled": False,
+                "interval": 60,
+                "message": "通知未开启",
+            }
+
+    dashboard.TreeholeNotificationDialog(service=FakeNotifyService())
     _drain()  # let any __init__-launched async calls settle
 
 
@@ -140,3 +155,75 @@ def test_plib_search_dialog_runs_async_end_to_end(app: QApplication) -> None:
 
     assert dialog._result_list.count() == 1
     assert dialog._results[0]["id"] == 7
+
+
+class _ToggleNotifyService:
+    """In-memory fake of TreeholeNotificationService for the dialog's UI logic."""
+
+    def __init__(self) -> None:
+        self._enabled = False
+        self._interval = 600
+
+    def status(self) -> dict[str, object]:
+        return {
+            "supported": True,
+            "binary_available": True,
+            "logged_in": True,
+            "enabled": self._enabled,
+            "interval": self._interval,
+            "message": "通知已开启" if self._enabled else "通知未开启",
+        }
+
+    def enable(self, interval: int | None = None) -> dict[str, object]:
+        self._enabled = True
+        if interval is not None:
+            self._interval = interval
+        return {"ok": True, "interval": self._interval, "message": "已开启"}
+
+    def disable(self) -> dict[str, object]:
+        self._enabled = False
+        return {"ok": True, "message": "已关闭"}
+
+
+def test_notification_dialog_toggle_updates_buttons(app: QApplication) -> None:
+    service = _ToggleNotifyService()
+    dialog = dashboard.TreeholeNotificationDialog(service=service)
+
+    # Disabled state: enable offered, disable inert.
+    assert dialog._enable_button.text() == "开启通知"
+    assert dialog._enable_button.isEnabled() is True
+    assert dialog._disable_button.isEnabled() is False
+
+    dialog._interval_combo.setCurrentIndex(1)  # 每 5 分钟 = 300
+    dialog._enable()  # routes through run_async
+    _drain()
+
+    assert service._enabled is True
+    assert service._interval == 300
+    assert dialog._enable_button.text() == "更新设置"
+    assert dialog._disable_button.isEnabled() is True
+
+    dialog._disable()
+    _drain()
+
+    assert service._enabled is False
+    assert dialog._enable_button.text() == "开启通知"
+    assert dialog._disable_button.isEnabled() is False
+
+
+def test_notification_dialog_disables_controls_when_unsupported(app: QApplication) -> None:
+    class _Unsupported:
+        def status(self) -> dict[str, object]:
+            return {
+                "supported": False,
+                "binary_available": False,
+                "logged_in": False,
+                "enabled": False,
+                "interval": 60,
+                "message": "系统通知仅支持 macOS",
+            }
+
+    dialog = dashboard.TreeholeNotificationDialog(service=_Unsupported())
+    assert dialog._enable_button.isEnabled() is False
+    assert dialog._disable_button.isEnabled() is False
+    assert dialog._interval_combo.isEnabled() is False

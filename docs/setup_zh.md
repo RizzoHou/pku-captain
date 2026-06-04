@@ -95,3 +95,23 @@ P-Lib 账号是 PKUHUB 自注册的邮箱 / 密码（**不是** IAAA），在 <h
 ```
 
 普通账号每天 10 次下载额度，下载会保存到 `downloads/plib/`。
+
+## 树洞（关注消息 / macOS 通知）
+
+`TreeholeUpdatesTool` 通过 [`pku-treehole-cli`](https://github.com/RizzoHou/pku-treehole-cli) 读取关注/收藏树洞的新回复，模式和 `plib-cli` 一致：克隆到工作区根目录（与 pku-captain 同级），装独立 venv：
+
+```bash
+cd ..
+git clone https://github.com/RizzoHou/pku-treehole-cli
+cd pku-treehole-cli
+python3 -m venv .venv && .venv/bin/pip install -e .
+```
+
+登录走 IAAA：在 GUI 里点 **◉ 树洞 → 登录**，输入学号/密码后按提示完成短信验证；凭据与会话会写进 `secrets/treehole/{id,password,session.json}`。
+
+**macOS 桌面通知**（仅 macOS）：在树洞弹窗里点 **消息通知**，选择检查间隔后「开启通知」。后台会装一个用户级 LaunchAgent（`com.pku.captain.treehole.notify`），按间隔跑 `treehole monitor --notify`，复用上面 `secrets/treehole` 的登录会话——所以 GUI 登录一次即可，无需在 treehole-cli 里再登一遍。两个前提：
+
+- 上面的 `pku-treehole-cli/.venv` 已装好（找不到 `treehole` 程序时「开启通知」按钮会禁用并提示）；
+- 首条通知前需在「系统设置 › 通知」里允许 **“Script Editor”** 发送通知（投递走 `osascript`，会显示为 Script Editor 图标）。
+
+间隔偏好存在 `data/treehole_notify.json`，「关闭通知」会卸载 LaunchAgent。
