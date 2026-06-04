@@ -127,6 +127,9 @@ class DashboardPanel(QWidget):
             lecture_card.refresh_requested.connect(
                 self._partial_refresh_emitter("lecture")
             )
+        assignment_card = self._cards["pku3b_assignments"]
+        if isinstance(assignment_card, AssignmentTodoCard):
+            assignment_card.add_to_calendar_requested.connect(self._show_calendar_dialog)
 
         grid_host = QWidget()
         grid = QGridLayout(grid_host)
@@ -155,6 +158,8 @@ class DashboardPanel(QWidget):
         # subprocess tool that the agent factory deliberately left out.
         self._treehole_button.setEnabled("treehole_updates" in (self._tools or ()))
         self._knowledge_button.setEnabled("knowledge_search" in (self._tools or ()))
+        if isinstance(assignment_card, AssignmentTodoCard):
+            assignment_card.set_calendar_enabled("calendar_reminder" in (self._tools or ()))
 
     def _partial_refresh_emitter(self, *keys: str) -> Callable[[], None]:
         """Build a slot that requests a refresh scoped to the given tool keys,
@@ -300,6 +305,14 @@ class DashboardPanel(QWidget):
         if tool is None:
             return
         RemindersDialog(tool, self).exec()
+
+    def _show_calendar_dialog(self) -> None:
+        tool = self._require_tool("calendar_reminder", "加入日历提醒")
+        if tool is None:
+            return
+        card = self._cards.get("pku3b_assignments")
+        assignments = card.assignments() if isinstance(card, AssignmentTodoCard) else []
+        CalendarReminderDialog(tool, assignments, self).exec()
 
     def _show_memory_dialog(self) -> None:
         tool = self._require_tool("memory", "记忆管理")
@@ -766,6 +779,7 @@ class LecturesCard(QFrame):
 class AssignmentTodoCard(QFrame):
     """Dashboard card that renders upcoming assignments as a todo list."""
 
+    add_to_calendar_requested = pyqtSignal()
     _COLLAPSED_LIMIT = 3
 
     def __init__(self) -> None:
@@ -788,12 +802,23 @@ class AssignmentTodoCard(QFrame):
         self._list_layout.setContentsMargins(0, 0, 0, 0)
         self._list_layout.setSpacing(7)
 
+        self._calendar_button = QPushButton("加入日历")
+        self._calendar_button.setObjectName("InlineToggleButton")
+        self._calendar_button.setToolTip("将勾选的 DDL 加入 macOS 日历并设置系统提醒")
+        self._calendar_button.clicked.connect(self.add_to_calendar_requested)
+        actions = QHBoxLayout()
+        actions.setContentsMargins(0, 0, 0, 0)
+        actions.setSpacing(10)
+        actions.addWidget(self._calendar_button, 0, Qt.AlignmentFlag.AlignLeft)
+        actions.addStretch()
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(8)
         layout.addWidget(title_label)
         layout.addWidget(hint_label)
         layout.addWidget(self._list_host)
+        layout.addLayout(actions)
         layout.addStretch()
 
         self.set_body("加载中...", "loading")
@@ -817,6 +842,18 @@ class AssignmentTodoCard(QFrame):
         self._assignments = upcoming_assignments(data.get("assignments"))
         self._expanded = False
         self._render_assignments()
+
+    def assignments(self) -> list[dict[str, object]]:
+        """Return the currently loaded assignments (display data for the dialog)."""
+        return list(self._assignments)
+
+    def set_calendar_enabled(self, enabled: bool) -> None:
+        self._calendar_button.setEnabled(enabled)
+        self._calendar_button.setToolTip(
+            "将勾选的 DDL 加入 macOS 日历并设置系统提醒"
+            if enabled
+            else "需在线模式（已注册 calendar_reminder 工具）才能加入日历"
+        )
 
     def _render_assignments(self) -> None:
         self._clear_items()
@@ -2062,6 +2099,203 @@ class RemindersDialog(QDialog):
         return value if isinstance(value, int) else None
 
 
+class CalendarReminderDialog(QDialog):
+    """Selectively push upcoming DDLs into macOS Calendar via CalendarReminderTool.
+
+    Seeded from the assignment card's already-loaded data (display only — no
+    refetch). The add shells to ``osascript`` and blocks, so it runs through
+    ``run_async`` to keep the window responsive.
+    """
+
+    _ALARM_OPTIONS = (
+        ("事件发生时提醒", 0),
+        ("提前 1 小时", 60),
+        ("提前 1 天", 1440),
+        ("提前 2 天", 2880),
+    )
+    _DEFAULT_ALARM_INDEX = 2  # 提前 1 天
+
+    def __init__(
+        self,
+        tool: Tool,
+        assignments: list[dict[str, object]] | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("加入日历提醒")
+        self.resize(720, 620)
+        self._tool = tool
+        self._pending: object = None
+        self._entries = _calendar_candidates(assignments or [])
+
+        title = QLabel("加入 macOS 日历提醒")
+        title.setObjectName("DialogTitle")
+        subtitle = QLabel(
+            "勾选要添加的 DDL，将写入『PKU Captain』日历并设置系统提醒（到点会有 macOS 通知）。"
+        )
+        subtitle.setObjectName("DialogSubtitle")
+        subtitle.setWordWrap(True)
+
+        self._alarm_combo = QComboBox()
+        for label, minutes in self._ALARM_OPTIONS:
+            self._alarm_combo.addItem(label, minutes)
+        self._alarm_combo.setCurrentIndex(self._DEFAULT_ALARM_INDEX)
+        alarm_row = QHBoxLayout()
+        alarm_row.setContentsMargins(0, 0, 0, 0)
+        alarm_row.setSpacing(10)
+        alarm_label = QLabel("提醒时间")
+        alarm_label.setObjectName("CardBody")
+        alarm_row.addWidget(alarm_label, 0, Qt.AlignmentFlag.AlignLeft)
+        alarm_row.addWidget(self._alarm_combo, 0, Qt.AlignmentFlag.AlignLeft)
+        alarm_row.addStretch()
+
+        self._list = QListWidget()
+        self._list.setObjectName("PLibResultList")
+        for entry in self._entries:
+            item = QListWidgetItem(str(entry["label"]))
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Checked)
+            item.setData(Qt.ItemDataRole.UserRole, entry)
+            self._list.addItem(item)
+
+        self._status_label = QLabel("")
+        self._status_label.setObjectName("CardBody")
+        self._status_label.setWordWrap(True)
+
+        select_all = QPushButton("全选")
+        select_all.setObjectName("SecondaryButton")
+        select_all.clicked.connect(lambda: self._set_all_checked(True))
+        select_none = QPushButton("全不选")
+        select_none.setObjectName("SecondaryButton")
+        select_none.clicked.connect(lambda: self._set_all_checked(False))
+        self._add_button = QPushButton("添加选中")
+        self._add_button.setObjectName("PrimaryButton")
+        self._add_button.clicked.connect(self._add_selected)
+        close_button = QPushButton("关闭")
+        close_button.setObjectName("InlineToggleButton")
+        close_button.clicked.connect(self.accept)
+        actions = QHBoxLayout()
+        actions.setContentsMargins(0, 0, 0, 0)
+        actions.setSpacing(10)
+        actions.addWidget(select_all)
+        actions.addWidget(select_none)
+        actions.addStretch()
+        actions.addWidget(self._add_button)
+        actions.addWidget(close_button)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+        layout.addWidget(title)
+        layout.addWidget(subtitle)
+        layout.addLayout(alarm_row)
+        layout.addWidget(self._list, 1)
+        layout.addWidget(self._status_label)
+        layout.addLayout(actions)
+
+        if not self._entries:
+            self._status_label.setText("近期没有带截止时间的未完成作业可添加。")
+            self._add_button.setEnabled(False)
+            select_all.setEnabled(False)
+            select_none.setEnabled(False)
+        else:
+            self._status_label.setText(f"共 {len(self._entries)} 个可添加的 DDL。")
+
+    def _set_all_checked(self, checked: bool) -> None:
+        state = Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked
+        for index in range(self._list.count()):
+            item = self._list.item(index)
+            if item.flags() & Qt.ItemFlag.ItemIsUserCheckable:
+                item.setCheckState(state)
+
+    def _checked_entries(self) -> list[dict[str, object]]:
+        result: list[dict[str, object]] = []
+        for index in range(self._list.count()):
+            item = self._list.item(index)
+            if item.checkState() != Qt.CheckState.Checked:
+                continue
+            entry = item.data(Qt.ItemDataRole.UserRole)
+            if isinstance(entry, dict):
+                result.append(entry)
+        return result
+
+    def _add_selected(self) -> None:
+        entries = self._checked_entries()
+        if not entries:
+            self._status_label.setText("请先勾选要添加的 DDL。")
+            return
+        alarm_minutes = self._alarm_combo.currentData()
+        payload = [
+            {
+                "title": str(entry["summary"]),
+                "deadline_iso": str(entry["deadline_iso"]),
+                "notes": str(entry.get("notes") or ""),
+            }
+            for entry in entries
+        ]
+        self._set_busy(True)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        self._pending = run_async(
+            lambda: self._tool.invoke(
+                {"items": payload, "alarm_minutes_before": alarm_minutes}
+            ),
+            on_done=self._on_added,
+            on_error=self._on_add_error,
+        )
+
+    def _on_added(self, result: object) -> None:
+        QApplication.restoreOverrideCursor()
+        self._set_busy(False)
+        success = bool(getattr(result, "success", False))
+        data = getattr(result, "data", None)
+        data = data if isinstance(data, dict) else {}
+        added = data.get("added") if isinstance(data.get("added"), list) else []
+        failed = data.get("failed") if isinstance(data.get("failed"), list) else []
+        calendar = str(data.get("calendar") or "PKU Captain")
+
+        added_titles = {
+            str(item.get("title"))
+            for item in added
+            if isinstance(item, dict)
+        }
+        self._mark_added(added_titles)
+
+        if not success:
+            message = str(getattr(result, "error", None) or "添加失败。")
+            self._status_label.setText(message)
+            self._status_label.setStyleSheet("color: #b42318;")
+            QMessageBox.warning(self, "加入日历提醒", message)
+            return
+
+        self._status_label.setStyleSheet("")
+        summary = f"已向『{calendar}』添加 {len(added)} 个 DDL 提醒"
+        if failed:
+            summary += f"，{len(failed)} 个失败"
+        self._status_label.setText(summary + "。")
+        QMessageBox.information(self, "加入日历提醒", summary + "。")
+
+    def _on_add_error(self, message: str) -> None:
+        QApplication.restoreOverrideCursor()
+        self._set_busy(False)
+        self._status_label.setText(f"添加失败：{message}")
+        self._status_label.setStyleSheet("color: #b42318;")
+        QMessageBox.warning(self, "加入日历提醒", message)
+
+    def _mark_added(self, added_titles: set[str]) -> None:
+        for index in range(self._list.count()):
+            item = self._list.item(index)
+            entry = item.data(Qt.ItemDataRole.UserRole)
+            if not isinstance(entry, dict) or str(entry.get("summary")) not in added_titles:
+                continue
+            item.setCheckState(Qt.CheckState.Unchecked)
+            item.setFlags(Qt.ItemFlag.NoItemFlags)
+            item.setText(f"✓ 已添加 · {entry.get('label')}")
+
+    def _set_busy(self, busy: bool) -> None:
+        self._add_button.setEnabled(not busy)
+        self._add_button.setText("添加中..." if busy else "添加选中")
+
+
 class MemoryDialog(QDialog):
     """Inspect and edit persistent user preferences."""
 
@@ -2492,6 +2726,42 @@ def _clip(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
     return text[: limit - 1] + "…"
+
+
+def _calendar_candidates(assignments: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Future, deadline-bearing, incomplete assignments shaped for the calendar dialog.
+
+    Drops completed / no-deadline / overdue items (an alarm in the past is
+    useless), and sorts soonest-first. Each entry carries both the display
+    `label` and the fields `CalendarReminderTool` needs.
+    """
+    now = datetime.now().astimezone()
+    entries: list[tuple[datetime, dict[str, object]]] = []
+    for item in assignments:
+        if not isinstance(item, dict) or item.get("completed"):
+            continue
+        deadline = parse_datetime(item.get("deadline_iso"))
+        if deadline is None or deadline < now:
+            continue
+        title = str(item.get("title") or "未命名作业")
+        course = str(item.get("course_name") or item.get("course_title") or "")
+        summary = f"{course}｜{title}" if course else title
+        note_lines = [f"课程：{course}"] if course else []
+        note_lines.append("由 PKU Captain 添加")
+        notes = "\n".join(note_lines)
+        entries.append(
+            (
+                deadline,
+                {
+                    "summary": summary,
+                    "deadline_iso": str(item.get("deadline_iso")),
+                    "notes": notes,
+                    "label": f"{_deadline_text(item)} · {summary}",
+                },
+            )
+        )
+    entries.sort(key=lambda pair: pair[0])
+    return [entry for _, entry in entries]
 
 
 def _deadline_text(item: dict[str, object]) -> str:
