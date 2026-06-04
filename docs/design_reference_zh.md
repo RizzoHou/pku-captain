@@ -8,9 +8,9 @@
 
 ## 核心功能
 
-1. **统一仪表盘** — 今日课表、近期 DDL、未读课程通知、今日推荐讲座、天气、食堂建议，一屏呈现。
+1. **统一仪表盘** — 今日课表、近期 DDL、未读课程通知、今日推荐讲座、~~天气~~（2026-06-04 砍掉：学生用手机看天气，应用内意义不大）、食堂建议，一屏呈现。
 2. **对话侧栏** — 自然语言查询所有 PKU 数据；agent 工具调用过程对用户可见。
-3. **工具集** — 可被 agent 调用的工具集合 — pku3b（作业/通知/课表）、食堂检索、讲座检索、天气、知识库检索、记忆、提醒。
+3. **工具集** — 可被 agent 调用的工具集合 — pku3b（作业/通知/课表）、食堂检索、讲座检索、~~天气~~（2026-06-04 砍掉：学生用手机看天气，应用内意义不大）、知识库检索、记忆、提醒。
 4. **多步工作流** — 组合工具调用完成复杂任务，含 今日简报、周复盘、课程补课。
 5. **PKU 知识库（RAG）+ 自动刷新** — 从权威页面（教务部、院系培养方案、校历、学工部等）抓取并向量化存储。后台调度器按各数据源自身节奏轮询；通过 SHA-256 哈希比对仅对变更块重新嵌入；新通知以仪表盘红点形式主动推送给用户。
 6. **记忆系统** — 持久化存储个人偏好（食堂、口味、课程、学习习惯），并在每次响应中自然融入。
@@ -24,7 +24,7 @@
 - **UI 层（PyQt6）** — 仪表盘 · 对话窗口 · Agent 日志面板。
 - **Agent 内核** — Conversation、Memory、ToolRegistry、WorkflowEngine；负责调度 LLM 调用与工具派发。
 - **LLM 层（通过 LLMProvider 抽象）** — DeepSeek（对话）、Kimi（视觉），运行时可切换。
-- **工具集** — pku3b（作业/通知/课表）、食堂、讲座、天气、KnowledgeSearch、Memory、Reminder；均为 Tool 子类，附 JSON schema。
+- **工具集** — pku3b（作业/通知/课表）、食堂、讲座、~~天气~~（2026-06-04 砍掉）、KnowledgeSearch、Memory、Reminder；均为 Tool 子类，附 JSON schema。
 - **知识库 pipeline** — Source 子类（Dean、Department、Lecture、Calendar）→ Scheduler → Differ（SHA-256）→ Chunker → Embedder（BGE-large-zh）→ KnowledgeBase（SQLite + numpy）→ Retriever，对 agent 暴露为 KnowledgeSearch 工具。
 
 ## 类设计要点（OOP）

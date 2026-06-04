@@ -32,14 +32,14 @@ The DeepSeek API key lives in `secrets/api_keys/deepseek_key.txt` (the whole `se
 
 ## What this project is
 
-**PKU Captain** is a desktop AI assistant for PKU students, submitted as a course assignment for an OOP / programming-practice class. Three-person team. The product is a PyQt6 desktop app whose **end-state center of gravity is the dashboard** — a single-screen "信息总站" surfacing today's classes, near-term DDLs, course notices, lectures and weather, with an extensible `Source` registry meant to absorb more PKU information sources over time (教务网 / 树洞 / 公众号 as post-06-06 additions). A side-panel **LLM agent** handles natural-language questions about that same data (via `pku3b`, lectures, weather, etc.) and orchestrates multi-step workflows. Note: Week 1 is built **agent-first** as a vertical slice to prove the four OOP hierarchies — that's a build-order choice, not the end-state UX. See `docs/design_reference_zh.md` for the full vision and `docs/roadmap_zh.md` "产品定位（终态）" for the dashboard-vs-agent ordering call.
+**PKU Captain** is a desktop AI assistant for PKU students, submitted as a course assignment for an OOP / programming-practice class. Three-person team. The product is a PyQt6 desktop app whose **end-state center of gravity is the dashboard** — a single-screen "信息总站" surfacing today's classes, near-term DDLs, course notices and lectures, with an extensible `Source` registry meant to absorb more PKU information sources over time (教务网 / 树洞 / 公众号 as post-06-06 additions). A side-panel **LLM agent** handles natural-language questions about that same data (via `pku3b`, lectures, etc.) and orchestrates multi-step workflows. Note: Week 1 is built **agent-first** as a vertical slice to prove the four OOP hierarchies — that's a build-order choice, not the end-state UX. See `docs/design_reference_zh.md` for the full vision and `docs/roadmap_zh.md` "产品定位（终态）" for the dashboard-vs-agent ordering call.
 
 ## Project docs and their authority
 
 - `docs/design_reference_zh.md` — design **reference**, not a contract. The team is explicitly not bound to its architecture, class hierarchy, or tech-stack choices. The **only** part treated as binding is the **"核心功能" (core features)** section, which lists the 6 features the product must deliver:
   1. Unified dashboard
   2. Conversational sidebar with visible tool calls
-  3. Tool set (pku3b, lectures, weather, KB search, memory, reminder)
+  3. Tool set (pku3b, lectures, KB search, memory, reminder — weather was listed here but cut 2026-06-04; kept in `design_reference_zh.md` 核心功能 as a struck-through, justified deferral)
   4. Multi-step workflows (morning briefing, weekly review, course catchup)
   5. Auto-refreshing RAG knowledge base over PKU authoritative sources
   6. Persistent personal-preference memory
