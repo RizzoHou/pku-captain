@@ -112,6 +112,7 @@ class MainWindow(QMainWindow):
         self._cached_data: dict[str, object] = {}
         self._cached_sig: dict[str, str] = {}
         self._loading_keys: set[str] = set()
+        self._refresh_had_success = False
 
         # Multi-session state. The startup session id lives in memory only;
         # nothing is written to disk until the first real user turn, so a
@@ -381,6 +382,7 @@ class MainWindow(QMainWindow):
         its result arrives (`_should_render`).
         """
         self._dashboard.set_refresh_busy(True)
+        self._refresh_had_success = False
         self.statusBar().showMessage("正在刷新仪表盘...")
         for name in tool_keys or self._ALL_TOOL_KEYS:
             if silent and name in self._cached_sig:
@@ -400,6 +402,7 @@ class MainWindow(QMainWindow):
         )
 
     def _on_dashboard_item_loaded(self, key: str, data: object) -> None:
+        self._refresh_had_success = True  # a live fetch landed (even if unchanged)
         loading = key in self._loading_keys
         self._loading_keys.discard(key)
         fresh_sig = _signature(data)
@@ -408,7 +411,10 @@ class MainWindow(QMainWindow):
         self._render_dashboard_item(key, data)
         self._cached_data[key] = data
         self._cached_sig[key] = fresh_sig
-        self._dashboard_cache.save(key, data)
+        try:
+            self._dashboard_cache.save(key, data)
+        except Exception:  # noqa: BLE001 - a cache-write surprise must not crash the slot
+            pass
 
     def _render_dashboard_item(self, key: str, data: object) -> None:
         """Dispatch one card's raw payload to its setter (no cache write)."""
@@ -455,6 +461,11 @@ class MainWindow(QMainWindow):
 
     def _on_dashboard_refresh_finished(self) -> None:
         self._dashboard.set_refresh_busy(False)
+        if not self._refresh_had_success:
+            # Every card errored (e.g. offline) and is showing stale cache —
+            # leave the "上次保存" label rather than claim a fresh refresh.
+            self.statusBar().showMessage("仪表盘刷新失败，继续显示缓存")
+            return
         stamp = datetime.now().strftime("%H:%M:%S")
         self._dashboard.set_updated_text(f"最近刷新：{stamp}")
         self.statusBar().showMessage(f"仪表盘已刷新：{stamp}")

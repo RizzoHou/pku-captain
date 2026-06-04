@@ -52,7 +52,10 @@ class DashboardCache:
         with self._lock:
             self._dir.mkdir(parents=True, exist_ok=True)
             self._path(key).write_text(
-                json.dumps(payload, ensure_ascii=False, indent=2),
+                # default=str matches the GUI's _signature(): both stringify any
+                # non-JSON-native value the same way, so neither the write nor
+                # the change-compare raises on a surprising payload type.
+                json.dumps(payload, ensure_ascii=False, indent=2, default=str),
                 encoding="utf-8",
             )
 

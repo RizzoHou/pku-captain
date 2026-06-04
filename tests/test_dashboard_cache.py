@@ -31,6 +31,17 @@ def test_get_missing_key_returns_none(tmp_path: Path) -> None:
     assert DashboardCache(tmp_path).get("lecture") is None
 
 
+def test_save_tolerates_non_json_native_value(tmp_path: Path) -> None:
+    # save() uses default=str (mirroring the GUI's _signature) so a surprising
+    # payload type stringifies instead of raising inside the Qt slot.
+    from datetime import datetime
+
+    cache = DashboardCache(tmp_path)
+    cache.save("x", {"when": datetime(2030, 1, 1)})  # noqa: DTZ001 - test value
+    got = cache.get("x")
+    assert isinstance(got["when"], str)
+
+
 def test_load_all_collects_every_card(tmp_path: Path) -> None:
     cache = DashboardCache(tmp_path)
     cache.save("lecture", [{"title": "talk"}])
