@@ -9,8 +9,8 @@ __pycache__/
 dist/
 build/
 
-# Virtualenvs
-.venv/
+# Virtualenvs (no trailing slash on .venv so a worktree's `.venv` symlink is ignored too)
+.venv
 venv/
 env/
 

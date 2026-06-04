@@ -26,11 +26,15 @@ The GUI defaults to offline so first-time clones don't hit the network. Pass `--
 
 ### Worktrees (`claude --worktree`)
 
-A repo-root `.worktreeinclude` (gitignored) lists the gitignored paths Claude Code copies into each new worktree so testing/dev works without re-provisioning: `.venv/` (all installed deps), `secrets/` (API keys + P-Lib/treehole creds + cached treehole session), and `.local/` (the project-local `pku3b` cargo binary). One catch with the copied venv: its editable-install pointer (`.venv/.../site-packages/_editable_impl_pku_captain.pth`) still names the **main** repo root, so `import src` can resolve back to main from any cwd that doesn't front-load the worktree root. The documented commands are unaffected — `pytest`, `python -m src`, and `scripts/smoke_deepseek.py` (which does its own `sys.path.insert(0, REPO_ROOT)`) all front-load the worktree root — but to make `import src` correct regardless of how it's invoked, re-point the editable install once inside the worktree (fast; deps are already copied):
+`CLAUDE.md` is tracked, so every worktree already has it via git — listing it in `.worktreeinclude` would be a no-op (that file copies only *gitignored* files). A repo-root `.worktreeinclude` (gitignored) covers the paths git won't carry over: `secrets/` (API keys + P-Lib/treehole creds + cached treehole session) and `.local/` (the project-local `pku3b` cargo binary).
+
+`.venv/` is **not** copied (~1.2 GB per worktree). Worktrees share the main venv via a symlink — run once inside the worktree (its `.claude/worktrees/<name>/` location puts the repo root three levels up):
 
 ```bash
-.venv/bin/python -m pip install -e ".[dev]"
+ln -s ../../../.venv .venv
 ```
+
+The shared venv's editable pointer (`_editable_impl_pku_captain.pth`) names the **main** checkout, so on its own `import src` from a worktree would resolve to main. The repo-root `conftest.py` prevents that — pytest loads it before any test imports `src` and it front-loads the session's own root, so bare `pytest tests/` imports the worktree's `src/` (verified). `python -m src` and `python scripts/smoke_deepseek.py` already front-load the worktree root (via `-m` / their own `sys.path.insert`). One don't: don't `pip install` new deps from inside a worktree — it mutates the shared venv, leaking to main + sibling worktrees, so a branch that *adds* a dependency can't be tested in isolation (install it in the main checkout instead). The `.gitignore` entry is `.venv` (no trailing slash) so the symlink is ignored too.
 
 Inside the REPL, `/save [path]` dumps the conversation (including `reasoning_content`) to `debug/conversation-<ts>.json` by default — useful when chasing thinking-mode wire-format regressions, since the dump preserves the exact assistant→tool→assistant ordering the DeepSeek endpoint validates against. `debug/` is gitignored.
 
