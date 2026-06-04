@@ -24,6 +24,7 @@ debug/
 
 # Claude Code worktrees / local state
 .claude/
+.worktreeinclude
 
 # Local app data (memory store, reminders, etc.)
 data/
