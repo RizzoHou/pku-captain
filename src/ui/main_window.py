@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from PyQt6.QtCore import Q_ARG, QMetaObject, Qt, QThread
+from PyQt6.QtCore import Q_ARG, QMetaObject, Qt, QThread, QTimer
 from PyQt6.QtWidgets import (
     QDialog,
     QMainWindow,
@@ -24,6 +24,11 @@ from ..core import (
     build_session_titler,
     reset_conversation,
     restore_conversation,
+)
+from ..tools.treehole_updates import (
+    MIN_NOTIFY_INTERVAL,
+    TreeholeInboxStore,
+    TreeholeNotificationService,
 )
 from .agent_worker import AgentWorker
 from .chat_panel import ChatPanel
@@ -98,7 +103,10 @@ class MainWindow(QMainWindow):
             else None
         )
         self._dashboard = DashboardPanel(
-            mode_label=mode_label, tools=agent.tools, memory_learner=memory_learner
+            mode_label=mode_label,
+            tools=agent.tools,
+            memory_learner=memory_learner,
+            treehole_inbox=TreeholeInboxStore(_REPO_ROOT / "data" / "treehole_inbox.json"),
         )
         self._chat_panel = ChatPanel()
 
@@ -113,6 +121,16 @@ class MainWindow(QMainWindow):
         self._cached_sig: dict[str, str] = {}
         self._loading_keys: set[str] = set()
         self._refresh_had_success = False
+
+        # Keep the 树洞消息 card in step with background auto-checking: while the
+        # macOS notifier is enabled, re-poll the treehole card on its interval so
+        # new replies surface in-app shortly after their notification, instead of
+        # the card staying frozen at its startup snapshot.
+        self._notify_service = TreeholeNotificationService()
+        self._treehole_sync_timer = QTimer(self)
+        self._treehole_sync_timer.timeout.connect(self._on_treehole_sync_tick)
+        self._treehole_sync_busy = False
+        self._treehole_sync_signals: object = None
 
         # Multi-session state. The startup session id lives in memory only;
         # nothing is written to disk until the first real user turn, so a
@@ -167,6 +185,7 @@ class MainWindow(QMainWindow):
         self._dashboard.morning_briefing_requested.connect(self._run_morning_briefing)
         self._dashboard.refresh_requested.connect(self._refresh_dashboard)
         self._dashboard.partial_refresh_requested.connect(self._refresh_dashboard_subset)
+        self._dashboard.treehole_settings_changed.connect(self._reconfigure_treehole_sync)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._dashboard)
@@ -186,6 +205,7 @@ class MainWindow(QMainWindow):
         # background and update only the cards that changed.
         self._seed_dashboard_from_cache()
         self._start_refresh([], silent=True)
+        self._reconfigure_treehole_sync()
         self.statusBar().showMessage(f"{mode_label} · 就绪")
 
     def _send_message(self, text: str) -> None:
@@ -472,6 +492,59 @@ class MainWindow(QMainWindow):
         self._dashboard.set_updated_text(f"最近刷新：{stamp}")
         self.statusBar().showMessage(f"仪表盘已刷新：{stamp}")
 
+    # --- treehole auto-sync ---------------------------------------------------
+    def _reconfigure_treehole_sync(self) -> None:
+        """Start/stop the treehole auto-sync timer to match the notifier.
+
+        The timer runs only when the treehole tool is registered (online) and
+        background auto-checking is enabled, ticking at the notifier's interval
+        so the in-app card tracks what the notifier surfaces. Re-read on startup
+        and whenever the treehole dialog (which hosts the notify settings)
+        closes, so an enable/disable/interval change takes effect immediately.
+        """
+        active = (
+            "treehole_updates" in self._agent.tools
+            and self._notify_service.is_supported()
+            and self._notify_service.is_enabled()
+            and self._notify_service.is_logged_in()
+        )
+        if active:
+            interval = max(MIN_NOTIFY_INTERVAL, self._notify_service.get_interval())
+            self._treehole_sync_timer.setInterval(interval * 1000)
+            if not self._treehole_sync_timer.isActive():
+                self._treehole_sync_timer.start()
+        else:
+            self._treehole_sync_timer.stop()
+
+    def _on_treehole_sync_tick(self) -> None:
+        """Quietly re-poll the treehole card off the GUI thread.
+
+        Goes through ``run_async`` rather than the dashboard refresh worker so it
+        does not flicker the global 刷新 button or spam the status bar every
+        interval; the result is merged into the accumulating inbox. A poll in
+        flight (or a transient error) is skipped — the next tick catches up.
+        """
+        if self._treehole_sync_busy:
+            return
+        tool = self._agent.tools.find("treehole_updates")
+        if tool is None:
+            return
+        self._treehole_sync_busy = True
+        self._treehole_sync_signals = run_async(
+            lambda: tool.invoke({"limit": 5}),
+            on_done=self._on_treehole_sync_done,
+            on_error=self._on_treehole_sync_error,
+        )
+
+    def _on_treehole_sync_done(self, result: object) -> None:
+        self._treehole_sync_busy = False
+        data = getattr(result, "data", None)
+        if getattr(result, "success", False) and isinstance(data, dict):
+            self._dashboard.set_treehole_updates(data)
+
+    def _on_treehole_sync_error(self, message: str) -> None:
+        self._treehole_sync_busy = False
+
     def _run_morning_briefing(self) -> None:
         QMetaObject.invokeMethod(
             self._workflow_worker,
@@ -500,6 +573,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("今日简报失败")
 
     def closeEvent(self, event: object) -> None:  # noqa: N802 - Qt override name.
+        self._treehole_sync_timer.stop()
         self._persist_current_session()
         self._agent_thread.quit()
         self._dashboard_thread.quit()

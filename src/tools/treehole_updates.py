@@ -394,6 +394,132 @@ class TreeholeNotificationService:
         return self._runner(list(cmd))
 
 
+def merge_treehole_updates(
+    existing: list[dict[str, Any]], new_updates: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Accumulate treehole updates by ``pid`` so the dashboard keeps unread
+    replies visible instead of dropping them on the next (empty) poll.
+
+    Each ``monitor.check()`` only returns the delta *since the dashboard's last
+    poll*, so replacing the card with each poll makes a new reply vanish after
+    one interval. Merging instead keeps every unread hole until the user views
+    it: ``new_comments`` are unioned by ``cid`` (oldest-first), ``old_reply`` is
+    the earliest baseline first seen, ``new_reply`` the latest count, and
+    ``delta`` is derived so it never undercounts the comments we can show
+    (``hidden = delta - shown`` stays >= 0). Pure and order-independent within a
+    poll batch; idempotent on re-merging an already-accumulated list.
+    """
+    merged: dict[str, dict[str, Any]] = {}
+    cids: dict[str, dict[int, dict[str, Any]]] = {}
+    order: list[str] = []
+
+    def _absorb(entry: dict[str, Any]) -> None:
+        raw_pid = entry.get("pid")
+        if raw_pid is None:
+            return
+        pid = str(raw_pid)
+        cur = merged.get(pid)
+        if cur is None:
+            cur = {
+                "pid": pid,
+                "old_reply": int(entry.get("old_reply") or 0),
+                "new_reply": int(entry.get("new_reply") or 0),
+                "text": entry.get("text"),
+            }
+            merged[pid] = cur
+            cids[pid] = {}
+            order.append(pid)
+        else:
+            cur["old_reply"] = min(cur["old_reply"], int(entry.get("old_reply") or 0))
+            cur["new_reply"] = max(cur["new_reply"], int(entry.get("new_reply") or 0))
+            if entry.get("text"):
+                cur["text"] = entry.get("text")
+        for comment in entry.get("new_comments") or []:
+            if not isinstance(comment, dict) or comment.get("cid") is None:
+                continue
+            cids[pid][int(comment["cid"])] = comment
+
+    for entry in list(existing or []) + list(new_updates or []):
+        if isinstance(entry, dict):
+            _absorb(entry)
+
+    result: list[dict[str, Any]] = []
+    for pid in order:
+        cur = merged[pid]
+        comments = [cids[pid][key] for key in sorted(cids[pid])]
+        delta = max(cur["new_reply"] - cur["old_reply"], len(comments), 0)
+        result.append({
+            "pid": pid,
+            "old_reply": cur["old_reply"],
+            "new_reply": cur["new_reply"],
+            "delta": delta,
+            "text": cur["text"],
+            "new_comments": comments,
+        })
+    result.sort(key=lambda item: int(item.get("new_reply") or 0), reverse=True)
+    return result
+
+
+class TreeholeInboxStore:
+    """Persisted accumulator of unread treehole updates feeding the dashboard.
+
+    The dashboard re-derives unread replies from its own ``monitor.check()``
+    poll (a separate baseline from the background notifier's), so this store is
+    what makes those polls *stick*: each poll's updates are merged in and the
+    set survives until the user opens the messages dialog (mark-as-read →
+    ``clear``). Persisting to ``data/treehole_inbox.json`` lets an unviewed
+    reply survive an app restart — on reopen the startup poll re-derives
+    anything that arrived while closed (the dashboard's state cursor is frozen
+    while the app is shut), and merges it back in.
+
+    ``path=None`` keeps it in-memory (the GUI default and tests use this so they
+    never touch the repo's ``data/``); ``MainWindow`` injects a real path.
+    """
+
+    def __init__(self, path: str | Path | None = None) -> None:
+        self.path = Path(path) if path is not None else None
+        self._entries: list[dict[str, Any]] = self._load()
+
+    def _load(self) -> list[dict[str, Any]]:
+        if self.path is None or not self.path.exists():
+            return []
+        try:
+            data = json.loads(self.path.read_text())
+        except (OSError, ValueError):
+            return []
+        entries = data.get("entries") if isinstance(data, dict) else data
+        if not isinstance(entries, list):
+            return []
+        return [entry for entry in entries if isinstance(entry, dict)]
+
+    def entries(self) -> list[dict[str, Any]]:
+        return [dict(entry) for entry in self._entries]
+
+    def unread_count(self) -> int:
+        return sum(int(entry.get("delta") or 0) for entry in self._entries)
+
+    def merge(self, updates: list[dict[str, Any]]) -> None:
+        self._entries = merge_treehole_updates(self._entries, list(updates or []))
+        self._save()
+
+    def clear(self) -> None:
+        if not self._entries:
+            return
+        self._entries = []
+        self._save()
+
+    def _save(self) -> None:
+        if self.path is None:
+            return
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.write_text(
+                json.dumps({"entries": self._entries}, ensure_ascii=False)
+            )
+        except OSError:
+            pass
+
+
 class TreeholeUpdatesTool(Tool):
     name: ClassVar[str] = "treehole_updates"
     description: ClassVar[str] = (

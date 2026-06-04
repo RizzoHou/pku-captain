@@ -31,6 +31,7 @@ from ..tools.base import Tool, ToolRegistry
 from ..tools.treehole_updates import (
     DEFAULT_NOTIFY_INTERVAL,
     TreeholeAuthService,
+    TreeholeInboxStore,
     TreeholeNotificationService,
 )
 from .formatters import parse_datetime, upcoming_assignments
@@ -46,6 +47,9 @@ class DashboardPanel(QWidget):
     morning_briefing_requested = pyqtSignal()
     refresh_requested = pyqtSignal()
     partial_refresh_requested = pyqtSignal(list)
+    # Emitted after the treehole dialog closes so the window can reconfigure the
+    # auto-sync timer (notification enable/disable/interval may have changed).
+    treehole_settings_changed = pyqtSignal()
 
     def __init__(
         self,
@@ -53,11 +57,16 @@ class DashboardPanel(QWidget):
         mode_label: str,
         tools: ToolRegistry | None = None,
         memory_learner: MemoryLearnService | None = None,
+        treehole_inbox: TreeholeInboxStore | None = None,
     ) -> None:
         super().__init__()
         self.setObjectName("DashboardPanel")
         self._tools = tools
         self._memory_learner = memory_learner
+        # Accumulates unread treehole updates so a poll's result sticks on the
+        # card instead of vanishing on the next empty poll. In-memory by default
+        # (tests / no-disk); MainWindow injects a persisted store.
+        self._treehole_inbox = treehole_inbox or TreeholeInboxStore()
 
         title = QLabel("PKU Captain 北大信息助手")
         title.setObjectName("DashboardTitle")
@@ -176,6 +185,10 @@ class DashboardPanel(QWidget):
         if isinstance(assignment_card, AssignmentTodoCard):
             assignment_card.set_calendar_enabled("calendar_reminder" in (self._tools or ()))
 
+        # Reflect unread carried over from a previous session before the first poll.
+        if self._treehole_inbox.unread_count():
+            self._render_treehole()
+
     def _partial_refresh_emitter(self, *keys: str) -> Callable[[], None]:
         """Build a slot that requests a refresh scoped to the given tool keys,
         so a single card's refresh button reloads only its own data instead of
@@ -226,13 +239,41 @@ class DashboardPanel(QWidget):
             card.set_lectures(data)
 
     def set_treehole_updates(self, data: dict[str, object]) -> None:
-        self._treehole_data = data
-        count = int(data.get("unread_count") or 0)
-        message = str(data.get("message") or "")
+        """Merge a poll's updates into the unread inbox and re-render the card.
+
+        Accumulates rather than replaces, so a reply surfaced by one poll stays
+        visible until the user opens the dialog (mark-as-read) — the next empty
+        poll no longer blanks it. The poll's own ``message`` is only used when
+        the inbox is empty; otherwise the count drives the summary.
+        """
+        updates = data.get("updates")
+        if isinstance(updates, list):
+            self._treehole_inbox.merge([u for u in updates if isinstance(u, dict)])
+        self._render_treehole(
+            fallback_message=str(data.get("message") or ""),
+            status=str(data.get("status") or "ok"),
+        )
+
+    def _render_treehole(self, *, fallback_message: str = "", status: str = "ok") -> None:
+        entries = self._treehole_inbox.entries()
+        count = self._treehole_inbox.unread_count()
+        if status in {"error", "auth_required", "needs_sms"}:
+            message = fallback_message or "树洞不可用"
+        elif count:
+            message = f"有 {count} 条树洞新回复"
+        else:
+            message = fallback_message or "暂无树洞新回复"
+        display: dict[str, object] = {
+            "status": status,
+            "message": message,
+            "unread_count": count,
+            "updates": entries,
+        }
+        self._treehole_data = display
         self._set_treehole_button(count, message)
         card = self._cards.get("treehole_updates")
         if isinstance(card, TreeholeMessagesCard):
-            card.set_updates(data)
+            card.set_updates(display)
 
     def set_plib_materials(self, data: dict[str, object]) -> None:
         card = self._cards.get("plib_materials")
@@ -241,13 +282,11 @@ class DashboardPanel(QWidget):
 
     def set_error(self, key: str, message: str) -> None:
         if key == "treehole_updates":
-            data = {
-                "status": "error",
-                "message": f"树洞不可用：{message}",
-                "unread_count": 0,
-                "updates": [],
-            }
-            self.set_treehole_updates(data)
+            # Keep accumulated unread entries visible; only the summary shows the
+            # error, so a transient poll failure does not wipe the inbox.
+            self._render_treehole(
+                fallback_message=f"树洞不可用：{message}", status="error"
+            )
             return
         if key == "plib_materials":
             card = self._cards.get("plib_materials")
@@ -283,7 +322,14 @@ class DashboardPanel(QWidget):
             return
         dialog = TreeholeMessagesDialog(self._treehole_data, self)
         dialog.auth_changed.connect(self._partial_refresh_emitter("treehole_updates"))
+        # Opening the list marks the accumulated unread as read: empty the inbox
+        # (the dialog already captured a snapshot) so the card/badge reset.
+        self._treehole_inbox.clear()
+        self._render_treehole()
         dialog.exec()
+        # The dialog nests the notification settings dialog; once it closes any
+        # enable/disable/interval change is persisted, so reconfigure the timer.
+        self.treehole_settings_changed.emit()
 
     def _show_plib_dialog(self) -> None:
         tool = self._require_tool("plib_materials", "P-Lib 资料搜索")
