@@ -37,6 +37,7 @@ from ..workflows import HelloWorkflow, MorningBriefingWorkflow
 from ..workflows.base import WorkflowRegistry
 from .agent import Agent
 from .conversation import Conversation
+from .memory import MemoryStore
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SECRETS_DIR = _REPO_ROOT / "secrets"
@@ -55,7 +56,15 @@ _SYSTEM_PROMPT = (
     "You are PKU Captain, a desktop AI assistant for Peking University "
     "students. Reply in the user's language (default Chinese). When a "
     "registered tool can answer the user's question, prefer calling the "
-    "tool over guessing. Be terse."
+    "tool over guessing. Be terse.\n"
+    "Learn about the user as you talk. Whenever the user states a durable "
+    "fact about themselves — their name, school or major, where they live, "
+    "preferred reply language, a recurring schedule, or a stable preference "
+    "relevant to helping them — call the `memory` tool with action `set`, a "
+    "short stable English key (e.g. `home_location`, `name`), and the value. "
+    "Do not store one-off or transient details. Any facts already known about "
+    "the user are listed under \"Known facts about the user\" below; use them "
+    "to personalize replies and never ask again for something already stored."
 )
 
 
@@ -71,7 +80,14 @@ def build_agent(*, offline: bool = False, enable_knowledge: bool = False) -> Age
     off keeps startup free of any embedding-API calls.
     """
     llm = _build_llm(offline=offline)
-    tools = _build_tools(offline=offline, enable_knowledge=enable_knowledge)
+    # One shared store: the MemoryTool writes to it and the Agent reads it
+    # back when folding memory into each turn's context. A second instance on
+    # the same path would never see mid-session writes (it loads once at
+    # construction), so the feature would silently no-op — keep it shared.
+    memory = MemoryStore()
+    tools = _build_tools(
+        offline=offline, enable_knowledge=enable_knowledge, memory=memory
+    )
     workflows = _build_workflows(tools)
 
     conversation = Conversation()
@@ -82,6 +98,7 @@ def build_agent(*, offline: bool = False, enable_knowledge: bool = False) -> Age
         tools=tools,
         workflows=workflows,
         conversation=conversation,
+        memory=memory,
     )
 
 
@@ -99,10 +116,12 @@ def _build_llm(*, offline: bool) -> LLMProvider:
     return DeepSeekProvider(api_key=api_key)
 
 
-def _build_tools(*, offline: bool, enable_knowledge: bool = False) -> ToolRegistry:
+def _build_tools(
+    *, offline: bool, enable_knowledge: bool = False, memory: MemoryStore | None = None
+) -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(ClockTool())
-    registry.register(MemoryTool())
+    registry.register(MemoryTool(store=memory))
     registry.register(ReminderTool())
     if not offline:
         registry.register(PKU3bAssignmentsTool())

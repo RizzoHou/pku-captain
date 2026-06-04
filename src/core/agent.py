@@ -15,10 +15,11 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..llm.base import LLMProvider
+from ..llm.base import ChatMessage, LLMProvider
 from ..tools.base import ToolRegistry
 from ..workflows.base import WorkflowRegistry
 from .conversation import Conversation
+from .memory import MemoryStore, render_memory_context
 
 
 @dataclass
@@ -35,6 +36,7 @@ class Agent:
     tools: ToolRegistry
     workflows: WorkflowRegistry
     conversation: Conversation = field(default_factory=Conversation)
+    memory: MemoryStore | None = None
     max_tool_iterations: int = 8
 
     def turn(self, user_message: str) -> Iterator[AgentEvent]:
@@ -45,7 +47,7 @@ class Agent:
         for _ in range(self.max_tool_iterations):
             response = None
             for stream_event in self.llm.stream_chat(
-                self.conversation.snapshot(),
+                self._messages_for_llm(),
                 tools=tool_schema,
             ):
                 if stream_event.delta:
@@ -56,7 +58,7 @@ class Agent:
                 if stream_event.response is not None:
                     response = stream_event.response
             if response is None:
-                response = self.llm.chat(self.conversation.snapshot(), tools=tool_schema)
+                response = self.llm.chat(self._messages_for_llm(), tools=tool_schema)
             yield AgentEvent(kind="llm_response", payload={"text": response.text})
 
             self.conversation.add_assistant(
@@ -91,3 +93,33 @@ class Agent:
             kind="final",
             payload={"text": "Agent exceeded max tool iterations."},
         )
+
+    def _messages_for_llm(self) -> list[ChatMessage]:
+        """Conversation snapshot with current memory folded into context.
+
+        Recomputed each LLM iteration so a `memory` tool call made earlier
+        in the same turn is reflected immediately. The block is merged into
+        the leading system message (rather than appended as a second system
+        message — DeepSeek expects a single system turn) and is injected only
+        into this copy; it never lands in `Conversation`, keeping the history
+        the GUI renders clean and free of accumulating context blocks.
+        """
+        messages = self.conversation.snapshot()
+        if self.memory is None:
+            return messages
+        block = render_memory_context(self.memory.list())
+        if not block:
+            return messages
+        if messages and messages[0].role == "system":
+            head = messages[0]
+            messages[0] = ChatMessage(
+                role="system",
+                content=f"{head.content}\n\n{block}",
+                name=head.name,
+                tool_call_id=head.tool_call_id,
+                tool_calls=head.tool_calls,
+                reasoning_content=head.reasoning_content,
+            )
+        else:
+            messages.insert(0, ChatMessage(role="system", content=block))
+        return messages

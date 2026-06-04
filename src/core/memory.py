@@ -116,3 +116,20 @@ class MemoryStore:
             if existed:
                 self._flush()
             return existed
+
+
+_MEMORY_HEADER = "Known facts about the user (from long-term memory):"
+
+
+def render_memory_context(entries: list[MemoryEntry]) -> str:
+    """Render stored entries as a system-prompt block, or "" if empty.
+
+    Folded into the leading system message at each turn so the agent's
+    replies reflect what it already knows about the user without having
+    to call the `memory` tool first. Pure (no I/O) so it is trivially
+    unit-testable in isolation.
+    """
+    if not entries:
+        return ""
+    lines = [f"- {entry.key}: {entry.value}" for entry in entries]
+    return _MEMORY_HEADER + "\n" + "\n".join(lines)
