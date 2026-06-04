@@ -23,6 +23,7 @@ from ..rag import (
 from ..tools import (
     CalendarReminderTool,
     ClockTool,
+    DeanResourcesTool,
     KnowledgeSearchTool,
     LectureTool,
     MemoryTool,
@@ -189,6 +190,7 @@ def _build_tools(
         registry.register(PLibMaterialsTool())
         registry.register(TreeholeUpdatesTool())
         registry.register(CalendarReminderTool())
+        registry.register(DeanResourcesTool())
         if enable_knowledge:
             registry.register(KnowledgeSearchTool(_build_knowledge_base()))
         registry.register(LectureTool())
