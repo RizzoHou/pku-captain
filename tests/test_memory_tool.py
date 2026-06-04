@@ -23,6 +23,21 @@ def test_set_then_get(tool: MemoryTool) -> None:
     assert get_result.data["value"] == "侯宇泽"
 
 
+def test_remember_stores_free_text(tool: MemoryTool) -> None:
+    result = tool.invoke({"action": "remember", "text": "我住在燕园"})
+    assert result.success
+    assert result.data["value"] == "我住在燕园"
+    # No key was supplied, yet the entry is retrievable via list.
+    listed = tool.invoke({"action": "list"})
+    assert any(e["value"] == "我住在燕园" for e in listed.data)
+
+
+def test_remember_requires_text(tool: MemoryTool) -> None:
+    result = tool.invoke({"action": "remember", "text": "  "})
+    assert not result.success
+    assert "text" in result.error
+
+
 def test_set_requires_key(tool: MemoryTool) -> None:
     result = tool.invoke({"action": "set", "value": "x"})
     assert not result.success

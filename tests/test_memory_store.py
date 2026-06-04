@@ -99,6 +99,44 @@ def test_unicode_value_roundtrips(tmp_path) -> None:
     assert store.get("note").value == "住在燕园，喜欢用中文回复"
 
 
+# -- remember (keyless free-text) --------------------------------------------
+
+
+def test_remember_stores_text_verbatim(tmp_path) -> None:
+    store = _store(tmp_path)
+    entry = store.remember("我住在燕园，喜欢用中文交流")
+    assert entry.value == "我住在燕园，喜欢用中文交流"
+    assert store.get(entry.key).value == entry.value
+
+
+def test_remember_auto_derives_a_key(tmp_path) -> None:
+    entry = _store(tmp_path).remember("我是计算机系的")
+    assert entry.key  # non-empty handle derived for the user
+    assert entry.key != "我是计算机系的"
+
+
+def test_remember_is_idempotent_on_identical_text(tmp_path) -> None:
+    store = _store(tmp_path)
+    a = store.remember("我喜欢咖啡")
+    b = store.remember("我喜欢咖啡")
+    assert a.key == b.key
+    assert len(store.list()) == 1  # same content → same handle, no duplicate
+
+
+def test_remember_distinct_text_distinct_entries(tmp_path) -> None:
+    store = _store(tmp_path)
+    store.remember("我喜欢咖啡")
+    store.remember("我不喝咖啡")
+    assert len(store.list()) == 2  # verbatim notes do not overwrite
+
+
+def test_remember_strips_and_rejects_empty(tmp_path) -> None:
+    store = _store(tmp_path)
+    assert store.remember("  我住在燕园  ").value == "我住在燕园"
+    with pytest.raises(ValueError):
+        store.remember("   ")
+
+
 # -- persistence -------------------------------------------------------------
 
 

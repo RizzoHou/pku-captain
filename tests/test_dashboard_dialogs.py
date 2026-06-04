@@ -139,6 +139,41 @@ def test_calendar_dialog_adds_selected_and_marks_rows(
     assert not (item.flags() & dashboard.Qt.ItemFlag.ItemIsUserCheckable)
 
 
+class RecordingTool(Tool):
+    """Records invocations; serves `list` from what `remember` stored."""
+
+    name = "memory"
+    description = "memory"
+    parameters_schema: dict[str, Any] = {"type": "object", "properties": {}}
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+        self._entries: list[dict[str, str]] = []
+
+    def invoke(self, args: dict[str, Any]) -> ToolResult:
+        self.calls.append(args)
+        if args.get("action") == "remember":
+            self._entries.append({"key": "note-x", "value": args.get("text", "")})
+            return ToolResult(success=True, data=self._entries[-1])
+        if args.get("action") == "list":
+            return ToolResult(success=True, data=list(self._entries))
+        return ToolResult(success=True, data={})
+
+
+def test_memory_dialog_remembers_free_text(app: QApplication) -> None:
+    # The user types a natural sentence (no key) and it is stored via the
+    # keyless `remember` action — the manual entry the new UX targets.
+    tool = RecordingTool()
+    dialog = dashboard.MemoryDialog(tool)
+    dialog._note_input.setText("我住在燕园")
+    dialog._remember()
+
+    remember_calls = [c for c in tool.calls if c.get("action") == "remember"]
+    assert remember_calls == [{"action": "remember", "text": "我住在燕园"}]
+    assert dialog._note_input.text() == ""  # cleared after save
+    assert dialog._list.count() == 1  # reloaded list shows the new note
+
+
 def test_plib_search_dialog_runs_async_end_to_end(app: QApplication) -> None:
     tool = FakeTool(
         {

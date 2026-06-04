@@ -60,11 +60,13 @@ _SYSTEM_PROMPT = (
     "Learn about the user as you talk. Whenever the user states a durable "
     "fact about themselves — their name, school or major, where they live, "
     "preferred reply language, a recurring schedule, or a stable preference "
-    "relevant to helping them — call the `memory` tool with action `set`, a "
-    "short stable English key (e.g. `home_location`, `name`), and the value. "
-    "Do not store one-off or transient details. Any facts already known about "
-    "the user are listed under \"Known facts about the user\" below; use them "
-    "to personalize replies and never ask again for something already stored."
+    "relevant to helping them — call the `memory` tool with action "
+    "`remember` and the fact as plain `text` (no key needed). Use action "
+    "`set` with a stable key only when updating a value that should replace "
+    "a previously stored one. Do not store one-off or transient details. "
+    "Any facts already known about the user are listed under \"Known facts "
+    "about the user\" below; use them to personalize replies and never ask "
+    "again for something already stored."
 )
 
 

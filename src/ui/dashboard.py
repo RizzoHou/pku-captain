@@ -2493,26 +2493,25 @@ class MemoryDialog(QDialog):
 
         title = QLabel("记忆管理")
         title.setObjectName("DialogTitle")
-        subtitle = QLabel("查看和管理 Agent 持久化保存的用户偏好。")
+        subtitle = QLabel(
+            "用一句话记下任何信息，自动保存为长期记忆；对话里提到的偏好也会被自动记住。"
+        )
         subtitle.setObjectName("DialogSubtitle")
         subtitle.setWordWrap(True)
 
-        self._key_input = QLineEdit()
-        self._key_input.setPlaceholderText("key，例如 home_location")
-        self._key_input.setMinimumWidth(220)
-        self._value_input = QLineEdit()
-        self._value_input.setPlaceholderText("value，例如 我住在燕园附近")
-        save_button = QPushButton("保存/覆盖")
-        save_button.setObjectName("PrimaryButton")
-        save_button.clicked.connect(self._save)
-        form = QGridLayout()
+        self._note_input = QLineEdit()
+        self._note_input.setPlaceholderText(
+            "例如：我住在燕园，喜欢用中文交流，周三下午有空"
+        )
+        self._note_input.returnPressed.connect(self._remember)
+        remember_button = QPushButton("记住")
+        remember_button.setObjectName("PrimaryButton")
+        remember_button.clicked.connect(self._remember)
+        form = QHBoxLayout()
         form.setContentsMargins(0, 0, 0, 0)
-        form.setHorizontalSpacing(10)
-        form.setVerticalSpacing(8)
-        form.addWidget(self._key_input, 0, 0)
-        form.addWidget(self._value_input, 0, 1)
-        form.addWidget(save_button, 0, 2)
-        form.setColumnStretch(1, 1)
+        form.setSpacing(10)
+        form.addWidget(self._note_input, 1)
+        form.addWidget(remember_button)
 
         self._status_label = QLabel("加载记忆中...")
         self._status_label.setObjectName("CardBody")
@@ -2573,32 +2572,35 @@ class MemoryDialog(QDialog):
             self._list.addItem(empty)
             return
         for memory in self._items:
+            # Value first — it carries the meaning; the key is an internal
+            # handle (auto-derived for free-text notes), shown muted below.
             item = QListWidgetItem(
-                "{key}\n{value}".format(
-                    key=memory.get("key") or "",
+                "{value}\n  {key}".format(
                     value=memory.get("value") or "",
+                    key=memory.get("key") or "",
                 )
             )
             item.setData(Qt.ItemDataRole.UserRole, memory)
             self._list.addItem(item)
 
-    def _save(self) -> None:
-        key = self._key_input.text().strip()
-        value = self._value_input.text()
-        result = self._tool.invoke({"action": "set", "key": key, "value": value})
+    def _remember(self) -> None:
+        text = self._note_input.text().strip()
+        if not text:
+            return
+        result = self._tool.invoke({"action": "remember", "text": text})
         if not result.success:
             QMessageBox.warning(self, "记忆管理", str(result.error or "保存失败"))
             return
-        self._key_input.clear()
-        self._value_input.clear()
+        self._note_input.clear()
         self._load()
 
     def _fill_selected(self) -> None:
         memory = self._selected_memory()
         if not memory:
             return
-        self._key_input.setText(str(memory.get("key") or ""))
-        self._value_input.setText(str(memory.get("value") or ""))
+        # Re-saving edited text stores a fresh entry; the original stays
+        # until deleted from the list (free-text notes don't overwrite).
+        self._note_input.setText(str(memory.get("value") or ""))
 
     def _delete(self) -> None:
         memory = self._selected_memory()
