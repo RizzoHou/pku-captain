@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QSplitter,
 )
 
-from ..core import AgentEvent, build_agent
+from ..core import AgentEvent, MemoryLearnService, build_agent
 from .agent_worker import AgentWorker
 from .chat_panel import ChatPanel
 from .dashboard import DashboardPanel
@@ -43,7 +43,17 @@ class MainWindow(QMainWindow):
             mode_label = "离线模式"
             fallback_message = f"在线模式不可用，已切换到离线模式：{exc}"
 
-        self._dashboard = DashboardPanel(mode_label=mode_label, tools=agent.tools)
+        # Lets the dashboard 记忆 box split a typed sentence into clean facts
+        # via the same LLM the chat uses; degrades to verbatim when offline.
+        # Shares agent.memory so dashboard- and chat-learned facts coincide.
+        memory_learner = (
+            MemoryLearnService(agent.llm, agent.memory)
+            if agent.memory is not None
+            else None
+        )
+        self._dashboard = DashboardPanel(
+            mode_label=mode_label, tools=agent.tools, memory_learner=memory_learner
+        )
         self._chat_panel = ChatPanel()
 
         self._agent_thread = QThread(self)
