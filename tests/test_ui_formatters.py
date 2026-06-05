@@ -3,7 +3,76 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from src.tools.pku3b_coursetable import _parse_course_table
-from src.ui.formatters import upcoming_assignments, upcoming_lectures
+from src.ui.formatters import (
+    split_dean_items,
+    upcoming_assignments,
+    upcoming_lectures,
+)
+
+_DEAN_NOW = datetime(2026, 6, 5, 12, 0).astimezone()
+
+
+def _dean(key, *, source="notice", date="", first_seen=""):
+    return {
+        "key": key,
+        "source": source,
+        "source_label": "通知公告",
+        "title": key,
+        "url": "u",
+        "date": date,
+        "item_id": "1",
+        "first_seen": first_seen,
+    }
+
+
+def test_split_dean_notices_use_one_month_window() -> None:
+    fresh = _dean("notice:1", date="2026-06-01")  # ~4 days old → recent
+    stale = _dean("notice:2", date="2026-04-01")  # >1 month old → history
+    recent, history = split_dean_items([fresh, stale], now=_DEAN_NOW)
+    assert [i["key"] for i in recent] == ["notice:1"]
+    assert [i["key"] for i in history] == ["notice:2"]
+
+
+def test_split_dean_others_use_half_year_window() -> None:
+    # A download dated 3 months ago stays recent (6-month window), unlike a
+    # notice at the same age which would fall into history.
+    download = _dean("download:1", source="download", date="2026-03-10")
+    recent, history = split_dean_items([download], now=_DEAN_NOW)
+    assert [i["key"] for i in recent] == ["download:1"]
+    assert history == []
+
+
+def test_split_dean_dateless_rule_windows_by_first_seen() -> None:
+    fresh_rule = _dean(
+        "rules_school:1", source="rules_school", first_seen="2026-05-20T09:00:00+08:00"
+    )
+    old_rule = _dean(
+        "rules_school:2", source="rules_school", first_seen="2025-10-01T09:00:00+08:00"
+    )
+    recent, history = split_dean_items([fresh_rule, old_rule], now=_DEAN_NOW)
+    assert [i["key"] for i in recent] == ["rules_school:1"]
+    assert [i["key"] for i in history] == ["rules_school:2"]
+
+
+def test_split_dean_falls_back_to_first_seen_on_unparseable_date() -> None:
+    item = _dean("notice:1", date="2026/06/01", first_seen="2026-06-04T09:00:00+08:00")
+    recent, history = split_dean_items([item], now=_DEAN_NOW)
+    assert [i["key"] for i in recent] == ["notice:1"]
+    assert history == []
+
+
+def test_split_dean_keeps_undated_item_in_history_not_dropped() -> None:
+    item = _dean("notice:1")  # no date, no first_seen
+    recent, history = split_dean_items([item], now=_DEAN_NOW)
+    assert recent == []
+    assert [i["key"] for i in history] == ["notice:1"]  # never lost
+
+
+def test_split_dean_sorts_recent_newest_first() -> None:
+    older = _dean("notice:1", date="2026-05-20")
+    newer = _dean("notice:2", date="2026-06-02")
+    recent, _ = split_dean_items([older, newer], now=_DEAN_NOW)
+    assert [i["key"] for i in recent] == ["notice:2", "notice:1"]
 
 
 def test_upcoming_assignments_prioritizes_future_deadlines() -> None:

@@ -27,6 +27,20 @@ class Workflow(ABC):
 
     name: ClassVar[str]
     description: ClassVar[str]
+    # JSON schema for the args dict `run` accepts; defaults to the
+    # no-argument shape. Param'd workflows override it, and the
+    # WorkflowTool adapter surfaces it into the LLM tool schema so the
+    # model knows how (if at all) to parameterize the workflow.
+    parameters_schema: ClassVar[dict[str, Any]] = {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    }
+    # Whether `build_agent` exposes this workflow to the LLM as a callable
+    # tool (via the WorkflowTool adapter). Real workflows are agent-callable;
+    # offline reference stubs (HelloWorkflow) set this False so they stay out
+    # of the production toolset while still serving the loop and tests.
+    agent_callable: ClassVar[bool] = True
 
     def __init__(self, tools: ToolRegistry) -> None:
         self.tools = tools

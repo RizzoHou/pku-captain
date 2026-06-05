@@ -59,11 +59,13 @@ class DeanResourcesTool(Tool):
         "Actions: `sidebar` (student-service links by category), `guide` by id "
         "(content behind a sidebar link), `rules_list` (校级/国家 regulations, "
         "scope school|national), `rules_show` by id (full rule text), "
+        "`notice_list` (教务部通知公告), `notice_show` by id (full notice text), "
         "`download_list` (downloadable forms/handbooks), `openinfo_list` "
-        "(information-disclosure files). `guide` ids come from `sidebar` URLs and "
-        "`rules_show` ids from `rules_list`, so list first, then show. Use this "
-        "for questions like “选课手册在哪下载”, “本科生学籍管理办法怎么规定的”, or "
-        "“教务部最近公示了什么”."
+        "(information-disclosure files). `guide` ids come from `sidebar` URLs, "
+        "`rules_show` ids from `rules_list`, and `notice_show` ids from "
+        "`notice_list`, so list first, then show. Use this for questions like "
+        "“选课手册在哪下载”, “本科生学籍管理办法怎么规定的”, “教务部最近发了什么通知”, "
+        "or “教务部最近公示了什么”."
     )
     parameters_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
@@ -75,6 +77,8 @@ class DeanResourcesTool(Tool):
                     "guide",
                     "rules_list",
                     "rules_show",
+                    "notice_list",
+                    "notice_show",
                     "download_list",
                     "openinfo_list",
                 ],
@@ -82,7 +86,10 @@ class DeanResourcesTool(Tool):
             },
             "id": {
                 "type": "integer",
-                "description": "Resource id. Required for `guide` and `rules_show`.",
+                "description": (
+                    "Resource id. Required for `guide`, `rules_show`, and "
+                    "`notice_show`."
+                ),
             },
             "scope": {
                 "type": "string",
@@ -95,8 +102,9 @@ class DeanResourcesTool(Tool):
             "page": {
                 "type": "integer",
                 "description": (
-                    "Page number for `rules_list` / `download_list` / "
-                    "`openinfo_list`. Default 1. The response carries `last_page`."
+                    "Page number for `rules_list` / `notice_list` / "
+                    "`download_list` / `openinfo_list`. Default 1. The response "
+                    "carries `last_page`."
                 ),
                 "minimum": 1,
                 "default": 1,
@@ -127,6 +135,10 @@ class DeanResourcesTool(Tool):
             scope = str(args.get("scope") or "school").strip()
             cli_args = ["rules", "list", "--scope", scope, *self._page(args)]
             return self._run_json(cli_args)
+        if action == "notice_show":
+            return self._show("notice", args, subcommand="show")
+        if action == "notice_list":
+            return self._run_json(["notice", "list", *self._page(args)])
         if action == "download_list":
             return self._run_json(["download", "list", *self._page(args)])
         if action == "openinfo_list":

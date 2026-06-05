@@ -119,7 +119,9 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 
 ## 教务部（dean.pku.edu.cn 公开资源）
 
-`DeanResourcesTool` 通过 [`pku-dean-cli`](https://github.com/RizzoHou/pku-dean-cli) 子进程读取北大教务部网站的**公开**资源（学生服务侧边栏、培养指南、校级/国家规章、可下载表格手册、信息公开文件），模式和 `plib-cli` 一致：跑 `dean --format json`，再 `json.loads` 它的稳定 JSON 信封。所有资源都无需登录，没有任何凭据要求。工具按顺序在 `PATH`、`../pku-dean-cli/.venv/bin/dean`、`<repo>/.local/bin/dean` 查找二进制。
+`DeanResourcesTool` 通过 [`pku-dean-cli`](https://github.com/RizzoHou/pku-dean-cli) 子进程读取北大教务部网站的**公开**资源（学生服务侧边栏、培养指南、校级/国家规章、通知公告、可下载表格手册、信息公开文件），模式和 `plib-cli` 一致：跑 `dean --format json`，再 `json.loads` 它的稳定 JSON 信封。所有资源都无需登录，没有任何凭据要求。工具按顺序在 `PATH`、`../pku-dean-cli/.venv/bin/dean`、`<repo>/.local/bin/dean` 查找二进制。
+
+> `pku-dean-cli` 已新增 `dean notice list|show`（通知公告列表 / 单条全文）。若是旧 clone，进到 `../pku-dean-cli` 跑 `git pull` 即可（editable 安装，无需重装；除非入口点或依赖有变才 `.venv/bin/pip install -e .`）。**注意**：这个 sibling 仓库被主 checkout 和所有 worktree 共享，升级会同时影响它们。
 
 推荐装法（克隆到工作区根目录，与 pku-captain 同级）：
 
@@ -136,4 +138,4 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 ../pku-dean-cli/.venv/bin/dean --format json rules list --scope school | jq .
 ```
 
-工具暴露的是**只读**检索动作（`sidebar` / `guide` / `rules_list` / `rules_show` / `download_list` / `openinfo_list`）；CLI 的文件下载动作（`download get` / `openinfo get`，会把二进制写到磁盘）v1 暂未接入。`--all`（抓全部分页）也未暴露——它会逐页串行抓取、容易撑爆超时和对话上下文，调用方用 `page` 翻页即可（返回里带 `last_page`）。
+工具暴露的是**只读**检索动作（`sidebar` / `guide` / `rules_list` / `rules_show` / `notice_list` / `notice_show` / `download_list` / `openinfo_list`）；CLI 的文件下载动作（`download get` / `openinfo get`，会把二进制写到磁盘）v1 暂未接入。`--all`（抓全部分页）也未暴露——它会逐页串行抓取、容易撑爆超时和对话上下文，调用方用 `page` 翻页即可（返回里带 `last_page`）。

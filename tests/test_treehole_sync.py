@@ -85,6 +85,22 @@ def test_panel_mark_read_clears(app: QApplication) -> None:
     assert panel._treehole_data["unread_count"] == 0
 
 
+def test_panel_history_survives_inbox_clear(app: QApplication) -> None:
+    # The whole point of history: a reply stays in the time-ordered log even
+    # after the inbox is marked read (cleared) on opening the dialog.
+    panel = _panel()
+    comment = {"cid": 10, "text": "回复内容", "name_tag": "洞友", "timestamp": 42}
+    panel.set_treehole_updates(
+        {"status": "ok", "updates": [_update("1", 0, 1, [comment])]}
+    )
+    panel._treehole_inbox.clear()  # mark-as-read on dialog open
+    panel._render_treehole()
+    assert panel._treehole_data["unread_count"] == 0
+    history = panel._treehole_history.entries()
+    assert [e["cid"] for e in history] == ["10"]
+    assert history[0]["text"] == "回复内容"
+
+
 # --- MainWindow auto-sync timer gating (unbound on a stub) -----------------
 
 

@@ -84,6 +84,47 @@ def test_rules_show_builds_subcommand_argv(monkeypatch) -> None:
     assert fake_run.calls == [["/bin/dean", "--format", "json", "rules", "show", "20"]]
 
 
+def test_notice_list_default_no_page_flag(monkeypatch) -> None:
+    fake_run = _fake_envelope(json.dumps({"ok": True, "data": {"page": 1, "items": []}}))
+    _patch(monkeypatch, fake_run)
+
+    DeanResourcesTool().invoke({"action": "notice_list"})
+
+    assert fake_run.calls == [["/bin/dean", "--format", "json", "notice", "list"]]
+
+
+def test_notice_list_paging_argv(monkeypatch) -> None:
+    fake_run = _fake_envelope(json.dumps({"ok": True, "data": {"page": 3, "items": []}}))
+    _patch(monkeypatch, fake_run)
+
+    result = DeanResourcesTool().invoke({"action": "notice_list", "page": 3})
+
+    assert result.success is True
+    assert fake_run.calls == [
+        ["/bin/dean", "--format", "json", "notice", "list", "--page", "3"]
+    ]
+
+
+def test_notice_show_builds_subcommand_argv(monkeypatch) -> None:
+    fake_run = _fake_envelope(
+        json.dumps({"ok": True, "data": {"id": 743, "title": "期末考试安排通知"}})
+    )
+    _patch(monkeypatch, fake_run)
+
+    result = DeanResourcesTool().invoke({"action": "notice_show", "id": 743})
+
+    assert result.success is True
+    assert result.data["id"] == 743
+    assert fake_run.calls == [["/bin/dean", "--format", "json", "notice", "show", "743"]]
+
+
+def test_notice_show_requires_int_id() -> None:
+    result = DeanResourcesTool().invoke({"action": "notice_show"})
+
+    assert result.success is False
+    assert result.error == "`notice show` requires integer `id`"
+
+
 def test_error_envelope_surfaces_message(monkeypatch) -> None:
     fake_run = _fake_envelope(
         json.dumps({"ok": False, "error": {"code": "not_found", "message": "no rule found"}}),
