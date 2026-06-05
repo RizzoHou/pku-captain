@@ -2388,6 +2388,10 @@ class DeanMessagesDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("教务部消息")
         self.resize(980, 680)
+        # Floor at the 5-column footprint (5 × 168 + gaps/margins) so dragging the
+        # dialog narrower can't clip the rightmost category out of reach (the
+        # per-column scroll is vertical-only, with no horizontal scroll).
+        self.setMinimumWidth(900)
 
         title = QLabel("教务部消息")
         title.setObjectName("DialogTitle")

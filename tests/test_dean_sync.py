@@ -131,3 +131,17 @@ def test_dean_messages_dialog_has_two_tabs_with_category_columns(
     assert "通知公告 · 1" in headers  # the one recent notice landed in its column
     assert "资料下载 · 0" in headers  # an empty category still renders a column
     dialog.deleteLater()
+
+
+def _has_pill(row: QFrame) -> bool:
+    return any(
+        lbl.objectName() == "DeanTagPill" for lbl in row.findChildren(QLabel)
+    )
+
+
+def test_dean_row_pill_shown_on_card_hidden_in_columns(app: QApplication) -> None:
+    item = _item("notice:1", source="notice")
+    # Card rows (show_category default True) carry a colored category pill.
+    assert _has_pill(dashboard._dean_update_row(item))
+    # Dialog column rows drop it — the column header already names the category.
+    assert not _has_pill(dashboard._dean_update_row(item, show_category=False))
