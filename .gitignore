@@ -28,6 +28,7 @@ debug/
 
 # Local app data (memory store, reminders, etc.)
 data/
+downloads/
 
 # Project-local toolchains / binaries
 .local/
