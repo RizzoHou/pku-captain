@@ -364,6 +364,18 @@ def apply_app_style(app: QApplication) -> None:
             border-color: #d8b9b5;
         }}
 
+        QPushButton#StopButton {{
+            background: {INK};
+            border-color: {INK};
+            color: #ffffff;
+        }}
+
+        QPushButton#StopButton:hover {{
+            background: #000000;
+            border-color: #000000;
+            color: #ffffff;
+        }}
+
         QPushButton#ThinkingToggleButton {{
             background: #fffaf7;
             color: {PKU_RED};

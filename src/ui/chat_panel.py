@@ -29,6 +29,7 @@ class ChatPanel(QWidget):
     """Conversation panel that emits user messages and renders final replies."""
 
     send_requested = pyqtSignal(str)
+    stop_requested = pyqtSignal()
     new_chat_requested = pyqtSignal()
     history_requested = pyqtSignal()
 
@@ -72,10 +73,20 @@ class ChatPanel(QWidget):
         self._send_button.setDefault(True)
         self._send_button.clicked.connect(self._emit_send)
 
+        # Shares the send button's slot in the input row: hidden while idle,
+        # shown (and the send button hidden) while a turn runs, so one click
+        # can stop a long-running answer. See `set_busy`.
+        self._stop_button = QPushButton("■ 停止")
+        self._stop_button.setObjectName("StopButton")
+        self._stop_button.setToolTip("停止当前正在生成的回答")
+        self._stop_button.hide()
+        self._stop_button.clicked.connect(self._emit_stop)
+
         input_row = QHBoxLayout()
         input_row.setSpacing(8)
         input_row.addWidget(self._input, 1)
         input_row.addWidget(self._send_button)
+        input_row.addWidget(self._stop_button)
 
         title = QLabel("对话")
         title.setObjectName("SectionTitle")
@@ -109,14 +120,32 @@ class ChatPanel(QWidget):
         layout.addLayout(input_row)
 
     def set_busy(self, busy: bool) -> None:
-        """Disable input while a turn is running."""
+        """Disable input while a turn is running.
+
+        Swaps the send button for the stop button in the same slot so the
+        primary action while busy is "停止". `set_busy(False)` also re-arms the
+        stop button (a prior cancel click disabled it for feedback).
+        """
         self._input.setEnabled(not busy)
-        self._send_button.setEnabled(not busy)
-        self._send_button.setText("处理中" if busy else "发送")
+        self._send_button.setVisible(not busy)
+        self._stop_button.setVisible(busy)
+        if not busy:
+            self._stop_button.setEnabled(True)
+            self._stop_button.setText("■ 停止")
         # Block session switching mid-turn so the conversation isn't swapped
         # while the worker thread is still appending to it.
         self._new_chat_button.setEnabled(not busy)
         self._history_button.setEnabled(not busy)
+
+    def mark_stopping(self) -> None:
+        """Give immediate feedback that a stop click registered.
+
+        Cancellation is cooperative — an in-flight tool or LLM call can't be
+        interrupted, so there may be a short delay before the turn ends. Disable
+        the button and relabel it so the click visibly took effect.
+        """
+        self._stop_button.setEnabled(False)
+        self._stop_button.setText("停止中…")
 
     def add_user_message(self, text: str) -> None:
         self._add_message("你", text, "user")
@@ -327,6 +356,10 @@ class ChatPanel(QWidget):
             return
         self._input.clear()
         self.send_requested.emit(text)
+
+    def _emit_stop(self) -> None:
+        self.mark_stopping()
+        self.stop_requested.emit()
 
     def _add_message(self, author: str, text: str, role: str) -> QLabel:
         bubble = QFrame()

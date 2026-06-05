@@ -190,6 +190,7 @@ class MainWindow(QMainWindow):
         self._workflow_thread.start()
 
         self._chat_panel.send_requested.connect(self._send_message)
+        self._chat_panel.stop_requested.connect(self._cancel_turn)
         self._chat_panel.new_chat_requested.connect(self._on_new_chat)
         self._chat_panel.history_requested.connect(self._on_open_history)
         self._dashboard.morning_briefing_requested.connect(self._run_morning_briefing)
@@ -229,6 +230,19 @@ class MainWindow(QMainWindow):
             Qt.ConnectionType.QueuedConnection,
             Q_ARG(str, text),
         )
+
+    def _cancel_turn(self) -> None:
+        """Ask the running turn to stop (chat panel 停止 button).
+
+        Sets the worker's thread-safe cancel flag directly — it must not be a
+        queued Qt call, since the worker thread is blocked inside the turn and
+        wouldn't drain its event queue until the turn ended. The turn then ends
+        with a `final` event, so `_on_turn_finished` clears the busy state.
+        """
+        if not self._busy:
+            return
+        self._agent_worker.request_cancel()
+        self.statusBar().showMessage("正在停止当前回答...")
 
     def _on_agent_event(self, event: AgentEvent) -> None:
         if event.kind == "tool_call":

@@ -11,7 +11,7 @@ sequence as it happens, not just the final answer.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -20,6 +20,11 @@ from ..tools.base import ToolRegistry
 from ..workflows.base import WorkflowRegistry
 from .conversation import Conversation
 from .memory import MemoryStore, render_memory_context
+
+# Shown (and persisted as the assistant turn's content) when the user stops a
+# turn mid-flight. Kept identical between the `final` event and the conversation
+# message so the rendered bubble matches what reloads from a saved session.
+_CANCELLED_NOTE = "（已被用户中断）"
 
 
 @dataclass
@@ -41,31 +46,60 @@ class Agent:
     memory: MemoryStore | None = None
     max_tool_iterations: int = 8
 
-    def turn(self, user_message: str) -> Iterator[AgentEvent]:
-        """Process one user turn. Yields events as they happen."""
+    def turn(
+        self,
+        user_message: str,
+        cancelled: Callable[[], bool] | None = None,
+    ) -> Iterator[AgentEvent]:
+        """Process one user turn. Yields events as they happen.
+
+        ``cancelled`` is a cheap predicate polled cooperatively at the safe
+        boundaries between blocking I/O — before each LLM call, per streamed
+        token, and before each tool dispatch. It can't interrupt a call already
+        in flight (an HTTP request or subprocess), but it stops the loop at the
+        next checkpoint and leaves ``Conversation`` in a valid state: every
+        cancel path ends with a content-only assistant message so the
+        user→assistant alternation stays clean for the next turn, and any
+        not-yet-dispatched tool call gets a cancelled result so no
+        ``assistant(tool_calls)`` is left with a missing answer. The worker
+        passes a ``threading.Event.is_set`` here (see ``AgentWorker``).
+        """
         self.conversation.add_user(user_message)
         tool_schema = self.tools.to_openai_schema()
 
+        def is_cancelled() -> bool:
+            return cancelled is not None and cancelled()
+
         for _ in range(self.max_tool_iterations):
+            if is_cancelled():
+                yield from self._yield_cancelled()
+                return
+
             response = None
+            partial_text: list[str] = []
+            cancelled_mid_stream = False
             try:
                 for stream_event in self.llm.stream_chat(
                     self._messages_for_llm(),
                     tools=tool_schema,
                 ):
+                    if is_cancelled():
+                        cancelled_mid_stream = True
+                        break
                     if stream_event.reasoning_delta:
                         yield AgentEvent(
                             kind="reasoning_delta",
                             payload={"text": stream_event.reasoning_delta},
                         )
                     if stream_event.delta:
+                        partial_text.append(stream_event.delta)
                         yield AgentEvent(
                             kind="assistant_delta",
                             payload={"text": stream_event.delta},
                         )
                     if stream_event.response is not None:
                         response = stream_event.response
-                if response is None:
+                if not cancelled_mid_stream and response is None:
                     response = self.llm.chat(self._messages_for_llm(), tools=tool_schema)
             except Exception as exc:
                 if _is_context_length_error(exc):
@@ -77,6 +111,13 @@ class Agent:
                     yield AgentEvent(kind="final", payload={"text": text})
                     return
                 raise
+
+            if cancelled_mid_stream:
+                # Stopped before a response landed; keep whatever streamed so the
+                # bubble (and the saved turn) shows the partial answer + note.
+                yield from self._yield_cancelled("".join(partial_text))
+                return
+
             yield AgentEvent(kind="llm_response", payload={"text": response.text})
 
             self.conversation.add_assistant(
@@ -89,7 +130,20 @@ class Agent:
                 yield AgentEvent(kind="final", payload={"text": response.text})
                 return
 
-            for call in response.tool_calls:
+            for index, call in enumerate(response.tool_calls):
+                if is_cancelled():
+                    # Answer every still-pending call so the assistant(tool_calls)
+                    # message above keeps a result for each id, then stop. The
+                    # tool_call events for these were never emitted, so the GUI
+                    # has no dangling rows to resolve.
+                    for pending in response.tool_calls[index:]:
+                        self.conversation.add_tool_result(
+                            call_id=pending.id,
+                            name=pending.name,
+                            content=f"ERROR: {_CANCELLED_NOTE}",
+                        )
+                    yield from self._yield_cancelled()
+                    return
                 yield AgentEvent(
                     kind="tool_call",
                     payload={"id": call.id, "name": call.name, "arguments": call.arguments},
@@ -110,6 +164,23 @@ class Agent:
         text = (
             f"工具调用已达到上限（{self.max_tool_iterations} 轮）。"
             "我已停止继续调用工具，避免无限循环；请缩小问题范围或重新发起查询。"
+        )
+        self.conversation.add_assistant(text)
+        yield AgentEvent(kind="final", payload={"text": text})
+
+    def _yield_cancelled(self, partial_text: str = "") -> Iterator[AgentEvent]:
+        """Record a user-interrupted turn and emit its closing ``final`` event.
+
+        Always appends a content-only assistant message (no tool_calls, no
+        reasoning_content — matching the synthetic max-iteration / context-length
+        messages) so the conversation stays a valid user→assistant alternation
+        whatever boundary the cancel hit. Any partial streamed answer is kept
+        above the note so the user doesn't lose what they already saw.
+        """
+        text = (
+            f"{partial_text}\n\n{_CANCELLED_NOTE}"
+            if partial_text.strip()
+            else _CANCELLED_NOTE
         )
         self.conversation.add_assistant(text)
         yield AgentEvent(kind="final", payload={"text": text})
