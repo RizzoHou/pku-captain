@@ -34,6 +34,7 @@ from ..tools import (
     PKU3bCourseTableTool,
     PLibMaterialsTool,
     ReminderTool,
+    TreeholeTool,
     TreeholeUpdatesTool,
 )
 from ..tools.base import ToolRegistry
@@ -199,6 +200,7 @@ def _build_tools(
         registry.register(PKU3bAnnouncementsTool())
         registry.register(PKU3bCourseTableTool())
         registry.register(PLibMaterialsTool())
+        registry.register(TreeholeTool())
         registry.register(TreeholeUpdatesTool())
         registry.register(CalendarReminderTool())
         registry.register(DeanResourcesTool())

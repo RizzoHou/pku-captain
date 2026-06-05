@@ -49,6 +49,7 @@ except ModuleNotFoundError:  # pragma: no cover - covered by graceful runtime er
         pass
 
 
+ClientFactory = Callable[..., Any]
 MonitorFactory = Callable[..., Any]
 
 
@@ -623,6 +624,156 @@ class TreeholeUpdatesTool(Tool):
         )
 
 
+class TreeholeTool(Tool):
+    name: ClassVar[str] = "treehole"
+    description: ClassVar[str] = (
+        "Search PKU Treehole holes by keyword or fetch one hole with its full "
+        "comment history. Use this when the user asks to search treehole content "
+        "or inspect a specific treehole pid."
+    )
+    parameters_schema: ClassVar[dict[str, Any]] = {
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "enum": ["search", "fetch"],
+                "description": "`search` by keyword, or `fetch` one hole by pid.",
+            },
+            "keyword": {
+                "type": "string",
+                "description": "Keyword for `search`.",
+            },
+            "pid": {
+                "type": "string",
+                "description": "Treehole pid for `fetch`.",
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Page size / maximum returned search rows. Default: 10.",
+                "minimum": 1,
+                "maximum": 50,
+                "default": 10,
+            },
+            "all": {
+                "type": "boolean",
+                "description": "For `search`, paginate all results up to the library cap.",
+                "default": False,
+            },
+            "allow_relogin": {
+                "type": "boolean",
+                "description": (
+                    "Allow pku-treehole-cli to re-login once on 401 when credentials exist. "
+                    "Default: false to avoid consuming IAAA attempts from the GUI."
+                ),
+                "default": False,
+            },
+        },
+        "required": ["action"],
+        "additionalProperties": False,
+    }
+
+    def __init__(
+        self,
+        *,
+        secrets_dir: str | Path | None = None,
+        client_factory: ClientFactory | None = None,
+    ) -> None:
+        base = _REPO_ROOT / "secrets" / "treehole"
+        self.secrets_dir = Path(secrets_dir) if secrets_dir is not None else base
+        self._client_factory = client_factory
+
+    def invoke(self, args: dict[str, Any]) -> ToolResult:
+        if build_client is None and self._client_factory is None:
+            return ToolResult(
+                success=False,
+                error=(
+                    "树洞库不可用：未找到 pku-treehole-cli。请确认工作区包含 "
+                    "pku-treehole-cli，或安装 pku-treehole 包。"
+                ),
+            )
+
+        action = str(args.get("action") or "").strip()
+        if action == "search":
+            return self._search(args)
+        if action == "fetch":
+            return self._fetch(args)
+        return ToolResult(success=False, error="`action` must be `search` or `fetch`")
+
+    def _search(self, args: dict[str, Any]) -> ToolResult:
+        keyword = str(args.get("keyword") or "").strip()
+        if not keyword:
+            return ToolResult(success=False, error="`search` requires a non-empty keyword")
+        limit = _bounded_int(args.get("limit"), default=10, minimum=1, maximum=50)
+        try:
+            client = self._build_client(args)
+            if bool(args.get("all", False)):
+                results = client.search_all(keyword, limit=limit)
+            else:
+                data = client.search(keyword, limit=limit)
+                results = data.get("list") or []
+        except NeedSMSVerification as exc:
+            return _treehole_action_status("needs_sms", f"需要短信验证：{exc}")
+        except AuthError as exc:
+            return _treehole_action_status("auth_required", f"树洞登录状态不可用：{exc}")
+        except requests.exceptions.RequestException as exc:
+            return _treehole_action_status("network_error", f"树洞网络请求失败：{exc}")
+        except TreeholeError as exc:
+            return _treehole_action_status("error", f"树洞接口错误：{exc}")
+        except OSError as exc:
+            return _treehole_action_status("error", f"树洞状态文件不可用：{exc}")
+
+        return ToolResult(
+            success=True,
+            data={
+                "status": "ok",
+                "action": "search",
+                "keyword": keyword,
+                "message": f"树洞搜索返回 {len(results)} 条结果",
+                "results": [_hole_to_dict(item) for item in results],
+            },
+        )
+
+    def _fetch(self, args: dict[str, Any]) -> ToolResult:
+        pid = str(args.get("pid") or "").strip().lstrip("#")
+        if not pid:
+            return ToolResult(success=False, error="`fetch` requires a non-empty pid")
+        limit = _bounded_int(args.get("limit"), default=50, minimum=1, maximum=100)
+        try:
+            client = self._build_client(args)
+            hole = client.hole(pid)
+            comments = client.comments_all(pid, limit=limit)
+        except NeedSMSVerification as exc:
+            return _treehole_action_status("needs_sms", f"需要短信验证：{exc}")
+        except AuthError as exc:
+            return _treehole_action_status("auth_required", f"树洞登录状态不可用：{exc}")
+        except requests.exceptions.RequestException as exc:
+            return _treehole_action_status("network_error", f"树洞网络请求失败：{exc}")
+        except TreeholeError as exc:
+            return _treehole_action_status("error", f"树洞接口错误：{exc}")
+        except OSError as exc:
+            return _treehole_action_status("error", f"树洞状态文件不可用：{exc}")
+
+        return ToolResult(
+            success=True,
+            data={
+                "status": "ok",
+                "action": "fetch",
+                "pid": pid,
+                "message": f"树洞 #{pid} 返回 {len(comments)} 条评论",
+                "hole": _hole_to_dict(hole),
+                "comments": [_hole_to_dict(item) for item in comments],
+                "comment_count": len(comments),
+            },
+        )
+
+    def _build_client(self, args: dict[str, Any]) -> Any:
+        factory = self._client_factory or build_client
+        return factory(
+            self.secrets_dir,
+            allow_relogin=bool(args.get("allow_relogin", False)),
+        )
+
+
 def _normalize_holes(value: object) -> set[str] | None:
     if value in (None, "", []):
         return None
@@ -645,6 +796,30 @@ def _status_result(status: str, message: str) -> ToolResult:
             "baseline_only": status == "ok",
         },
     )
+
+
+def _treehole_action_status(status: str, message: str) -> ToolResult:
+    return ToolResult(
+        success=True,
+        data={
+            "status": status,
+            "message": message,
+            "results": [],
+            "comments": [],
+        },
+    )
+
+
+def _bounded_int(value: object, *, default: int, minimum: int, maximum: int) -> int:
+    try:
+        number = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        number = default
+    return max(minimum, min(maximum, number))
+
+
+def _hole_to_dict(item: object) -> dict[str, Any]:
+    return dict(item) if isinstance(item, dict) else {}
 
 
 def _update_to_dict(update: object) -> dict[str, Any]:
