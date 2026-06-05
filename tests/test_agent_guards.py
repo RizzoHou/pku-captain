@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from src.core.agent import Agent
 from src.core.conversation import Conversation
 from src.llm.base import ChatMessage, ChatResponse, LLMProvider, ToolCall
@@ -139,6 +141,16 @@ def test_context_length_api_error_becomes_user_facing_final() -> None:
 
     assert events[-1].kind == "final"
     assert "上下文长度" in events[-1].payload["text"]
+
+
+def test_quota_error_is_not_treated_as_context_length() -> None:
+    # A bare "exceed" marker would mislabel a quota/rate-limit error as an
+    # over-long history; such errors must propagate, not become a final.
+    llm = ScriptedLLM(error=RuntimeError("Error code: 429 - rate limit exceeded"))
+    agent, _tool = _agent(llm)
+
+    with pytest.raises(RuntimeError, match="rate limit exceeded"):
+        list(agent.turn("hi"))
 
 
 def test_max_tool_iterations_returns_chinese_final_message() -> None:

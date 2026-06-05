@@ -268,12 +268,16 @@ def _truncate_text(text: str, max_chars: int) -> str:
 
 
 def _is_context_length_error(exc: Exception) -> bool:
+    # Match context-length signals specifically; a bare "exceed" would also
+    # swallow quota / rate-limit errors ("exceeded your quota") and mislabel
+    # them as an over-long history.
     text = f"{type(exc).__name__}: {exc}".lower()
     markers = (
         "maximum context length",
         "context length",
-        "exceed",
+        "context_length_exceeded",
         "too many tokens",
         "token limit",
+        "reduce the length of the messages",
     )
     return any(marker in text for marker in markers)
