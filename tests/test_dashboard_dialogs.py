@@ -199,6 +199,72 @@ def test_clickable_rows_open_linked_sections(
     ]
 
 
+def test_pku3b_rows_open_resolved_links(
+    app: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    opened: list[str] = []
+    monkeypatch.setattr(
+        dashboard, "_open_external_url", lambda url: opened.append(url) or True
+    )
+
+    todo_row = dashboard._todo_row(
+        {
+            "title": "作业十七",
+            "course_name": "程序设计实习",
+            "deadline_iso": "2099-01-01T10:00:00",
+            "submit_url": "https://course.pku.edu.cn/webapps/assignment/uploadAssignment",
+            "url": "https://course.pku.edu.cn/webapps/blackboard/content/listContent.jsp",
+        }
+    )
+    announcement_card = dashboard.AnnouncementsCard()
+    announcement_button = announcement_card._announcement_row(
+        {
+            "course": "人工智能基础",
+            "title": "复习课通知",
+            "url": "https://course.pku.edu.cn/webapps/blackboard/content/launchLink.jsp",
+        }
+    )
+    fallback_button = announcement_card._announcement_row(
+        {"course": "未知课程", "title": "无链接通知"}
+    )
+    todo_row.show()
+    announcement_button.show()
+    fallback_button.show()
+
+    QTest.mouseClick(todo_row, dashboard.Qt.MouseButton.LeftButton)
+    QTest.mouseClick(announcement_button, dashboard.Qt.MouseButton.LeftButton)
+    QTest.mouseClick(fallback_button, dashboard.Qt.MouseButton.LeftButton)
+
+    assert opened == [
+        "https://course.pku.edu.cn/webapps/assignment/uploadAssignment",
+        "https://course.pku.edu.cn/webapps/blackboard/content/launchLink.jsp",
+        dashboard.PKU3B_WEB_URL,
+    ]
+
+
+def test_dashboard_cards_open_sections_but_buttons_do_not(
+    app: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    opened: list[str] = []
+    refreshed: list[str] = []
+    monkeypatch.setattr(dashboard, "_open_external_url", lambda url: opened.append(url) or True)
+
+    card = dashboard.DeanUpdatesCard()
+    card.refresh_requested.connect(lambda: refreshed.append("refresh"))
+    card.resize(360, 220)
+    card.show()
+
+    QTest.mouseClick(card, dashboard.Qt.MouseButton.LeftButton, pos=card.rect().center())
+    QTest.mouseClick(
+        card._refresh_button,
+        dashboard.Qt.MouseButton.LeftButton,
+        pos=card._refresh_button.rect().center(),
+    )
+
+    assert opened == [dashboard.DEAN_WEB_URL]
+    assert refreshed == ["refresh"]
+
+
 def test_calendar_candidates_filters_and_sorts(app: QApplication) -> None:
     candidates = dashboard._calendar_candidates(
         [

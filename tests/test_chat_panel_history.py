@@ -14,7 +14,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PyQt6")
 
-from PyQt6.QtWidgets import QApplication, QLabel  # noqa: E402
+from PyQt6.QtWidgets import QApplication, QWidget  # noqa: E402
 
 from src.llm.base import ChatMessage, ToolCall  # noqa: E402
 from src.ui.chat_panel import ChatPanel, InlineToolCall  # noqa: E402
@@ -35,9 +35,9 @@ def _flow(panel: ChatPanel) -> list[tuple[str, str]]:
         if isinstance(widget, InlineToolCall):
             entries.append(("tool", widget._name_label.text()))
             continue
-        label = widget.findChild(QLabel, "MessageText")
-        if label is not None:
-            entries.append(("bubble", label.text()))
+        body = widget.findChild(QWidget, "MessageText")
+        if body is not None and hasattr(body, "text"):
+            entries.append(("bubble", body.text()))
     return entries
 
 

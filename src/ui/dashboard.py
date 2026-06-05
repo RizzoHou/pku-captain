@@ -44,6 +44,10 @@ if TYPE_CHECKING:
 
 
 TREEHOLE_WEB_URL = "https://treehole.pku.edu.cn/ch/web/"
+PKU3B_WEB_URL = "https://course.pku.edu.cn/"
+DEAN_WEB_URL = "https://dean.pku.edu.cn/"
+PLIB_WEB_URL = "https://pkuhub.cn/"
+LECTURE_WEB_URL = "https://lecture.pku.edu.cn/"
 
 
 class ClickableFrame(QFrame):
@@ -56,6 +60,33 @@ class ClickableFrame(QFrame):
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt callback.
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit()
+        super().mousePressEvent(event)
+
+
+class ExternalLinkCard(QFrame):
+    """Dashboard card that opens an external web entry when its body is clicked."""
+
+    def __init__(self, external_url: str = "") -> None:
+        super().__init__()
+        self._external_url = external_url
+        if external_url:
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def set_external_url(self, url: str) -> None:
+        self._external_url = url
+        self.setCursor(
+            Qt.CursorShape.PointingHandCursor
+            if url
+            else Qt.CursorShape.ArrowCursor
+        )
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt callback.
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and self._external_url
+            and not isinstance(self.childAt(event.position().toPoint()), QPushButton)
+        ):
+            _open_external_url(self._external_url)
         super().mousePressEvent(event)
 
 
@@ -427,7 +458,7 @@ class DashboardPanel(QWidget):
         KnowledgeSearchDialog(tool, self).exec()
 
 
-class DashboardCard(QFrame):
+class DashboardCard(ExternalLinkCard):
     """Small fixed-purpose dashboard card."""
 
     def __init__(self, title: str, body: str) -> None:
@@ -460,7 +491,7 @@ class DashboardCard(QFrame):
         self._body_label.setStyleSheet(f"color: {colors.get(state, colors['data'])};")
 
 
-class AnnouncementsCard(QFrame):
+class AnnouncementsCard(ExternalLinkCard):
     """Dashboard card for course announcements."""
 
     detail_requested = pyqtSignal(str)
@@ -468,7 +499,7 @@ class AnnouncementsCard(QFrame):
     _COLLAPSED_LIMIT = 4
 
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__(PKU3B_WEB_URL)
         self.setObjectName("DashboardCard")
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
@@ -561,11 +592,9 @@ class AnnouncementsCard(QFrame):
         title = str(item.get("title") or "未命名通知")
         button = QPushButton(f"{course}\n{title}")
         button.setObjectName("ListRowButton")
-        button.setToolTip("点击查看完整公告")
-        announcement_id = str(item.get("id") or "")
-        button.clicked.connect(
-            lambda _checked=False, value=announcement_id: self.detail_requested.emit(value)
-        )
+        url = _pku3b_item_url(item, prefer_submit=False)
+        button.setToolTip("点击在 Safari 打开课程通知页")
+        button.clicked.connect(lambda _checked=False, target=url: _open_external_url(target))
         return button
 
     def _toggle_expanded(self) -> None:
@@ -581,7 +610,7 @@ class AnnouncementsCard(QFrame):
                 widget.deleteLater()
 
 
-class TreeholeMessagesCard(QFrame):
+class TreeholeMessagesCard(ExternalLinkCard):
     """Dashboard card for PKU Treehole updates."""
 
     view_requested = pyqtSignal()
@@ -589,7 +618,7 @@ class TreeholeMessagesCard(QFrame):
     _COLLAPSED_LIMIT = 3
 
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__(TREEHOLE_WEB_URL)
         self.setObjectName("DashboardCard")
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
@@ -676,14 +705,14 @@ class TreeholeMessagesCard(QFrame):
                 widget.deleteLater()
 
 
-class DeanUpdatesCard(QFrame):
+class DeanUpdatesCard(ExternalLinkCard):
     """Dashboard card for newly surfaced Dean's Office public resources."""
 
     refresh_requested = pyqtSignal()
     _COLLAPSED_LIMIT = 4
 
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__(DEAN_WEB_URL)
         self.setObjectName("DashboardCard")
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
@@ -760,7 +789,7 @@ class DeanUpdatesCard(QFrame):
                 widget.deleteLater()
 
 
-class PLibMaterialsCard(QFrame):
+class PLibMaterialsCard(ExternalLinkCard):
     """Dashboard card for P-Lib course materials."""
 
     login_requested = pyqtSignal()
@@ -768,7 +797,7 @@ class PLibMaterialsCard(QFrame):
     refresh_requested = pyqtSignal()
 
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__(PLIB_WEB_URL)
         self.setObjectName("DashboardCard")
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
@@ -833,7 +862,7 @@ class PLibMaterialsCard(QFrame):
             self._quota_label.setText(f"今日剩余下载次数：{remaining}")
 
 
-class LecturesCard(QFrame):
+class LecturesCard(ExternalLinkCard):
     """Dashboard card for campus lectures."""
 
     detail_requested = pyqtSignal(dict)
@@ -842,7 +871,7 @@ class LecturesCard(QFrame):
     _COLLAPSED_LIMIT = 4
 
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__(LECTURE_WEB_URL)
         self.setObjectName("DashboardCard")
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
@@ -958,14 +987,14 @@ class LecturesCard(QFrame):
                 widget.deleteLater()
 
 
-class AssignmentTodoCard(QFrame):
+class AssignmentTodoCard(ExternalLinkCard):
     """Dashboard card that renders upcoming assignments as a todo list."""
 
     add_to_calendar_requested = pyqtSignal()
     _COLLAPSED_LIMIT = 3
 
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__(PKU3B_WEB_URL)
         self.setObjectName("DashboardCard")
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
@@ -1073,7 +1102,7 @@ class AssignmentTodoCard(QFrame):
                 widget.deleteLater()
 
 
-class ScheduleCard(QFrame):
+class ScheduleCard(ExternalLinkCard):
     """Seven-day calendar-style course table card."""
 
     _DAYS = [
@@ -1087,7 +1116,7 @@ class ScheduleCard(QFrame):
     ]
 
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__(PKU3B_WEB_URL)
         self.setObjectName("DashboardCard")
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setMinimumHeight(300)
@@ -1286,9 +1315,11 @@ class CourseBlockWidget(QFrame):
 
 
 def _todo_row(item: dict[str, object]) -> QFrame:
-    row = QFrame()
+    row = ClickableFrame()
     row.setObjectName("TodoRow")
     row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    row.setToolTip("点击在 Safari 打开作业提交页")
+    row.clicked.connect(lambda: _open_external_url(_pku3b_item_url(item)))
 
     marker = QLabel("")
     marker.setObjectName("TodoMarker")
@@ -1320,6 +1351,15 @@ def _todo_row(item: dict[str, object]) -> QFrame:
     layout.addLayout(text_layout, 1)
     layout.addWidget(deadline, 0)
     return row
+
+
+def _pku3b_item_url(item: dict[str, object], *, prefer_submit: bool = True) -> str:
+    keys = ("submit_url", "url") if prefer_submit else ("url", "submit_url")
+    for key in keys:
+        value = item.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return PKU3B_WEB_URL
 
 
 def _treehole_row(item: dict[str, object]) -> QFrame:

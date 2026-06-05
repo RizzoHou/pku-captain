@@ -9,6 +9,7 @@ description = "Desktop AI assistant for PKU students."
 requires-python = ">=3.11"
 dependencies = [
     "PyQt6>=6.6",
+    "PyQt6-WebEngine>=6.6",
     "requests>=2.31",
     "numpy>=1.26",
 ]

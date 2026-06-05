@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import html
+import os
 import re
 from typing import Any
 
-from PyQt6.QtCore import Qt, pyqtSignal
+os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--no-sandbox --disable-gpu")
+os.environ.setdefault("QTWEBENGINE_DISABLE_SANDBOX", "1")
+
+from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QFontMetrics, QKeyEvent, QTextCursor
+from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
+from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -22,7 +28,10 @@ from PyQt6.QtWidgets import (
 
 from ..llm.base import ChatMessage
 from ..tools.base import ToolResult
+from .dashboard import _open_external_url
 from .tool_trace_panel import _format_tool_result, _to_json
+
+_MATHJAX_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"
 
 
 class ChatPanel(QWidget):
@@ -35,8 +44,8 @@ class ChatPanel(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.setObjectName("ChatPanel")
-        self.setMinimumWidth(520)
-        self._streaming_bubble: QLabel | None = None
+        self.setMinimumWidth(360)
+        self._streaming_bubble: MessageBodyWidget | None = None
         self._streaming_text = ""
         self._tool_rows: dict[str, InlineToolCall] = {}
         # Chain-of-thought ("thinking") display, off by default. When off we
@@ -108,6 +117,10 @@ class ChatPanel(QWidget):
         layout.addWidget(scroll, 1)
         layout.addLayout(input_row)
 
+    def resizeEvent(self, event) -> None:  # noqa: ANN001,N802 - Qt callback.
+        super().resizeEvent(event)
+        self._resize_flow_widgets()
+
     def set_busy(self, busy: bool) -> None:
         """Disable input while a turn is running."""
         self._input.setEnabled(not busy)
@@ -126,14 +139,16 @@ class ChatPanel(QWidget):
         self._finish_thinking()
         if self._streaming_bubble is not None:
             self._streaming_text = text or self._streaming_text or "（空回复）"
-            self._streaming_bubble.setText(
-                _message_html(self._streaming_text, "assistant")
+            self._streaming_bubble = self._finalize_message_body(
+                self._streaming_bubble,
+                self._streaming_text,
+                "assistant",
             )
             self._streaming_bubble = None
             self._streaming_text = ""
             self._scroll.verticalScrollBar().setValue(self._scroll.verticalScrollBar().maximum())
             return
-        self._add_message("PKU Captain", text or "（空回复）", "assistant")
+        self._add_message("PKU Captain", text or "（空回复）", "assistant", finalized=True)
 
     def append_assistant_delta(self, text: str) -> None:
         if not text:
@@ -146,11 +161,10 @@ class ChatPanel(QWidget):
                 "PKU Captain",
                 "正在生成...",
                 "assistant",
+                finalized=False,
             )
         self._streaming_text += text
-        self._streaming_bubble.setText(
-            _message_html(self._streaming_text, "assistant")
-        )
+        _set_message_body_text(self._streaming_bubble, self._streaming_text, "assistant")
         self._scroll.verticalScrollBar().setValue(self._scroll.verticalScrollBar().maximum())
 
     def append_reasoning_delta(self, text: str) -> None:
@@ -243,8 +257,10 @@ class ChatPanel(QWidget):
         self._finish_thinking()
         if self._streaming_bubble is None:
             return
-        self._streaming_bubble.setText(
-            _message_html(self._streaming_text or empty_fallback, "assistant")
+        self._streaming_bubble = self._finalize_message_body(
+            self._streaming_bubble,
+            self._streaming_text or empty_fallback,
+            "assistant",
         )
         self._streaming_bubble = None
         self._streaming_text = ""
@@ -328,29 +344,31 @@ class ChatPanel(QWidget):
         self._input.clear()
         self.send_requested.emit(text)
 
-    def _add_message(self, author: str, text: str, role: str) -> QLabel:
+    def _add_message(
+        self,
+        author: str,
+        text: str,
+        role: str,
+        *,
+        finalized: bool = True,
+    ) -> MessageBodyWidget:
         bubble = QFrame()
         bubble.setObjectName("MessageBubble")
         bubble.setProperty("messageRole", role)
-        bubble.setMaximumWidth(720 if role == "assistant" else 440)
+        bubble.setMaximumWidth(self._message_bubble_max_width(role))
         bubble.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
         author_label = QLabel(author)
         author_label.setObjectName("MessageAuthor")
 
-        body_label = QLabel()
-        body_label.setObjectName("MessageText")
-        body_label.setTextFormat(body_label.textFormat().RichText)
-        body_label.setWordWrap(True)
-        body_label.setOpenExternalLinks(True)
-        body_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-        body_label.setText(_message_html(text, role))
+        body_widget = _message_body_widget(role, text=text, finalized=finalized)
+        _set_message_body_text(body_widget, text, role)
 
         bubble_layout = QVBoxLayout(bubble)
         bubble_layout.setContentsMargins(10, 8, 10, 8)
         bubble_layout.setSpacing(4)
         bubble_layout.addWidget(author_label)
-        bubble_layout.addWidget(body_label)
+        bubble_layout.addWidget(body_widget)
 
         row = QHBoxLayout()
         if role == "user":
@@ -363,11 +381,321 @@ class ChatPanel(QWidget):
         row_host = QWidget()
         row_host.setLayout(row)
         self._insert_flow_widget(row_host)
-        return body_label
+        return body_widget
+
+    def _finalize_message_body(
+        self,
+        body: MessageBodyWidget,
+        text: str,
+        role: str,
+    ) -> MessageBodyWidget:
+        if role == "assistant" and _should_use_math_view(text) and not isinstance(
+            body, MathMessageView
+        ):
+            replacement = MathMessageView()
+            _set_message_body_text(replacement, text, role)
+            _replace_message_body(body, replacement)
+            self._resize_flow_widgets()
+            return replacement
+        _set_message_body_text(body, text, role)
+        return body
 
     def _insert_flow_widget(self, widget: QWidget) -> None:
         self._message_layout.insertWidget(self._message_layout.count() - 1, widget)
+        self._resize_flow_widgets()
         self._scroll.verticalScrollBar().setValue(self._scroll.verticalScrollBar().maximum())
+
+    def _resize_flow_widgets(self) -> None:
+        assistant_width = self._message_bubble_max_width("assistant")
+        user_width = self._message_bubble_max_width("user")
+        for bubble in self.findChildren(QFrame, "MessageBubble"):
+            role = str(bubble.property("messageRole") or "assistant")
+            bubble.setMaximumWidth(user_width if role == "user" else assistant_width)
+        for tool_row in self.findChildren(InlineToolCall):
+            tool_row.setMaximumWidth(assistant_width)
+        for thinking_row in self.findChildren(InlineThinking):
+            thinking_row.set_available_width(assistant_width)
+
+    def _message_bubble_max_width(self, role: str) -> int:
+        viewport_width = (
+            self._scroll.viewport().width()
+            if hasattr(self, "_scroll")
+            else self.width()
+        )
+        available = max(260, viewport_width - 28)
+        if role == "user":
+            return max(240, min(440, int(available * 0.72)))
+        return max(260, min(720, int(available * 0.9)))
+
+
+class ExternalLinkPage(QWebEnginePage):
+    """Intercept links from the embedded chat renderer and open them in Safari."""
+
+    def acceptNavigationRequest(  # noqa: N802 - Qt callback.
+        self,
+        url: QUrl,
+        nav_type: QWebEnginePage.NavigationType,
+        is_main_frame: bool,
+    ) -> bool:
+        if nav_type == QWebEnginePage.NavigationType.NavigationTypeLinkClicked:
+            _open_external_url(url.toString())
+            return False
+        return super().acceptNavigationRequest(url, nav_type, is_main_frame)
+
+
+class MathMessageView(QWebEngineView):
+    """Assistant-message renderer backed by WebEngine + MathJax."""
+
+    _MIN_HEIGHT = 24
+    _MAX_HEIGHT = 20_000
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setObjectName("MessageText")
+        self.setPage(ExternalLinkPage(self))
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setMinimumHeight(self._MIN_HEIGHT)
+        self.setFixedHeight(self._MIN_HEIGHT)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
+        self.settings().setAttribute(
+            QWebEngineSettings.WebAttribute.ShowScrollBars,
+            False,
+        )
+        self.loadFinished.connect(lambda _ok: self._schedule_height_syncs())
+        self._plain_text = ""
+        self._estimated_height = self._MIN_HEIGHT
+
+    def setText(self, text: str) -> None:  # noqa: N802 - QLabel-compatible API.
+        self._plain_text = text
+        self._estimated_height = _estimate_message_html_height(text)
+        self.setFixedHeight(self._estimated_height)
+        self.updateGeometry()
+        self.setHtml(_mathjax_document(text), QUrl("about:blank"))
+
+    def text(self) -> str:
+        return self._plain_text
+
+    def _schedule_height_syncs(self) -> None:
+        for delay in (0, 50, 150, 350, 800):
+            QTimer.singleShot(delay, self._sync_height)
+
+    def _sync_height(self) -> None:
+        script = """
+            (() => {
+                const height = () => {
+                    const bodyTop = document.body.getBoundingClientRect().top;
+                    const childBottom = Array.from(document.body.children).reduce(
+                        (bottom, element) => Math.max(
+                            bottom,
+                            element.getBoundingClientRect().bottom - bodyTop
+                        ),
+                        0
+                    );
+                    return Math.ceil(Math.max(childBottom, 1));
+                };
+                const result = (ready) => ({height: height(), ready});
+                if (window.MathJax) {
+                    const ready = MathJax.startup && MathJax.startup.promise
+                        ? MathJax.startup.promise
+                        : Promise.resolve();
+                    return ready
+                        .then(() => MathJax.typesetPromise ? MathJax.typesetPromise() : null)
+                        .then(() => result(true))
+                        .catch(() => result(false));
+                }
+                return result(true);
+            })();
+        """
+        self.page().runJavaScript(script, self._apply_content_height)
+
+    def _apply_content_height(self, value: object) -> None:
+        try:
+            if isinstance(value, dict):
+                height = int(float(value.get("height", self._MIN_HEIGHT)))
+                ready = bool(value.get("ready", False))
+            else:
+                height = int(float(value))
+                ready = False
+        except (TypeError, ValueError):
+            height = self._MIN_HEIGHT
+            ready = False
+        next_height = max(self._MIN_HEIGHT, min(self._MAX_HEIGHT, height + 2))
+        # Before MathJax/fonts settle, WebEngine can report a one-line height.
+        # Keep the temporary estimate only until the browser reports a ready
+        # layout; afterwards allow shrinking to remove extra whitespace.
+        if not ready:
+            next_height = max(next_height, self._estimated_height)
+        if self.height() != next_height:
+            self.setFixedHeight(next_height)
+            self.updateGeometry()
+            parent = self.parentWidget()
+            if parent is not None:
+                parent.updateGeometry()
+                grandparent = parent.parentWidget()
+                if grandparent is not None:
+                    grandparent.updateGeometry()
+
+
+MessageBodyWidget = QLabel | MathMessageView
+
+
+def _message_body_widget(
+    role: str,
+    *,
+    text: str = "",
+    finalized: bool = True,
+) -> MessageBodyWidget:
+    if role == "assistant" and finalized and _should_use_math_view(text):
+        return MathMessageView()
+    label = QLabel()
+    label.setObjectName("MessageText")
+    label.setTextFormat(label.textFormat().RichText)
+    label.setWordWrap(True)
+    label.setOpenExternalLinks(False)
+    label.linkActivated.connect(_open_external_url)
+    label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+    return label
+
+
+def _estimate_message_html_height(body: str) -> int:
+    """Conservative pre-layout height for MathJax messages.
+
+    WebEngine's first scrollHeight can be too small while MathJax is still
+    resolving fonts. This estimate keeps the Qt widget tall enough until the
+    browser-side measurement catches up.
+    """
+    block_breaks = len(
+        re.findall(r"</(?:div|li|tr|p|pre|h[1-6])>|<br\b", body, flags=re.IGNORECASE)
+    )
+    text = re.sub(r"<[^>]+>", "\n", body)
+    text = html.unescape(text)
+    text_lines = [line for line in text.splitlines() if line.strip()]
+    visual_lines = max(1, len(text_lines), block_breaks)
+    math_blocks = body.count("class='math-block'") + body.count('class="math-block"')
+    table_rows = len(re.findall(r"<tr\b", body, flags=re.IGNORECASE))
+    return min(
+        MathMessageView._MAX_HEIGHT,
+        max(
+            MathMessageView._MIN_HEIGHT,
+            4 + visual_lines * 16 + math_blocks * 14 + table_rows * 6,
+        ),
+    )
+
+
+def _set_message_body_text(body: MessageBodyWidget, text: str, role: str) -> None:
+    mathjax = isinstance(body, MathMessageView)
+    body.setText(_message_html(text, role, mathjax=mathjax))
+
+
+def _replace_message_body(old: MessageBodyWidget, new: MessageBodyWidget) -> None:
+    parent = old.parentWidget()
+    layout = parent.layout() if parent is not None else None
+    if layout is None:
+        old.setParent(None)
+        old.deleteLater()
+        return
+    index = layout.indexOf(old)
+    if index < 0:
+        old.setParent(None)
+        old.deleteLater()
+        return
+    layout.removeWidget(old)
+    old.setParent(None)
+    old.deleteLater()
+    layout.insertWidget(index, new)
+
+
+def _should_use_math_view(text: str) -> bool:
+    return _webengine_enabled() and _contains_latex(text)
+
+
+def _contains_latex(text: str) -> bool:
+    blocks = re.split(r"(```.*?```|`[^`]*`)", text, flags=re.DOTALL)
+    for block in blocks:
+        if not block or block.startswith("`"):
+            continue
+        if re.search(r"\\\(.+?\\\)|\\\[.+?\\\]", block, flags=re.DOTALL):
+            return True
+        if re.search(r"(?<!\\)\$\$(.+?)(?<!\\)\$\$", block, flags=re.DOTALL):
+            return True
+        if re.search(r"(?<!\\)\$(?!\$).+?(?<!\\)\$", block, flags=re.DOTALL):
+            return True
+        if re.search(r"\\(frac|sum|int|sqrt|lim|begin|alpha|beta|gamma|theta|pi)\b", block):
+            return True
+    return False
+
+
+def _webengine_enabled() -> bool:
+    return (
+        os.environ.get("PKU_CAPTAIN_DISABLE_WEBENGINE") != "1"
+        and os.environ.get("QT_QPA_PLATFORM") != "offscreen"
+    )
+
+
+def _mathjax_document(body: str) -> str:
+    """Wrap rendered message HTML in a MathJax-enabled document."""
+    return f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script>
+    window.MathJax = {{
+      tex: {{
+        inlineMath: [['\\\\(', '\\\\)'], ['$', '$']],
+        displayMath: [['\\\\[', '\\\\]'], ['$$', '$$']],
+        processEscapes: true
+      }},
+      chtml: {{
+        scale: 1,
+        matchFontHeight: false
+      }},
+      options: {{
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      }}
+    }};
+  </script>
+  <script async src="{_MATHJAX_SCRIPT_URL}"></script>
+  <style>
+    html, body {{
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: auto;
+      min-height: 0;
+      background: transparent;
+      color: #1f2328;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 13px;
+      line-height: 1.35;
+      overflow: visible;
+    }}
+    a {{
+      color: #8c0000;
+      text-decoration: underline;
+    }}
+    pre {{
+      font-family: Menlo, Consolas, monospace;
+      font-size: 12px;
+    }}
+    code {{
+      font-family: Menlo, Consolas, monospace;
+      font-size: 12px;
+    }}
+    table {{
+      max-width: 100%;
+    }}
+    .math-inline {{
+      color: #650000;
+    }}
+    .math-block {{
+      color: #650000;
+      overflow: visible;
+      padding: 4px 0;
+    }}
+  </style>
+</head>
+<body>{body}</body>
+</html>"""
 
 
 def _tool_result_from_content(content: str) -> ToolResult:
@@ -464,7 +792,8 @@ class InlineThinking(QFrame):
         self.setObjectName("InlineThinking")
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
-        self.setMaximumWidth(self._MAX_WIDTH)
+        self._available_width = self._MAX_WIDTH
+        self.setMaximumWidth(self._available_width)
         self._expanded = True
         self._follow = True  # auto-scroll to newest while streaming
         self._wrap_width = self._MAX_WIDTH - self._FRAME_PADDING - self._TEXT_PADDING
@@ -517,6 +846,14 @@ class InlineThinking(QFrame):
         self._saturated = False  # replacement can shrink — always re-measure
         self._sync_size_to_text()
 
+    def set_available_width(self, width: int) -> None:
+        self._available_width = max(260, min(self._MAX_WIDTH, width))
+        self.setMaximumWidth(self._available_width)
+        if self.width() > self._available_width:
+            self.setFixedWidth(self._available_width)
+        self._saturated = False
+        self._sync_size_to_text()
+
     def _sync_size_to_text(self) -> None:
         self._sync_width_to_text()
         self._sync_height_to_text()
@@ -552,7 +889,7 @@ class InlineThinking(QFrame):
             + QFontMetrics(self._toggle_button.font()).horizontalAdvance(self._toggle_button.text())
             + 64
         )
-        width = min(self._MAX_WIDTH, max(content_width, header_width) + self._FRAME_PADDING)
+        width = min(self._available_width, max(content_width, header_width) + self._FRAME_PADDING)
         self.setFixedWidth(width)
         # Text wraps at the body's inner width (frame minus its horizontal
         # chrome). Stash it so height-sync can count wrapped lines synchronously,
@@ -585,14 +922,14 @@ class InlineThinking(QFrame):
         self._body.setFixedHeight(height)
 
 
-def _message_html(text: str, role: str) -> str:
-    body = _render_message_body(text, role)
+def _message_html(text: str, role: str, *, mathjax: bool = True) -> str:
+    body = _render_message_body(text, role, mathjax=mathjax)
     return body
 
 
-def _render_message_body(text: str, role: str) -> str:
+def _render_message_body(text: str, role: str, *, mathjax: bool) -> str:
     if role != "assistant":
-        return html.escape(text).replace("\n", "<br>")
+        return "<br>".join(_linkify_text(line) for line in text.splitlines())
 
     blocks = re.split(r"(```.*?```)", text, flags=re.DOTALL)
     rendered: list[str] = []
@@ -609,11 +946,11 @@ def _render_message_body(text: str, role: str) -> str:
                 f"{html.escape(chr(10).join(lines)).strip()}</pre>"
             )
         else:
-            rendered.append(_render_markdownish_text(block))
+            rendered.append(_render_markdownish_text(block, mathjax=mathjax))
     return "".join(rendered) or "（空回复）"
 
 
-def _render_markdownish_text(text: str) -> str:
+def _render_markdownish_text(text: str, *, mathjax: bool) -> str:
     lines = text.splitlines()
     out: list[str] = []
     in_list = False
@@ -637,7 +974,16 @@ def _render_markdownish_text(text: str) -> str:
             while index < len(lines) and _looks_like_table_row(lines[index].strip()):
                 table_lines.append(lines[index].strip())
                 index += 1
-            out.append(_table_html(table_lines))
+            out.append(_table_html(table_lines, mathjax=mathjax))
+            continue
+        block_formula = _collect_block_formula(lines, index)
+        if block_formula is not None:
+            if in_list:
+                out.append("</ul>")
+                in_list = False
+            formula, next_index = block_formula
+            out.append(_latex_block_html(formula, mathjax=mathjax))
+            index = next_index
             continue
         if stripped in {"---", "***", "___"}:
             if in_list:
@@ -653,41 +999,104 @@ def _render_markdownish_text(text: str) -> str:
             if not in_list:
                 out.append("<ul style='margin: 4px 0 4px 18px; padding: 0;'>")
                 in_list = True
-            out.append(f"<li>{_inline_markdown(stripped[2:])}</li>")
+            out.append(f"<li>{_inline_markdown(stripped[2:], mathjax=mathjax)}</li>")
             index += 1
             continue
         if in_list:
             out.append("</ul>")
             in_list = False
         if stripped.startswith("### "):
-            out.append(_heading_html(stripped[4:], weight=700))
+            out.append(_heading_html(stripped[4:], weight=700, mathjax=mathjax))
         elif stripped.startswith("## "):
-            out.append(_heading_html(stripped[3:], weight=800))
+            out.append(_heading_html(stripped[3:], weight=800, mathjax=mathjax))
         elif stripped.startswith("# "):
-            out.append(_heading_html(stripped[2:], weight=800))
+            out.append(_heading_html(stripped[2:], weight=800, mathjax=mathjax))
         else:
-            out.append(f"<div style='margin: 3px 0;'>{_inline_markdown(stripped)}</div>")
+            out.append(
+                f"<div style='margin: 3px 0;'>{_inline_markdown(stripped, mathjax=mathjax)}</div>"
+            )
         index += 1
     if in_list:
         out.append("</ul>")
     return "".join(out)
 
 
-def _inline_markdown(text: str) -> str:
-    escaped = html.escape(text)
-    escaped = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", escaped)
-    escaped = re.sub(
-        r"`([^`]+)`",
-        r"<code style='background: #fffaf7; padding: 1px 4px; border-radius: 4px;'>\1</code>",
-        escaped,
-    )
-    return escaped
+def _inline_markdown(text: str, *, mathjax: bool) -> str:
+    parts = re.split(r"(`[^`]+`)", text)
+    rendered: list[str] = []
+    for part in parts:
+        if not part:
+            continue
+        if part.startswith("`") and part.endswith("`") and len(part) >= 2:
+            rendered.append(
+                "<code style='background: #fffaf7; padding: 1px 4px; border-radius: 4px;'>"
+                f"{html.escape(part[1:-1])}</code>"
+            )
+            continue
+        rendered.append(_inline_markdown_no_code(part, mathjax=mathjax))
+    return "".join(rendered)
 
 
-def _heading_html(text: str, *, weight: int) -> str:
+def _inline_markdown_no_code(text: str, *, mathjax: bool) -> str:
+    pattern = re.compile(r"\\\((.+?)\\\)|(?<!\\)\$(?!\$)(.+?)(?<!\\)\$")
+    rendered: list[str] = []
+    cursor = 0
+    for match in pattern.finditer(text):
+        rendered.append(_inline_text_without_latex(text[cursor : match.start()]))
+        rendered.append(
+            _latex_inline_html(match.group(1) or match.group(2) or "", mathjax=mathjax)
+        )
+        cursor = match.end()
+    rendered.append(_inline_text_without_latex(text[cursor:]))
+    return "".join(rendered)
+
+
+def _inline_text_without_latex(text: str) -> str:
+    linked = _linkify_text(text)
+    linked = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", linked)
+    return linked
+
+
+def _linkify_text(text: str) -> str:
+    """Render Markdown links and bare URLs as safe HTML anchors."""
+    pattern = re.compile(r"\[([^\]]+)\]\((https?://[^)\s]+)\)|(https?://[^\s<>()]+)")
+    rendered: list[str] = []
+    cursor = 0
+    for match in pattern.finditer(text):
+        rendered.append(html.escape(text[cursor : match.start()]))
+        label = match.group(1)
+        markdown_url = match.group(2)
+        bare_url = match.group(3)
+        url = markdown_url or bare_url or ""
+        if bare_url:
+            url, trailing = _split_url_trailing_punctuation(url)
+            rendered.append(_anchor_html(url, url))
+            rendered.append(html.escape(trailing))
+        else:
+            rendered.append(_anchor_html(url, label or url))
+        cursor = match.end()
+    rendered.append(html.escape(text[cursor:]))
+    return "".join(rendered)
+
+
+def _split_url_trailing_punctuation(url: str) -> tuple[str, str]:
+    trailing = ""
+    while url and url[-1] in ".,;:!?，。；：！？":
+        trailing = url[-1] + trailing
+        url = url[:-1]
+    return url, trailing
+
+
+def _anchor_html(url: str, label: str) -> str:
+    safe_url = html.escape(url, quote=True)
+    safe_label = html.escape(label)
+    return f"<a href='{safe_url}'>{safe_label}</a>"
+
+
+def _heading_html(text: str, *, weight: int, mathjax: bool) -> str:
     return (
         f"<div style='font-weight: {weight}; margin-top: 8px;'>"
-        f"{_inline_markdown(text)}</div>"
+        f"{_inline_markdown(text, mathjax=mathjax)}</div>"
     )
 
 
@@ -715,7 +1124,7 @@ def _split_table_row(line: str) -> list[str]:
     return [cell.strip() for cell in line.strip().strip("|").split("|")]
 
 
-def _table_html(lines: list[str]) -> str:
+def _table_html(lines: list[str], *, mathjax: bool) -> str:
     headers = _split_table_row(lines[0])
     rows = [_split_table_row(line) for line in lines[2:]]
     column_count = max([len(headers), *(len(row) for row in rows)] or [0])
@@ -725,14 +1134,14 @@ def _table_html(lines: list[str]) -> str:
     header_cells = "".join(
         "<th style='background: #fff6ed; color: #650000; "
         "font-weight: 700; padding: 5px 7px; border: 1px solid #eadbd5;'>"
-        f"{_inline_markdown(_cell_at(headers, column))}</th>"
+        f"{_inline_markdown(_cell_at(headers, column), mathjax=mathjax)}</th>"
         for column in range(column_count)
     )
     body_rows = []
     for row in rows:
         cells = "".join(
             "<td style='padding: 5px 7px; border: 1px solid #eadbd5;'>"
-            f"{_inline_markdown(_cell_at(row, column))}</td>"
+            f"{_inline_markdown(_cell_at(row, column), mathjax=mathjax)}</td>"
             for column in range(column_count)
         )
         body_rows.append(f"<tr>{cells}</tr>")
@@ -741,6 +1150,92 @@ def _table_html(lines: list[str]) -> str:
         "style='border-collapse: collapse; margin: 8px 0;'>"
         f"<tr>{header_cells}</tr>{''.join(body_rows)}</table>"
     )
+
+
+def _collect_block_formula(lines: list[str], index: int) -> tuple[str, int] | None:
+    stripped = lines[index].strip()
+    if stripped.startswith("$$"):
+        return _collect_delimited_formula(lines, index, "$$", "$$")
+    if stripped.startswith("\\["):
+        return _collect_delimited_formula(lines, index, "\\[", "\\]")
+    return None
+
+
+def _collect_delimited_formula(
+    lines: list[str],
+    index: int,
+    opener: str,
+    closer: str,
+) -> tuple[str, int]:
+    first = lines[index].strip()
+    remainder = first[len(opener) :]
+    if remainder.endswith(closer) and len(remainder) > len(closer):
+        return remainder[: -len(closer)].strip(), index + 1
+
+    formula_lines = [remainder] if remainder else []
+    index += 1
+    while index < len(lines):
+        line = lines[index]
+        stripped = line.strip()
+        if stripped.endswith(closer):
+            formula_lines.append(stripped[: -len(closer)])
+            return "\n".join(formula_lines).strip(), index + 1
+        formula_lines.append(line)
+        index += 1
+    return "\n".join(formula_lines).strip(), index
+
+
+def _latex_inline_html(formula: str, *, mathjax: bool) -> str:
+    if mathjax:
+        return f"<span class='math-inline'>\\({_latex_source_text(formula)}\\)</span>"
+    return (
+        "<span style='font-family: Menlo, Consolas, monospace; "
+        "background: #fffaf7; border: 1px solid #eadbd5; border-radius: 4px; "
+        "padding: 0 4px; color: #650000;'>"
+        f"{_latex_display_text(formula)}</span>"
+    )
+
+
+def _latex_block_html(formula: str, *, mathjax: bool) -> str:
+    if mathjax:
+        return f"<div class='math-block'>\\[{_latex_source_text(formula)}\\]</div>"
+    return (
+        "<div style='font-family: Menlo, Consolas, monospace; "
+        "background: #fffaf7; border: 1px solid #eadbd5; border-radius: 6px; "
+        "padding: 8px; margin: 8px 0; color: #650000; text-align: center; "
+        "white-space: pre-wrap;'>"
+        f"{_latex_display_text(formula)}</div>"
+    )
+
+
+def _latex_source_text(formula: str) -> str:
+    return html.escape(formula.strip())
+
+
+def _latex_display_text(formula: str) -> str:
+    text = html.escape(formula.strip())
+    replacements = {
+        r"\times": "×",
+        r"\cdot": "·",
+        r"\leq": "≤",
+        r"\geq": "≥",
+        r"\neq": "≠",
+        r"\approx": "≈",
+        r"\infty": "∞",
+        r"\sum": "∑",
+        r"\int": "∫",
+        r"\alpha": "α",
+        r"\beta": "β",
+        r"\gamma": "γ",
+        r"\delta": "δ",
+        r"\lambda": "λ",
+        r"\mu": "μ",
+        r"\pi": "π",
+        r"\theta": "θ",
+    }
+    for raw, rendered in replacements.items():
+        text = text.replace(html.escape(raw), rendered)
+    return text
 
 
 def _cell_at(cells: list[str], index: int) -> str:

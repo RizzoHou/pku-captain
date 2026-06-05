@@ -22,6 +22,7 @@ from .pku3b import (
     Pku3bTimeoutError,
     run_pku3b,
 )
+from .pku3b_links import enrich_assignments
 
 
 @dataclass
@@ -37,6 +38,9 @@ class Assignment:
     last_attempt: str | None
     descriptions: list[str] = field(default_factory=list)
     attachments: list[dict[str, str]] = field(default_factory=list)
+    url: str | None = None
+    submit_url: str | None = None
+    blackboard_content_id: str | None = None
 
 
 class PKU3bAssignmentsTool(Tool):
@@ -106,10 +110,12 @@ class PKU3bAssignmentsTool(Tool):
                 ),
             )
 
-        assignments = [_record_to_assignment(r) for r in records]
+        assignments = enrich_assignments(
+            [asdict(_record_to_assignment(r)) for r in records]
+        )
         return ToolResult(
             success=True,
-            data={"assignments": [asdict(a) for a in assignments]},
+            data={"assignments": assignments},
         )
 
 
