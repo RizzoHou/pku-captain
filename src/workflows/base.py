@@ -36,6 +36,11 @@ class Workflow(ABC):
         "properties": {},
         "additionalProperties": False,
     }
+    # Whether `build_agent` exposes this workflow to the LLM as a callable
+    # tool (via the WorkflowTool adapter). Real workflows are agent-callable;
+    # offline reference stubs (HelloWorkflow) set this False so they stay out
+    # of the production toolset while still serving the loop and tests.
+    agent_callable: ClassVar[bool] = True
 
     def __init__(self, tools: ToolRegistry) -> None:
         self.tools = tools

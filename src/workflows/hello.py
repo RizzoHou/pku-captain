@@ -16,6 +16,8 @@ from .base import Workflow, WorkflowResult
 class HelloWorkflow(Workflow):
     name: ClassVar[str] = "hello"
     description: ClassVar[str] = "Greet the user with the current time via the clock tool."
+    # Reference/offline stub only — keep it out of the agent's real toolset.
+    agent_callable: ClassVar[bool] = False
 
     def run(self, args: dict[str, Any] | None = None) -> WorkflowResult:
         result = self.tools.get("clock").invoke({})

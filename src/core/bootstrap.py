@@ -310,7 +310,7 @@ def _build_workflows(tools: ToolRegistry) -> WorkflowRegistry:
 def _register_workflow_tools(
     tools: ToolRegistry, workflows: WorkflowRegistry
 ) -> None:
-    """Expose every registered workflow to the agent as a callable Tool.
+    """Expose each agent-callable workflow to the LLM as a callable Tool.
 
     `Agent.turn()` only serializes the ToolRegistry to the LLM, so without
     this a workflow is reachable solely through the GUI workflow button —
@@ -320,8 +320,14 @@ def _register_workflow_tools(
     button path (`WorkflowWorker` over `agent.workflows`) is unaffected, and
     recursion is impossible because workflows invoke tools by explicit name,
     never by a workflow name.
+
+    Workflows that set `agent_callable = False` (offline reference stubs like
+    `HelloWorkflow`) are skipped: they stay in the `WorkflowRegistry` for the
+    loop/tests but never pollute the real agent toolset.
     """
     for workflow in workflows.all():
+        if not workflow.agent_callable:
+            continue
         tools.register(WorkflowTool(workflow))
 
 

@@ -18,9 +18,9 @@ Network tools register **online only** in `bootstrap._build_tools()` because the
 
 `KnowledgeSearchTool` (RAG) is further gated behind `build_agent(enable_knowledge=...)` — **opt-in, default off** — because every `encode()` is a DashScope embedding-API call; off means no embedding requests at startup. The CLI and GUI both expose it via a `--rag` flag (off by default).
 
-`MorningBriefingWorkflow` composes `pku3b_assignments` / `pku3b_announcements` / `lecture` / `clock` into a daily briefing, fetching each via a `ToolRegistry` membership check so an unregistered (offline) or failed tool is noted and skipped, not fatal — `success=False` only when no source is reachable at all.
+`MorningBriefingWorkflow` composes `pku3b_assignments` / `pku3b_announcements` / `lecture` / `clock` into a daily briefing, fetching each via a `ToolRegistry` membership check so an unregistered or failed tool is noted and skipped — `success=False` only when no source is reachable.
 
-**Workflows are agent-callable too, not just GUI-button-driven**: `Agent.turn()` serializes only the `ToolRegistry` to the LLM, so `build_agent` (`_register_workflow_tools`) wraps each `Workflow` in a `WorkflowTool` adapter and registers it into that same registry — workflows then enter `to_openai_schema()` and the model starts one via the normal tool-call loop. GUI 工作流按钮 (`WorkflowWorker`) path unchanged. Recursion is safe **only** because workflows invoke tools by explicit name — don't route adapters through a separate registry.
+**Workflows are agent-callable too, not just GUI-button-driven**: `Agent.turn()` serializes only the `ToolRegistry` to the LLM, so `build_agent` (`_register_workflow_tools`) wraps each `Workflow` in a `WorkflowTool` adapter and registers it into that same registry — workflows then enter `to_openai_schema()` and the model starts one via the normal tool-call loop. GUI 工作流按钮 (`WorkflowWorker`) path unchanged. Recursion is safe **only** because workflows invoke tools by explicit name — don't route adapters through a separate registry. Reference stubs (`HelloWorkflow`) set `agent_callable=False` to stay in the registry but out of the toolset.
 
 The PyQt6 GUI main window is wired through three `QThread`s (`AgentWorker`, `DashboardWorker`, `WorkflowWorker`) per integration contract §2, PKU-red theme in `src/ui/styles.py`.
 
@@ -88,7 +88,7 @@ The GUI defaults to offline so first-time clones don't hit the network. Pass `--
 
 ### Worktrees (`claude --worktree`)
 
-`.worktreeinclude` (gitignored, per-machine) copies only *gitignored* paths git won't carry over — tracked files like `CLAUDE.md` come via git, so listing them is a no-op. It covers `secrets/` (API keys + P-Lib/treehole creds + session) and `.local/` (project-local `pku3b` binary), plus `.claude/*` + `!.claude/worktrees/` so a worktree gets local Claude config (`settings.local.json`) but not the 24 MB worktrees dir — use `.claude/*` not `.claude/`, else git prunes the dir before the `!`.
+`.worktreeinclude` (gitignored, per-machine) copies only *gitignored* paths git won't carry over (tracked files like `CLAUDE.md` come via git). It covers `secrets/` (API keys + P-Lib/treehole creds + session) and `.local/` (`pku3b` binary), plus `.claude/*` + `!.claude/worktrees/` so a worktree gets local Claude config but not the 24 MB worktrees dir — use `.claude/*` not `.claude/`, else git prunes the dir before the `!`.
 
 `.venv/` is **not** copied (~1.2 GB per worktree). Worktrees share the main venv via a symlink — run once inside the worktree (its `.claude/worktrees/<name>/` location puts the repo root three levels up):
 
