@@ -93,6 +93,7 @@ self.thread.start()
 | `llm_response` | `text: str` | 每次 LLM 回复完成后立即触发，包括携带 tool_calls 的中间回复 | 累计或暂存；最终展示由 `final` 决定 |
 | `tool_call` | `id: str`, `name: str`, `arguments: dict` | LLM 请求调用某个工具时 | 在工具调用面板新增一行（"调用中"） |
 | `tool_result` | `id: str`, `name: str`, `result: ToolResult` | 工具执行完毕（成功或失败均会触发） | 用 `id` 匹配上面的行，渲染 `result.data` 或 `result.error` |
+| `context_usage` | `used: int`, `window: int`, `estimated: bool` | 每次 LLM 回复完成、assistant 消息入历史后触发（每个 turn 至少一次，多工具轮次每轮一次） | 刷新对话表头的上下文占用进度条；`used` 是当前会话占用的 token 数（`window` 为模型上下文上限，DeepSeek V4 = 1,000,000），`estimated=True` 表示无 API 用量时的本地估算（标注「约」） |
 | `final` | `text: str` | 整个 turn 结束，`text` 是最终对用户可见的回答 | 在对话面板渲染最终消息（若已用 `assistant_delta` 流式渲染，`final` 用于定型） |
 
 注意点：
@@ -101,6 +102,7 @@ self.thread.start()
 - `llm_response.text` 在中间步骤通常为空（模型只返回 tool_calls）。**不要**把每个 `llm_response` 都贴到对话面板，否则会出现空气泡。建议：仅当 `final` 触发时，用其 `text` 渲染最终回答。
 - `tool_result.result` 是 `ToolResult` 数据类。`result.data` 类型由具体工具决定（`PKU3bAssignmentsTool` 返回结构化记录，`WeatherTool` 返回 dict，`ClockTool` 返回字符串）。GUI 可以先用 `repr()` 或 `json.dumps(default=str)` 打底渲染，需要美化时按 `name` 分发到专用渲染器。
 - token 级流式由 `LLMProvider.stream_chat()` 提供，默认实现是把 `chat()` 的全文一次性包成一个 `ChatStreamEvent`。`DeepSeekProvider.stream_chat()` 走真正的 SSE。`Agent.turn()` 会优先调用 `stream_chat()`，把每段增量以 `assistant_delta` 事件 yield 给 GUI；若 provider 未返回最终 `response`，会回退到 `chat()`。GUI 在收到 `final` 之前应只用 `assistant_delta` 渲染气泡，避免与 `final` 重复。
+- `context_usage` 的 `used` 优先取 API 返回的 `ChatResponse.usage.total_tokens`（DeepSeek 通过流式 `stream_options.include_usage` 与非流式响应都回传 `usage`）；provider 未报告用量时回退到 `src.llm.base.estimate_tokens` 的本地估算（`estimated=True`）。turn 之外刷新进度条（新对话、恢复历史会话、离线启动）用 `Agent.estimate_context_usage()` 取同一份估算。模型上下文上限来自 `LLMProvider.context_window`（DeepSeek=1M，Echo=1M）。GUI 不直接读取 provider 内部，仍只经 `Agent` 取数。
 
 ## 4. 错误契约
 
