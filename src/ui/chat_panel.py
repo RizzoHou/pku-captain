@@ -518,6 +518,14 @@ class InlineThinking(QFrame):
         self._sync_size_to_text()
 
     def _sync_size_to_text(self) -> None:
+        # Force the QSS font (`#InlineThinkingBody { font-size: 11px }`) to
+        # resolve synchronously before measuring. Qt applies a stylesheet font
+        # only at polish time, which for the first thinking window of a session
+        # lands *after* the streaming burst that sized it — so the box was
+        # measured against the larger default font and kept a too-tall height
+        # that no later delta corrected. ensurePolished() is a cheap flag-check
+        # once polished, so the streaming path stays O(delta).
+        self._body.ensurePolished()
         self._sync_width_to_text()
         self._sync_height_to_text()
         self._saturated = (
