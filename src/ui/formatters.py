@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 
@@ -60,6 +60,49 @@ def upcoming_assignments(items: object) -> list[dict[str, Any]]:
     if future:
         return [item for _, item in future] + no_deadline
     return no_deadline + fallback
+
+
+_DEAN_WINDOW_DAYS: dict[str, int] = {"notice": 31}
+_DEAN_DEFAULT_WINDOW_DAYS = 183
+
+
+def split_dean_items(
+    entries: object, now: datetime | None = None
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Split accumulated dean items into ``(recent, history)`` by recency window.
+
+    Notices are kept ~1 month; every other source (校级/上级 rules, downloads,
+    openinfo) ~half a year. The effective date is the item's own ``date`` when
+    parseable, else the ``first_seen`` stamp the inbox records — so date-less
+    rules window by when we first saw them (they fall into history ~6 months
+    later, never lost). Filtering at render time re-evaluates the window against
+    today's clock on every repaint, matching the dashboard-cache invariant. Both
+    lists are newest-first. No item is ever dropped: anything outside its window
+    (or with no usable date) lands in history.
+    """
+    if not isinstance(entries, list):
+        return [], []
+    current = now or datetime.now().astimezone()
+
+    recent: list[tuple[datetime, dict[str, Any]]] = []
+    history: list[tuple[datetime | None, dict[str, Any]]] = []
+    for item in entries:
+        if not isinstance(item, dict):
+            continue
+        when = parse_datetime(item.get("date")) or parse_datetime(item.get("first_seen"))
+        days = _DEAN_WINDOW_DAYS.get(
+            str(item.get("source") or ""), _DEAN_DEFAULT_WINDOW_DAYS
+        )
+        cutoff = current - timedelta(days=days)
+        if when is not None and when >= cutoff:
+            recent.append((when, item))
+        else:
+            history.append((when, item))
+
+    epoch = datetime.min.replace(tzinfo=UTC)
+    recent.sort(key=lambda pair: pair[0], reverse=True)
+    history.sort(key=lambda pair: pair[0] or epoch, reverse=True)
+    return [item for _, item in recent], [item for _, item in history]
 
 
 def parse_datetime(value: object) -> datetime | None:

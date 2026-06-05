@@ -25,6 +25,7 @@ from ..core import (
     reset_conversation,
     restore_conversation,
 )
+from ..tools.dean_updates import DeanInboxStore
 from ..tools.treehole_updates import (
     MIN_NOTIFY_INTERVAL,
     TreeholeHistoryStore,
@@ -111,6 +112,7 @@ class MainWindow(QMainWindow):
             treehole_history=TreeholeHistoryStore(
                 _REPO_ROOT / "data" / "treehole_history.json"
             ),
+            dean_inbox=DeanInboxStore(_REPO_ROOT / "data" / "dean_inbox.json"),
         )
         self._chat_panel = ChatPanel()
 
