@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPlainTextEdit,
+    QProgressBar,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -112,12 +113,24 @@ class ChatPanel(QWidget):
         header_row.addWidget(self._new_chat_button)
         header_row.addWidget(self._history_button)
 
+        # Context-occupation gauge for the current conversation, under the
+        # header it controls. A proactive read-out of how much of the model's
+        # window is used, ahead of the agent's reactive over-length guard.
+        self._context_meter = ContextMeter()
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(12)
         layout.addLayout(header_row)
+        layout.addWidget(self._context_meter)
         layout.addWidget(scroll, 1)
         layout.addLayout(input_row)
+
+    def set_context_usage(
+        self, used: int, window: int, *, estimated: bool = False
+    ) -> None:
+        """Update the context-occupation meter (driven by MainWindow)."""
+        self._context_meter.set_usage(used, window, estimated=estimated)
 
     def set_busy(self, busy: bool) -> None:
         """Disable input while a turn is running.
@@ -624,6 +637,78 @@ class InlineThinking(QFrame):
         chrome = round(2 * self._body.document().documentMargin()) + 4
         height = min(self._MAX_HEIGHT, lines * metrics.lineSpacing() + chrome)
         self._body.setFixedHeight(height)
+
+
+class ContextMeter(QWidget):
+    """Slim gauge of how much of the model's context window is in use.
+
+    A label ("上下文 12.3K / 1M · 1.2%") over a thin progress bar. With a 1M
+    window most chats sit at a low single-digit percent — that is the intended
+    message ("plenty of room"), so the absolute figure carries the meaning and
+    the bar is deliberately linear (no rescaling to look fuller). The chunk
+    colour escalates gold → red → bright-red as the window fills.
+    """
+
+    _WARN_PCT = 75.0
+    _FULL_PCT = 90.0
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setObjectName("ContextMeter")
+        self._label = QLabel("上下文 —")
+        self._label.setObjectName("ContextMeterLabel")
+
+        self._bar = QProgressBar()
+        self._bar.setObjectName("ContextMeterBar")
+        self._bar.setTextVisible(False)
+        self._bar.setFixedHeight(6)
+        # Permille range so a low-single-digit fill is still a visible sliver.
+        self._bar.setRange(0, 1000)
+        self._bar.setValue(0)
+        self._set_level("ok")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(2, 0, 2, 2)
+        layout.setSpacing(3)
+        layout.addWidget(self._label)
+        layout.addWidget(self._bar)
+
+    def set_usage(self, used: int, window: int, *, estimated: bool = False) -> None:
+        used = max(0, int(used))
+        window = max(0, int(window))
+        if window <= 0:
+            self._bar.setValue(0)
+            self._label.setText("上下文 —")
+            self._set_level("ok")
+            return
+        ratio = min(1.0, used / window)
+        self._bar.setValue(round(ratio * 1000))
+        pct = ratio * 100
+        prefix = "约 " if estimated else ""
+        self._label.setText(
+            f"上下文 {prefix}{_fmt_tokens(used)} / {_fmt_tokens(window)} · {pct:.1f}%"
+        )
+        level = "ok" if pct < self._WARN_PCT else ("warn" if pct < self._FULL_PCT else "full")
+        self._set_level(level)
+        kind = "估算" if estimated else "实际"
+        self._bar.setToolTip(
+            f"对话已占用约 {used:,} / {window:,} tokens（{kind}），剩余 {window - used:,}"
+        )
+
+    def _set_level(self, level: str) -> None:
+        if self._bar.property("level") == level:
+            return
+        self._bar.setProperty("level", level)
+        self._bar.style().unpolish(self._bar)
+        self._bar.style().polish(self._bar)
+
+
+def _fmt_tokens(n: int) -> str:
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    if n >= 1_000:
+        return f"{n / 1_000:.1f}K"
+    return str(n)
 
 
 def _message_html(text: str, role: str) -> str:

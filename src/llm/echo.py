@@ -14,6 +14,9 @@ from .base import ChatMessage, ChatResponse, LLMProvider
 
 class EchoLLMProvider(LLMProvider):
     name: ClassVar[str] = "echo"
+    # Mirror the real app's headline model so the offline context meter shows
+    # the same 1M window users see online.
+    context_window: ClassVar[int] = 1_000_000
 
     def chat(
         self,

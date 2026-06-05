@@ -14,7 +14,14 @@ from typing import Any, ClassVar
 
 import requests
 
-from .base import ChatMessage, ChatResponse, ChatStreamEvent, LLMProvider, ToolCall
+from .base import (
+    ChatMessage,
+    ChatResponse,
+    ChatStreamEvent,
+    LLMProvider,
+    TokenUsage,
+    ToolCall,
+)
 
 
 class DeepSeekAPIError(RuntimeError):
@@ -23,6 +30,8 @@ class DeepSeekAPIError(RuntimeError):
 
 class DeepSeekProvider(LLMProvider):
     name: ClassVar[str] = "deepseek"
+    # DeepSeek V4 accepts a 1M-token context window.
+    context_window: ClassVar[int] = 1_000_000
 
     def __init__(
         self,
@@ -67,6 +76,9 @@ class DeepSeekProvider(LLMProvider):
             body["thinking"] = {"type": "disabled"}
         if stream:
             body["stream"] = True
+            # Ask for the trailing usage chunk; without this an SSE stream omits
+            # token accounting entirely (OpenAI-compatible behaviour).
+            body["stream_options"] = {"include_usage": True}
         if tools:
             body["tools"] = tools
             body["tool_choice"] = "auto"
@@ -107,7 +119,10 @@ class DeepSeekProvider(LLMProvider):
             )
             for c in raw_calls
         ]
-        return ChatResponse(text=text, tool_calls=calls, reasoning_content=reasoning)
+        usage = _parse_usage(data.get("usage"))
+        return ChatResponse(
+            text=text, tool_calls=calls, reasoning_content=reasoning, usage=usage
+        )
 
     def stream_chat(
         self,
@@ -134,6 +149,7 @@ class DeepSeekProvider(LLMProvider):
             text_parts: list[str] = []
             reasoning_parts: list[str] = []
             tool_calls: dict[int, dict[str, Any]] = {}
+            usage_raw: dict[str, Any] | None = None
             for raw_line in resp.iter_lines(decode_unicode=True):
                 if not raw_line or not raw_line.startswith("data:"):
                     continue
@@ -141,6 +157,10 @@ class DeepSeekProvider(LLMProvider):
                 if payload == "[DONE]":
                     break
                 event = json.loads(payload)
+                # The trailing usage chunk carries `usage` with empty `choices`;
+                # read it before the guard below skips choice-less chunks.
+                if event.get("usage"):
+                    usage_raw = event["usage"]
                 choices = event.get("choices") or []
                 if not choices:
                     continue
@@ -161,6 +181,7 @@ class DeepSeekProvider(LLMProvider):
                 text="".join(text_parts),
                 tool_calls=_tool_calls_from_stream(tool_calls),
                 reasoning_content="".join(reasoning_parts) or None,
+                usage=_parse_usage(usage_raw),
             )
         )
 
@@ -193,6 +214,18 @@ def _to_api_message(m: ChatMessage) -> dict[str, Any]:
     if m.name:
         out["name"] = m.name
     return out
+
+
+def _parse_usage(raw: dict[str, Any] | None) -> TokenUsage | None:
+    if not raw:
+        return None
+    prompt = int(raw.get("prompt_tokens", 0) or 0)
+    completion = int(raw.get("completion_tokens", 0) or 0)
+    total = raw.get("total_tokens")
+    total = int(total) if total is not None else prompt + completion
+    return TokenUsage(
+        prompt_tokens=prompt, completion_tokens=completion, total_tokens=total
+    )
 
 
 def _parse_arguments(raw: str) -> dict[str, Any]:

@@ -217,6 +217,7 @@ class MainWindow(QMainWindow):
         self._seed_dashboard_from_cache()
         self._start_refresh([], silent=True)
         self._reconfigure_treehole_sync()
+        self._refresh_context_meter()
         self.statusBar().showMessage(f"{mode_label} · 就绪")
 
     def _send_message(self, text: str) -> None:
@@ -265,8 +266,26 @@ class MainWindow(QMainWindow):
             self._chat_panel.append_reasoning_delta(str(event.payload.get("text") or ""))
         elif event.kind == "assistant_delta":
             self._chat_panel.append_assistant_delta(str(event.payload.get("text") or ""))
+        elif event.kind == "context_usage":
+            self._refresh_context_meter(event.payload)
         elif event.kind == "final":
             self._chat_panel.add_assistant_message(str(event.payload.get("text") or ""))
+
+    def _refresh_context_meter(self, payload: dict | None = None) -> None:
+        """Update the chat context-usage meter.
+
+        With a `payload` (live `context_usage` event) shows the API token count;
+        without one (startup, new chat, restored session) shows the agent's
+        estimate of the current conversation. Reading the conversation is
+        race-free here — callers are all on the GUI thread with no turn running.
+        """
+        if payload is None:
+            payload = self._agent.estimate_context_usage()
+        self._chat_panel.set_context_usage(
+            int(payload.get("used", 0)),
+            int(payload.get("window", 0)),
+            estimated=bool(payload.get("estimated", False)),
+        )
 
     def _on_agent_error(self, message: str) -> None:
         self._chat_panel.add_system_message(message)
@@ -346,6 +365,7 @@ class MainWindow(QMainWindow):
         self._persist_current_session()
         reset_conversation(self._agent)
         self._chat_panel.clear()
+        self._refresh_context_meter()
         self._current_session_id = self._session_store.new_id()
         self._current_title = None
         self._session_created_at = _now_iso()
@@ -368,6 +388,7 @@ class MainWindow(QMainWindow):
             return
         restore_conversation(self._agent, record.get("messages", []))
         self._chat_panel.load_history(self._agent.conversation.snapshot())
+        self._refresh_context_meter()
         self._current_session_id = str(record.get("id", dialog.selected_id))
         self._current_title = record.get("title") or None
         self._session_created_at = str(record.get("created_at") or _now_iso())

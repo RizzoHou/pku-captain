@@ -4,7 +4,9 @@ from .base import (
     ChatStreamEvent,
     LLMProvider,
     LLMProviderRegistry,
+    TokenUsage,
     ToolCall,
+    estimate_tokens,
 )
 from .deepseek import DeepSeekAPIError, DeepSeekProvider
 from .echo import EchoLLMProvider
@@ -21,7 +23,9 @@ __all__ = [
     "KimiProvider",
     "LLMProvider",
     "LLMProviderRegistry",
+    "TokenUsage",
     "ToolCall",
+    "estimate_tokens",
     "image_part",
     "text_part",
 ]

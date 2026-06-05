@@ -15,7 +15,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..llm.base import ChatMessage, LLMProvider
+from ..llm.base import ChatMessage, LLMProvider, estimate_tokens
 from ..tools.base import ToolRegistry
 from ..workflows.base import WorkflowRegistry
 from .conversation import Conversation
@@ -32,7 +32,7 @@ class AgentEvent:
     """Emitted as the agent processes a turn."""
 
     # "assistant_delta" | "reasoning_delta" | "llm_response"
-    # | "tool_call" | "tool_result" | "final"
+    # | "tool_call" | "tool_result" | "context_usage" | "final"
     kind: str
     payload: dict[str, Any]
 
@@ -125,6 +125,9 @@ class Agent:
                 response.tool_calls,
                 reasoning_content=response.reasoning_content,
             )
+            yield AgentEvent(
+                kind="context_usage", payload=self._usage_payload(response.usage)
+            )
 
             if not response.tool_calls:
                 yield AgentEvent(kind="final", payload={"text": response.text})
@@ -214,6 +217,33 @@ class Agent:
         else:
             messages.insert(0, ChatMessage(role="system", content=block))
         return messages
+
+    def estimate_context_usage(self) -> dict[str, Any]:
+        """Estimated context occupation of the current conversation.
+
+        Used to seed/refresh the GUI meter outside a live turn — a new chat, a
+        restored session, or offline where the API reports no token usage. The
+        proactive complement to ``_is_context_length_error`` (the reactive guard
+        that fires once the window is actually blown). Estimates from the same
+        snapshot the next request would send, so it includes the folded-in
+        memory block; ``used`` is therefore approximate (``estimated=True``).
+        """
+        return self._usage_payload(None)
+
+    def _usage_payload(self, usage: Any) -> dict[str, Any]:
+        """Build a ``context_usage`` payload, preferring real API token counts.
+
+        Falls back to a heuristic estimate of the current LLM-bound snapshot
+        when the provider reported no ``usage`` (Echo / non-usage providers).
+        """
+        window = getattr(self.llm, "context_window", 0) or 0
+        if usage is not None:
+            return {"used": usage.total_tokens, "window": window, "estimated": False}
+        return {
+            "used": estimate_tokens(self._messages_for_llm()),
+            "window": window,
+            "estimated": True,
+        }
 
 
 def _is_context_length_error(exc: Exception) -> bool:

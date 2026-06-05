@@ -561,6 +561,35 @@ def apply_app_style(app: QApplication) -> None:
             font-size: 10px;
         }}
 
+        QWidget#ContextMeter {{
+            background: transparent;
+        }}
+
+        QLabel#ContextMeterLabel {{
+            color: {MUTED};
+            font-size: 10px;
+            font-weight: 600;
+        }}
+
+        QProgressBar#ContextMeterBar {{
+            border: none;
+            border-radius: 3px;
+            background: #efe7e3;
+        }}
+
+        QProgressBar#ContextMeterBar::chunk {{
+            border-radius: 3px;
+            background: {PKU_GOLD};
+        }}
+
+        QProgressBar#ContextMeterBar[level="warn"]::chunk {{
+            background: {PKU_RED};
+        }}
+
+        QProgressBar#ContextMeterBar[level="full"]::chunk {{
+            background: #b42318;
+        }}
+
         QFrame#InlineThinking {{
             border: 1px dashed #d8c4be;
             border-left: 4px solid {PKU_GOLD};
