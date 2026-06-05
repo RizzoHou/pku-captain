@@ -17,7 +17,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..llm.base import ChatMessage, LLMProvider
+from ..llm.base import ChatMessage, ChatResponse, LLMProvider
 from ..tools.base import ToolRegistry, ToolResult
 from ..workflows.base import WorkflowRegistry
 from .conversation import Conversation
@@ -83,6 +83,12 @@ class Agent:
                     return
                 raise
             yield AgentEvent(kind="llm_response", payload={"text": response.text})
+
+            if not response.text and not response.tool_calls:
+                response = ChatResponse(
+                    text="（模型没有返回内容。）",
+                    reasoning_content=response.reasoning_content,
+                )
 
             self.conversation.add_assistant(
                 response.text,
@@ -198,7 +204,11 @@ class Agent:
         the system prompt and the newest coherent suffix, drops old reasoning,
         and trims large tool outputs before the provider sees the request.
         """
-        normalized = [_normalized_for_context(message) for message in messages]
+        normalized = [
+            _normalized_for_context(message)
+            for message in messages
+            if _is_valid_context_message(message)
+        ]
         if _messages_char_size(normalized) <= self.max_context_chars:
             return normalized
 
@@ -234,6 +244,14 @@ def _normalized_for_context(message: ChatMessage) -> ChatMessage:
         tool_calls=message.tool_calls,
         reasoning_content=None,
     )
+
+
+def _is_valid_context_message(message: ChatMessage) -> bool:
+    if message.role == "assistant":
+        return bool(message.content or message.tool_calls)
+    if message.role == "tool":
+        return bool(message.tool_call_id)
+    return bool(message.content)
 
 
 def _tool_call_signature(name: str, arguments: dict[str, Any]) -> tuple[str, str]:

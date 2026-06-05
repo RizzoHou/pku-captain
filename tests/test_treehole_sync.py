@@ -23,6 +23,7 @@ pytest.importorskip("PyQt6")
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 
 import src.ui.dashboard as dashboard  # noqa: E402
+from src.core.auto_refresh import AutoRefreshSettings  # noqa: E402
 from src.tools.treehole_updates import MIN_NOTIFY_INTERVAL, TreeholeInboxStore  # noqa: E402
 from src.ui.main_window import MainWindow  # noqa: E402
 
@@ -223,3 +224,81 @@ def test_sync_done_ignores_failed_poll() -> None:
     MainWindow._on_treehole_sync_done(stub, SimpleNamespace(success=False, data=None))
     assert stub._treehole_sync_busy is False
     assert received == []
+
+
+def test_auto_refresh_config_starts_default_interval() -> None:
+    labels = []
+    stub = SimpleNamespace(
+        _auto_refresh_settings=AutoRefreshSettings(),
+        _auto_refresh_timer=_FakeTimer(),
+        _dashboard=SimpleNamespace(set_auto_refresh_text=labels.append),
+    )
+
+    MainWindow._configure_auto_refresh(stub)
+
+    assert stub._auto_refresh_timer.active is True
+    assert stub._auto_refresh_timer.interval == 300 * 1000
+    assert labels == ["自动刷新 5m"]
+
+
+def test_auto_refresh_config_stops_when_disabled() -> None:
+    labels = []
+    stub = SimpleNamespace(
+        _auto_refresh_settings=AutoRefreshSettings(enabled=False),
+        _auto_refresh_timer=_FakeTimer(),
+        _dashboard=SimpleNamespace(set_auto_refresh_text=labels.append),
+    )
+    stub._auto_refresh_timer.active = True
+
+    MainWindow._configure_auto_refresh(stub)
+
+    assert stub._auto_refresh_timer.active is False
+    assert labels == ["自动刷新关"]
+
+
+def test_auto_refresh_tick_skips_when_refresh_busy() -> None:
+    calls = []
+    stub = SimpleNamespace(
+        _dashboard_refresh_busy=True,
+        _start_refresh=lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    MainWindow._on_auto_refresh_tick(stub)
+
+    assert calls == []
+
+
+def test_auto_refresh_tick_starts_silent_refresh() -> None:
+    calls = []
+    stub = SimpleNamespace(
+        _dashboard_refresh_busy=False,
+        _start_refresh=lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    MainWindow._on_auto_refresh_tick(stub)
+
+    assert calls == [(([],), {"silent": True, "auto_notify": True})]
+
+
+def test_auto_refresh_first_finish_only_sets_baseline() -> None:
+    messages = []
+    notifications = []
+    labels = []
+    stub = SimpleNamespace(
+        _refresh_had_success=True,
+        _auto_refresh_changes=[object()],
+        _auto_refresh_baseline_ready=False,
+        _auto_refresh_settings=AutoRefreshSettings(notify_enabled=True),
+        _dashboard=SimpleNamespace(set_updated_text=labels.append),
+        _auto_refresh_digest=SimpleNamespace(summarize=lambda changes: "摘要"),
+        _chat_panel=SimpleNamespace(add_system_message=messages.append),
+        _auto_refresh_notifier=SimpleNamespace(notify=notifications.append),
+    )
+
+    MainWindow._finish_auto_refresh(stub)
+
+    assert stub._auto_refresh_baseline_ready is True
+    assert stub._auto_refresh_changes == []
+    assert labels
+    assert messages == []
+    assert notifications == []

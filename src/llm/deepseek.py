@@ -173,7 +173,7 @@ def _to_api_message(m: ChatMessage) -> dict[str, Any]:
             "content": m.content,
         }
     if m.role == "assistant":
-        out: dict[str, Any] = {"role": "assistant", "content": m.content or None}
+        out: dict[str, Any] = {"role": "assistant", "content": m.content or ""}
         if m.tool_calls:
             out["tool_calls"] = [
                 {

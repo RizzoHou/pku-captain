@@ -199,10 +199,11 @@ def test_clickable_rows_open_linked_sections(
     ]
 
 
-def test_pku3b_rows_open_resolved_links(
+def test_pku3b_rows_open_resolved_links_and_announcements_request_detail(
     app: QApplication, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     opened: list[str] = []
+    detail_items: list[dict[str, object]] = []
     monkeypatch.setattr(
         dashboard, "_open_external_url", lambda url: opened.append(url) or True
     )
@@ -224,6 +225,7 @@ def test_pku3b_rows_open_resolved_links(
             "url": "https://course.pku.edu.cn/webapps/blackboard/content/launchLink.jsp",
         }
     )
+    announcement_card.detail_requested.connect(detail_items.append)
     fallback_button = announcement_card._announcement_row(
         {"course": "未知课程", "title": "无链接通知"}
     )
@@ -235,11 +237,120 @@ def test_pku3b_rows_open_resolved_links(
     QTest.mouseClick(announcement_button, dashboard.Qt.MouseButton.LeftButton)
     QTest.mouseClick(fallback_button, dashboard.Qt.MouseButton.LeftButton)
 
-    assert opened == [
-        "https://course.pku.edu.cn/webapps/assignment/uploadAssignment",
-        "https://course.pku.edu.cn/webapps/blackboard/content/launchLink.jsp",
-        dashboard.PKU3B_WEB_URL,
+    assert opened == ["https://course.pku.edu.cn/webapps/assignment/uploadAssignment"]
+    assert [item["title"] for item in detail_items] == ["复习课通知", "无链接通知"]
+
+
+def test_announcements_history_accumulates_and_opens_links(
+    app: QApplication,
+) -> None:
+    card = dashboard.AnnouncementsCard()
+    card.set_announcements(
+        {
+            "announcements": [
+                {
+                    "id": "a1",
+                    "course": "程序设计实习",
+                    "title": "通知一",
+                    "url": "https://course.pku.edu.cn/notice/a1",
+                }
+            ]
+        }
+    )
+    card.set_announcements(
+        {
+            "announcements": [
+                {
+                    "id": "a1",
+                    "course": "程序设计实习",
+                    "title": "通知一",
+                    "url": "https://course.pku.edu.cn/notice/a1",
+                },
+                {
+                    "id": "a2",
+                    "course": "人工智能基础",
+                    "title": "通知二",
+                    "url": "https://course.pku.edu.cn/notice/a2",
+                },
+            ]
+        }
+    )
+
+    assert [item["id"] for item in card._history_items] == ["a1", "a2"]
+
+    dialog = dashboard.AnnouncementsHistoryDialog(card._history_items)
+    detail_items: list[dict[str, object]] = []
+    dialog.detail_requested.connect(detail_items.append)
+    buttons = [
+        button
+        for button in dialog.findChildren(dashboard.QPushButton, "ListRowButton")
+        if "通知" in button.text()
     ]
+    assert len(buttons) == 2
+
+    buttons[1].show()
+    QTest.mouseClick(buttons[1], dashboard.Qt.MouseButton.LeftButton)
+
+    assert [item["id"] for item in detail_items] == ["a2"]
+
+
+def test_announcement_detail_dialog_opens_external_page(
+    app: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    opened: list[str] = []
+    monkeypatch.setattr(
+        dashboard, "_open_external_url", lambda url: opened.append(url) or True
+    )
+    tool = FakeTool(
+        {
+            "announcement": {
+                "id": "a1",
+                "course": "程序设计实习",
+                "title": "通知一",
+                "posted_at": "2026-06-06",
+                "body": "正文内容",
+            }
+        }
+    )
+    dialog = dashboard.AnnouncementDetailDialog(
+        tool,
+        {
+            "id": "a1",
+            "course": "程序设计实习",
+            "title": "通知一",
+            "url": "https://course.pku.edu.cn/notice/a1",
+        },
+    )
+    _drain()
+
+    button = dialog.findChild(dashboard.QPushButton, "SecondaryButton")
+    assert button is not None
+    button.click()
+
+    assert opened == ["https://course.pku.edu.cn/notice/a1"]
+
+
+def test_announcements_history_shows_full_returned_list(app: QApplication) -> None:
+    card = dashboard.AnnouncementsCard()
+    announcements = [
+        {
+            "id": f"a{index}",
+            "course": "中国近现代史纲要",
+            "title": f"通知 {index}",
+            "url": f"https://course.pku.edu.cn/notice/a{index}",
+        }
+        for index in range(65)
+    ]
+
+    card.set_announcements(
+        {"announcements": announcements, "total_reported": len(announcements)}
+    )
+    dialog = dashboard.AnnouncementsHistoryDialog(card.history_items())
+    buttons = dialog.findChildren(dashboard.QPushButton, "ListRowButton")
+
+    assert card._summary_label.text() == "最近 65 条 / 总计 65 条"
+    assert len(card.history_items()) == 65
+    assert len(buttons) == 65
 
 
 def test_dashboard_cards_open_sections_but_buttons_do_not(
@@ -263,6 +374,21 @@ def test_dashboard_cards_open_sections_but_buttons_do_not(
 
     assert opened == [dashboard.DEAN_WEB_URL]
     assert refreshed == ["refresh"]
+
+
+def test_schedule_card_does_not_open_teaching_web(
+    app: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    opened: list[str] = []
+    monkeypatch.setattr(dashboard, "_open_external_url", lambda url: opened.append(url) or True)
+
+    card = dashboard.ScheduleCard()
+    card.resize(360, 260)
+    card.show()
+
+    QTest.mouseClick(card, dashboard.Qt.MouseButton.LeftButton, pos=card.rect().center())
+
+    assert opened == []
 
 
 def test_calendar_candidates_filters_and_sorts(app: QApplication) -> None:

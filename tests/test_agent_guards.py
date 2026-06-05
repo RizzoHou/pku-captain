@@ -7,6 +7,7 @@ from typing import Any
 from src.core.agent import Agent
 from src.core.conversation import Conversation
 from src.llm.base import ChatMessage, ChatResponse, LLMProvider, ToolCall
+from src.llm.deepseek import _to_api_message
 from src.tools.base import Tool, ToolRegistry, ToolResult
 from src.workflows.base import WorkflowRegistry
 
@@ -130,6 +131,36 @@ def test_messages_for_llm_compacts_old_history_before_call() -> None:
     assert sent[0].role == "system"
     assert any(message.content == "CURRENT QUESTION" for message in sent)
     assert all("old-user" not in message.content for message in sent)
+
+
+def test_messages_for_llm_drops_empty_assistant_history() -> None:
+    llm = ScriptedLLM([ChatResponse(text="ok")])
+    agent, _tool = _agent(llm)
+    agent.conversation.add_assistant("")
+
+    list(agent.turn("hi"))
+
+    assert all(
+        message.role != "assistant" or message.content or message.tool_calls
+        for message in llm.calls[0]
+    )
+
+
+def test_empty_final_response_gets_non_empty_assistant_message() -> None:
+    llm = ScriptedLLM([ChatResponse(text="")])
+    agent, _tool = _agent(llm)
+
+    events = list(agent.turn("hi"))
+
+    assert events[-1].payload["text"] == "（模型没有返回内容。）"
+    assert agent.conversation.snapshot()[-1].content == "（模型没有返回内容。）"
+
+
+def test_deepseek_assistant_message_uses_string_content() -> None:
+    assert _to_api_message(ChatMessage(role="assistant", content="")) == {
+        "role": "assistant",
+        "content": "",
+    }
 
 
 def test_context_length_api_error_becomes_user_facing_final() -> None:

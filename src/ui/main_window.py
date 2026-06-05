@@ -25,6 +25,15 @@ from ..core import (
     reset_conversation,
     restore_conversation,
 )
+from ..core.announcement_history import AnnouncementHistoryStore
+from ..core.auto_refresh import (
+    AutoRefreshSettings,
+    AutoRefreshSettingsStore,
+    DashboardChange,
+    DashboardDigest,
+    MacOSNotifier,
+    detect_dashboard_changes,
+)
 from ..tools.treehole_updates import (
     MIN_NOTIFY_INTERVAL,
     TreeholeInboxStore,
@@ -32,7 +41,7 @@ from ..tools.treehole_updates import (
 )
 from .agent_worker import AgentWorker
 from .chat_panel import ChatPanel
-from .dashboard import DashboardPanel
+from .dashboard import AutoRefreshSettingsDialog, DashboardPanel
 from .dashboard_worker import DashboardWorker
 from .formatters import upcoming_assignments
 from .session_history_dialog import SessionHistoryDialog
@@ -117,10 +126,14 @@ class MainWindow(QMainWindow):
         # into the spinner state by the in-flight refresh — those must render
         # when their result lands (`_should_render`).
         self._dashboard_cache = build_dashboard_cache()
+        self._announcement_history_store = AnnouncementHistoryStore()
+        self._dashboard.set_announcement_history(self._announcement_history_store.load())
         self._cached_data: dict[str, object] = {}
         self._cached_sig: dict[str, str] = {}
         self._loading_keys: set[str] = set()
         self._refresh_had_success = False
+        self._dashboard_refresh_busy = False
+        self._active_refresh_auto = False
 
         # Keep the 树洞消息 card in step with background auto-checking: while the
         # macOS notifier is enabled, re-poll the treehole card on its interval so
@@ -131,6 +144,17 @@ class MainWindow(QMainWindow):
         self._treehole_sync_timer.timeout.connect(self._on_treehole_sync_tick)
         self._treehole_sync_busy = False
         self._treehole_sync_signals: object = None
+
+        self._auto_refresh_store = AutoRefreshSettingsStore()
+        self._auto_refresh_settings = self._auto_refresh_store.load()
+        self._auto_refresh_digest = DashboardDigest(
+            None if effective_offline else agent.llm
+        )
+        self._auto_refresh_notifier = MacOSNotifier()
+        self._auto_refresh_timer = QTimer(self)
+        self._auto_refresh_timer.timeout.connect(self._on_auto_refresh_tick)
+        self._auto_refresh_changes: list[DashboardChange] = []
+        self._auto_refresh_baseline_ready = False
 
         # Multi-session state. The startup session id lives in memory only;
         # nothing is written to disk until the first real user turn, so a
@@ -159,7 +183,10 @@ class MainWindow(QMainWindow):
             {
                 "pku3b_coursetable": {},
                 "pku3b_assignments": {},
-                "pku3b_announcements": {"limit": 5},
+                # Fetch the full announcement list so 历史通知 can show every
+                # item reported by pku3b; AnnouncementsCard still collapses
+                # the main card to the newest few rows.
+                "pku3b_announcements": {},
                 "treehole_updates": {"limit": 5},
                 "dean_updates": {"limit": 5},
                 "plib_materials": {"action": "quota"},
@@ -189,6 +216,9 @@ class MainWindow(QMainWindow):
         self._dashboard.morning_briefing_requested.connect(self._run_morning_briefing)
         self._dashboard.refresh_requested.connect(self._refresh_dashboard)
         self._dashboard.partial_refresh_requested.connect(self._refresh_dashboard_subset)
+        self._dashboard.auto_refresh_settings_requested.connect(
+            self._open_auto_refresh_settings
+        )
         self._dashboard.treehole_settings_changed.connect(self._reconfigure_treehole_sync)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -210,6 +240,7 @@ class MainWindow(QMainWindow):
         self._seed_dashboard_from_cache()
         self._start_refresh([], silent=True)
         self._reconfigure_treehole_sync()
+        self._configure_auto_refresh()
         self.statusBar().showMessage(f"{mode_label} · 就绪")
 
     def _send_message(self, text: str) -> None:
@@ -396,7 +427,13 @@ class MainWindow(QMainWindow):
         not trigger a full-dashboard reload."""
         self._start_refresh([str(key) for key in keys])
 
-    def _start_refresh(self, tool_keys: list[str], *, silent: bool = False) -> None:
+    def _start_refresh(
+        self,
+        tool_keys: list[str],
+        *,
+        silent: bool = False,
+        auto_notify: bool = False,
+    ) -> None:
         """Reload `tool_keys` (empty list means all) and scope the worker to the
         same set.
 
@@ -408,15 +445,21 @@ class MainWindow(QMainWindow):
         is recorded in `_loading_keys`, which guarantees it gets rendered when
         its result arrives (`_should_render`).
         """
-        self._dashboard.set_refresh_busy(True)
+        if self._dashboard_refresh_busy:
+            return
+        self._dashboard_refresh_busy = True
+        self._active_refresh_auto = auto_notify
+        self._auto_refresh_changes = []
         self._refresh_had_success = False
-        self.statusBar().showMessage("正在刷新仪表盘...")
-        for name in tool_keys or self._ALL_TOOL_KEYS:
-            if silent and name in self._cached_sig:
-                continue  # keep cached content visible, no spinner flicker
-            card_key = "schedule" if name == "pku3b_coursetable" else name
-            self._dashboard.set_loading(card_key)
-            self._loading_keys.add(name)
+        if not auto_notify:
+            self._dashboard.set_refresh_busy(True)
+            self.statusBar().showMessage("正在刷新仪表盘...")
+            for name in tool_keys or self._ALL_TOOL_KEYS:
+                if silent and name in self._cached_sig:
+                    continue  # keep cached content visible, no spinner flicker
+                card_key = "schedule" if name == "pku3b_coursetable" else name
+                self._dashboard.set_loading(card_key)
+                self._loading_keys.add(name)
         # Read GUI widgets (the OTP field) here, on the GUI thread, and hand
         # the snapshot to the worker — the worker must never touch widgets.
         dynamic_args = {"pku3b_coursetable": self._dashboard_args("pku3b_coursetable")}
@@ -433,6 +476,10 @@ class MainWindow(QMainWindow):
         loading = key in self._loading_keys
         self._loading_keys.discard(key)
         fresh_sig = _signature(data)
+        if self._active_refresh_auto and key in self._cached_data:
+            self._auto_refresh_changes.extend(
+                detect_dashboard_changes(key, self._cached_data[key], data)
+            )
         if not _should_render(loading, self._cached_sig.get(key), fresh_sig):
             return  # cached card unchanged since last save — no repaint
         self._render_dashboard_item(key, data)
@@ -454,6 +501,7 @@ class MainWindow(QMainWindow):
             return
         if key == "pku3b_announcements" and isinstance(data, dict):
             self._dashboard.set_announcements(data)
+            self._announcement_history_store.save(self._dashboard.announcement_history())
             return
         if key == "treehole_updates" and isinstance(data, dict):
             self._dashboard.set_treehole_updates(data)
@@ -473,6 +521,8 @@ class MainWindow(QMainWindow):
         loading = key in self._loading_keys
         self._loading_keys.discard(key)
         card_key = "schedule" if key == "pku3b_coursetable" else key
+        if self._active_refresh_auto:
+            return
         if key in self._cached_data:
             # Keep the last-good cached download visible rather than wiping a
             # card to an error. An explicit refresh blanked it to the spinner,
@@ -490,6 +540,12 @@ class MainWindow(QMainWindow):
         return {}
 
     def _on_dashboard_refresh_finished(self) -> None:
+        was_auto = self._active_refresh_auto
+        self._dashboard_refresh_busy = False
+        self._active_refresh_auto = False
+        if was_auto:
+            self._finish_auto_refresh()
+            return
         self._dashboard.set_refresh_busy(False)
         if not self._refresh_had_success:
             # Every card errored (e.g. offline) and is showing stale cache —
@@ -499,6 +555,63 @@ class MainWindow(QMainWindow):
         stamp = datetime.now().strftime("%H:%M:%S")
         self._dashboard.set_updated_text(f"最近刷新：{stamp}")
         self.statusBar().showMessage(f"仪表盘已刷新：{stamp}")
+
+    # --- dashboard auto-refresh ----------------------------------------------
+    def _configure_auto_refresh(self) -> None:
+        settings = self._auto_refresh_settings
+        interval = max(60, int(settings.interval_seconds))
+        self._auto_refresh_timer.setInterval(interval * 1000)
+        if settings.enabled:
+            self._auto_refresh_timer.start()
+            label = f"自动刷新 {int(interval / 60)}m"
+        else:
+            self._auto_refresh_timer.stop()
+            label = "自动刷新关"
+        self._dashboard.set_auto_refresh_text(label)
+
+    def _open_auto_refresh_settings(self) -> None:
+        settings = self._auto_refresh_settings
+        dialog = AutoRefreshSettingsDialog(
+            enabled=settings.enabled,
+            interval_seconds=settings.interval_seconds,
+            notify_enabled=settings.notify_enabled,
+            parent=self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        values = dialog.settings()
+        self._auto_refresh_settings = AutoRefreshSettings(
+            enabled=bool(values["enabled"]),
+            interval_seconds=int(values["interval_seconds"]),
+            notify_enabled=bool(values["notify_enabled"]),
+        )
+        self._auto_refresh_store.save(self._auto_refresh_settings)
+        self._configure_auto_refresh()
+        state = "已开启" if self._auto_refresh_settings.enabled else "已关闭"
+        self.statusBar().showMessage(f"自动刷新{state}")
+
+    def _on_auto_refresh_tick(self) -> None:
+        if self._dashboard_refresh_busy:
+            return
+        self._start_refresh([], silent=True, auto_notify=True)
+
+    def _finish_auto_refresh(self) -> None:
+        if not self._refresh_had_success:
+            return
+        stamp = datetime.now().strftime("%H:%M:%S")
+        self._dashboard.set_updated_text(f"后台刷新：{stamp}")
+        changes = list(self._auto_refresh_changes)
+        self._auto_refresh_changes = []
+        if not self._auto_refresh_baseline_ready:
+            self._auto_refresh_baseline_ready = True
+            return
+        if not changes or not self._auto_refresh_settings.notify_enabled:
+            return
+        digest = self._auto_refresh_digest.summarize(changes)
+        if not digest:
+            return
+        self._chat_panel.add_system_message(f"后台自动刷新发现新变化：\n{digest}")
+        self._auto_refresh_notifier.notify(digest)
 
     # --- treehole auto-sync ---------------------------------------------------
     def _reconfigure_treehole_sync(self) -> None:
@@ -581,6 +694,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("今日简报失败")
 
     def closeEvent(self, event: object) -> None:  # noqa: N802 - Qt override name.
+        self._auto_refresh_timer.stop()
         self._treehole_sync_timer.stop()
         self._persist_current_session()
         self._agent_thread.quit()
