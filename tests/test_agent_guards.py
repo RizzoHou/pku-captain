@@ -78,7 +78,7 @@ class TreeholeCountingTool(Tool):
         )
 
 
-def _agent(llm: LLMProvider, *, max_tool_iterations: int = 8, max_context_chars: int = 120_000):
+def _agent(llm: LLMProvider, *, max_tool_iterations: int = 8):
     tools = ToolRegistry()
     tool = CountingTool()
     tools.register(tool)
@@ -91,7 +91,6 @@ def _agent(llm: LLMProvider, *, max_tool_iterations: int = 8, max_context_chars:
             workflows=WorkflowRegistry(),
             conversation=conversation,
             max_tool_iterations=max_tool_iterations,
-            max_context_chars=max_context_chars,
         ),
         tool,
     )
@@ -102,7 +101,6 @@ def _agent_with_tool(
     tool: Tool,
     *,
     max_tool_iterations: int = 8,
-    max_context_chars: int = 120_000,
 ) -> Agent:
     tools = ToolRegistry()
     tools.register(tool)
@@ -114,22 +112,23 @@ def _agent_with_tool(
         workflows=WorkflowRegistry(),
         conversation=conversation,
         max_tool_iterations=max_tool_iterations,
-        max_context_chars=max_context_chars,
     )
 
 
-def test_messages_for_llm_compacts_old_history_before_call() -> None:
+def test_reasoning_content_is_preserved_in_llm_messages() -> None:
     llm = ScriptedLLM([ChatResponse(text="ok")])
-    agent, _tool = _agent(llm, max_context_chars=220)
-    agent.conversation.add_user("old-user-" + "x" * 500)
-    agent.conversation.add_assistant("old-assistant-" + "y" * 500)
+    agent, _tool = _agent(llm)
+    agent.conversation.add_assistant("earlier answer", reasoning_content="earlier thought")
 
     list(agent.turn("CURRENT QUESTION"))
 
     sent = llm.calls[0]
     assert sent[0].role == "system"
     assert any(message.content == "CURRENT QUESTION" for message in sent)
-    assert all("old-user" not in message.content for message in sent)
+    assert any(
+        message.role == "assistant" and message.reasoning_content == "earlier thought"
+        for message in sent
+    )
 
 
 def test_context_length_api_error_becomes_user_facing_final() -> None:

@@ -42,7 +42,6 @@ class Agent:
     conversation: Conversation = field(default_factory=Conversation)
     memory: MemoryStore | None = None
     max_tool_iterations: int = 8
-    max_context_chars: int = 120_000
 
     def turn(self, user_message: str) -> Iterator[AgentEvent]:
         """Process one user turn. Yields events as they happen."""
@@ -173,10 +172,10 @@ class Agent:
         """
         messages = self.conversation.snapshot()
         if self.memory is None:
-            return self._fit_messages_to_context(messages)
+            return messages
         block = render_memory_context(self.memory.list())
         if not block:
-            return self._fit_messages_to_context(messages)
+            return messages
         if messages and messages[0].role == "system":
             head = messages[0]
             messages[0] = ChatMessage(
@@ -189,51 +188,7 @@ class Agent:
             )
         else:
             messages.insert(0, ChatMessage(role="system", content=block))
-        return self._fit_messages_to_context(messages)
-
-    def _fit_messages_to_context(self, messages: list[ChatMessage]) -> list[ChatMessage]:
-        """Keep the prompt under a conservative character budget.
-
-        This is not a tokenizer; it is a deterministic preflight guard. It keeps
-        the system prompt and the newest coherent suffix, drops old reasoning,
-        and trims large tool outputs before the provider sees the request.
-        """
-        normalized = [_normalized_for_context(message) for message in messages]
-        if _messages_char_size(normalized) <= self.max_context_chars:
-            return normalized
-
-        system_messages = [m for m in normalized if m.role == "system"]
-        head = system_messages[:1]
-        budget = max(1, self.max_context_chars - _messages_char_size(head))
-        suffix: list[ChatMessage] = []
-        size = 0
-        for message in reversed([m for m in normalized if m.role != "system"]):
-            message_size = _message_char_size(message)
-            if suffix and size + message_size > budget:
-                break
-            suffix.insert(0, message)
-            size += message_size
-            if size >= budget:
-                break
-        while suffix and suffix[0].role == "tool":
-            suffix.pop(0)
-        if not suffix and normalized:
-            suffix = [_truncate_message(normalized[-1], max_chars=budget)]
-        return head + suffix
-
-
-def _normalized_for_context(message: ChatMessage) -> ChatMessage:
-    content = message.content
-    if message.role == "tool":
-        content = _truncate_text(content, 4_000)
-    return ChatMessage(
-        role=message.role,
-        content=content,
-        name=message.name,
-        tool_call_id=message.tool_call_id,
-        tool_calls=message.tool_calls,
-        reasoning_content=None,
-    )
+        return messages
 
 
 def _tool_call_signature(name: str, arguments: dict[str, Any]) -> tuple[str, str]:
@@ -306,40 +261,10 @@ def _serialize_tool_result(name: str, result: ToolResult) -> str:
     return _truncate_text(content, budget)
 
 
-def _truncate_message(message: ChatMessage, *, max_chars: int) -> ChatMessage:
-    return ChatMessage(
-        role=message.role,
-        content=_truncate_text(message.content, max_chars),
-        name=message.name,
-        tool_call_id=message.tool_call_id,
-        tool_calls=message.tool_calls,
-        reasoning_content=None,
-    )
-
-
 def _truncate_text(text: str, max_chars: int) -> str:
     if len(text) <= max_chars:
         return text
     return text[: max(0, max_chars - 18)] + "\n...（已截断）"
-
-
-def _messages_char_size(messages: list[ChatMessage]) -> int:
-    return sum(_message_char_size(message) for message in messages)
-
-
-def _message_char_size(message: ChatMessage) -> int:
-    tool_size = sum(
-        len(call.name) + len(json.dumps(call.arguments, ensure_ascii=False))
-        for call in message.tool_calls
-    )
-    return (
-        len(message.role)
-        + len(message.content or "")
-        + len(message.name or "")
-        + len(message.tool_call_id or "")
-        + tool_size
-        + 16
-    )
 
 
 def _is_context_length_error(exc: Exception) -> bool:
