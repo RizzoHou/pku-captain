@@ -96,6 +96,28 @@ def test_dashboard_title_preserves_only_product_name(app: QApplication) -> None:
     assert [title.text() for title in titles] == ["PKU Captain"]
 
 
+def test_schedule_card_displays_official_note_smaller(app: QApplication) -> None:
+    card = dashboard.ScheduleCard()
+    card.set_schedule(
+        {
+            "blocks": [
+                {
+                    "day_key": "mon",
+                    "day_name": "周一",
+                    "start_slot": 1,
+                    "end_slot": 2,
+                    "title": "程序设计实习",
+                    "detail": "理教407 | 教师：杨帅",
+                    "note": "与软件设计实践互斥",
+                }
+            ]
+        }
+    )
+
+    note_labels = card.findChildren(QLabel, "CourseBlockNote")
+    assert [label.text() for label in note_labels] == ["与软件设计实践互斥"]
+
+
 def test_calendar_candidates_filters_and_sorts(app: QApplication) -> None:
     candidates = dashboard._calendar_candidates(
         [

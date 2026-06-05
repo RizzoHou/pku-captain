@@ -33,8 +33,22 @@ def test_parse_course_table_merges_contiguous_slots() -> None:
     blocks = _parse_course_table(
         {
             "course": [
-                {"mon": {"courseName": "程序设计实习(主) 上课信息：一教101 教师：张三"}},
-                {"mon": {"courseName": "程序设计实习(主) 上课信息：一教101 教师：张三"}},
+                {
+                    "mon": {
+                        "courseName": (
+                            "程序设计实习(主) 上课信息：一教101 教师：张三 "
+                            "备注：与软件设计实践互斥 考试信息：20260626"
+                        )
+                    }
+                },
+                {
+                    "mon": {
+                        "courseName": (
+                            "程序设计实习(主) 上课信息：一教101 教师：张三 "
+                            "备注：与软件设计实践互斥 考试信息：20260626"
+                        )
+                    }
+                },
                 {"mon": {"courseName": "高等数学(主) 上课信息：二教202 教师：李四"}},
             ]
         }
@@ -44,3 +58,4 @@ def test_parse_course_table_merges_contiguous_slots() -> None:
         ("程序设计实习", 1, 2),
         ("高等数学", 3, 3),
     ]
+    assert blocks[0].note == "与软件设计实践互斥"

@@ -1068,14 +1068,14 @@ class ScheduleCard(QFrame):
             end = int(item["end_slot"])
             title = str(item.get("title", "未命名课程"))
             detail = str(item.get("detail", ""))
-            button = QPushButton(title)
-            button.setObjectName("CourseBlock")
-            button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-            button.setToolTip(detail or title)
-            button.clicked.connect(
-                lambda _checked=False, course=dict(item): self._show_course_detail(course)
+            note = str(item.get("note", ""))
+            block = CourseBlockWidget(title=title, note=note)
+            block.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            block.setToolTip(" | ".join(part for part in (detail, note) if part) or title)
+            block.clicked.connect(
+                lambda course=dict(item): self._show_course_detail(course)
             )
-            self._calendar_layout.addWidget(button, start, column, end - start + 1, 1)
+            self._calendar_layout.addWidget(block, start, column, end - start + 1, 1)
 
         self._calendar_layout.setColumnMinimumWidth(0, 24)
         for column in range(1, 8):
@@ -1091,6 +1091,7 @@ class ScheduleCard(QFrame):
                 f"课程：{course.get('title', '未命名课程')}",
                 f"时间：{course.get('day_name', '')} {slot}",
                 f"详情：{course.get('detail') or '暂无详细信息'}",
+                f"备注：{course.get('note') or '暂无官方备注'}",
             ]
         )
         QMessageBox.information(self, "课程详情", message)
@@ -1116,6 +1117,42 @@ def _slot_label(text: str) -> QLabel:
     label.setAlignment(Qt.AlignmentFlag.AlignCenter)
     label.setObjectName("ScheduleSlot")
     return label
+
+
+class CourseBlockWidget(QFrame):
+    """Clickable course cell with a smaller official note line."""
+
+    clicked = pyqtSignal()
+
+    def __init__(self, *, title: str, note: str = "") -> None:
+        super().__init__()
+        self.setObjectName("CourseBlock")
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        title_label = QLabel(title)
+        title_label.setObjectName("CourseBlockTitle")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_label.setWordWrap(True)
+
+        self._note_label = QLabel(note)
+        self._note_label.setObjectName("CourseBlockNote")
+        self._note_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._note_label.setWordWrap(True)
+        self._note_label.setVisible(bool(note))
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(4, 3, 4, 3)
+        layout.setSpacing(2)
+        layout.addStretch()
+        layout.addWidget(title_label)
+        layout.addWidget(self._note_label)
+        layout.addStretch()
+
+    def mousePressEvent(self, event) -> None:  # noqa: ANN001,N802 - Qt callback.
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
 
 
 def _todo_row(item: dict[str, object]) -> QFrame:

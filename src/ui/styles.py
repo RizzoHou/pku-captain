@@ -294,21 +294,30 @@ def apply_app_style(app: QApplication) -> None:
             background: #fffaf7;
         }}
 
-        QPushButton#CourseBlock {{
+        QFrame#CourseBlock {{
             background: {PKU_RED};
             color: #ffffff;
             border: 1px solid {PKU_RED_DARK};
             border-radius: 6px;
-            padding: 1px 4px;
-            font-size: 11px;
-            font-weight: 700;
             min-height: 24px;
         }}
 
-        QPushButton#CourseBlock:hover {{
+        QFrame#CourseBlock:hover {{
             background: {PKU_RED_DARK};
             color: #ffffff;
             border-color: {PKU_GOLD};
+        }}
+
+        QLabel#CourseBlockTitle {{
+            color: #ffffff;
+            font-size: 11px;
+            font-weight: 800;
+        }}
+
+        QLabel#CourseBlockNote {{
+            color: #fff1cc;
+            font-size: 9px;
+            font-weight: 650;
         }}
 
         QPushButton {{
