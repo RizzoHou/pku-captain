@@ -3,8 +3,7 @@ restarts and can be reopened.
 
 Each session is one JSON file at ``data/sessions/<id>.json`` holding the
 full message history (faithful `asdict` of every `ChatMessage`, including
-`tool_calls` and `reasoning_content`) plus metadata. Mirrors the
-`ReminderStore` convention (`src/tools/reminder.py`): a `threading.Lock`
+`tool_calls` and `reasoning_content`) plus metadata. A `threading.Lock`
 guards every load/modify/write so the async titler callback (which runs on
 a `QThreadPool` thread) cannot interleave a write with the GUI thread's
 auto-save.
@@ -107,7 +106,7 @@ def deserialize_messages(raw: Iterable[dict[str, Any]]) -> list[ChatMessage]:
 class SessionStore:
     """One-JSON-file-per-session store; thread-safe.
 
-    Like `ReminderStore`, every public method takes the lock for the whole
+    Every public method takes the lock for the whole
     read/modify/write cycle, so the GUI-thread auto-save and the worker-pool
     title update cannot corrupt a file by interleaving.
     """

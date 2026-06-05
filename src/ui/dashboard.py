@@ -129,9 +129,6 @@ class DashboardPanel(QWidget):
         self._treehole_button.setObjectName("HeaderTreeholeButton")
         self._treehole_button.setToolTip("查看树洞新消息")
         self._treehole_button.clicked.connect(self._show_treehole_dialog)
-        self._reminders_button = QPushButton("提醒")
-        self._reminders_button.setObjectName("SecondaryButton")
-        self._reminders_button.clicked.connect(self._show_reminders_dialog)
         self._memory_button = QPushButton("记忆")
         self._memory_button.setObjectName("SecondaryButton")
         self._memory_button.clicked.connect(self._show_memory_dialog)
@@ -147,9 +144,8 @@ class DashboardPanel(QWidget):
         header.addWidget(self._refresh_button, 0, 2, 2, 1, Qt.AlignmentFlag.AlignRight)
         header.addWidget(self._briefing_button, 0, 3, 2, 1, Qt.AlignmentFlag.AlignRight)
         header.addWidget(self._treehole_button, 0, 4, 2, 1, Qt.AlignmentFlag.AlignRight)
-        header.addWidget(self._reminders_button, 0, 5, 2, 1, Qt.AlignmentFlag.AlignRight)
-        header.addWidget(self._memory_button, 0, 6, 2, 1, Qt.AlignmentFlag.AlignRight)
-        header.addWidget(self._knowledge_button, 0, 7, 2, 1, Qt.AlignmentFlag.AlignRight)
+        header.addWidget(self._memory_button, 0, 5, 2, 1, Qt.AlignmentFlag.AlignRight)
+        header.addWidget(self._knowledge_button, 0, 6, 2, 1, Qt.AlignmentFlag.AlignRight)
 
         self._cards = {
             "schedule": ScheduleCard(),
@@ -404,12 +400,6 @@ class DashboardPanel(QWidget):
         if tool is None:
             return
         LectureSearchDialog(tool, self).exec()
-
-    def _show_reminders_dialog(self) -> None:
-        tool = self._require_tool("reminder", "提醒管理")
-        if tool is None:
-            return
-        RemindersDialog(tool, self).exec()
 
     def _show_calendar_dialog(self) -> None:
         tool = self._require_tool("calendar_reminder", "加入日历提醒")
@@ -2366,158 +2356,6 @@ class LectureSearchDialog(QDialog):
         data = item.data(Qt.ItemDataRole.UserRole)
         if isinstance(data, dict):
             LectureDetailDialog(data, self).exec()
-
-
-class RemindersDialog(QDialog):
-    """Manage reminders stored by ReminderTool."""
-
-    def __init__(self, tool: Tool, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("提醒管理")
-        self.resize(760, 620)
-        self._tool = tool
-        self._items: list[dict[str, object]] = []
-
-        title = QLabel("提醒管理")
-        title.setObjectName("DialogTitle")
-        subtitle = QLabel("这里管理本地提醒列表；当前版本不会触发 macOS 系统通知。")
-        subtitle.setObjectName("DialogSubtitle")
-        subtitle.setWordWrap(True)
-
-        self._text_input = QLineEdit()
-        self._text_input.setPlaceholderText("提醒内容")
-        self._time_input = QLineEdit()
-        self._time_input.setPlaceholderText("触发时间，例如 2026-06-02T18:00:00")
-        add_button = QPushButton("新增")
-        add_button.setObjectName("PrimaryButton")
-        add_button.clicked.connect(self._add)
-        form = QGridLayout()
-        form.setContentsMargins(0, 0, 0, 0)
-        form.setHorizontalSpacing(10)
-        form.setVerticalSpacing(8)
-        form.addWidget(self._text_input, 0, 0, 1, 2)
-        form.addWidget(self._time_input, 1, 0)
-        form.addWidget(add_button, 1, 1)
-        form.setColumnStretch(0, 1)
-
-        self._status_label = QLabel("加载提醒中...")
-        self._status_label.setObjectName("CardBody")
-        self._status_label.setWordWrap(True)
-        self._list = QListWidget()
-        self._list.setObjectName("PLibResultList")
-
-        refresh_button = QPushButton("刷新")
-        refresh_button.setObjectName("SecondaryButton")
-        refresh_button.clicked.connect(self._load)
-        done_button = QPushButton("标记完成")
-        done_button.setObjectName("SecondaryButton")
-        done_button.clicked.connect(self._done)
-        delete_button = QPushButton("删除")
-        delete_button.setObjectName("SecondaryButton")
-        delete_button.clicked.connect(self._delete)
-        close_button = QPushButton("关闭")
-        close_button.setObjectName("InlineToggleButton")
-        close_button.clicked.connect(self.accept)
-        actions = QHBoxLayout()
-        actions.setContentsMargins(0, 0, 0, 0)
-        actions.setSpacing(10)
-        actions.addWidget(refresh_button)
-        actions.addWidget(done_button)
-        actions.addWidget(delete_button)
-        actions.addStretch()
-        actions.addWidget(close_button)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
-        layout.addWidget(title)
-        layout.addWidget(subtitle)
-        layout.addLayout(form)
-        layout.addWidget(self._status_label)
-        layout.addWidget(self._list, 1)
-        layout.addLayout(actions)
-        self._load()
-
-    def _load(self) -> None:
-        result = self._tool.invoke(
-            {"action": "list", "pending_only": False, "future_only": False}
-        )
-        if not result.success:
-            self._status_label.setText(str(result.error or "提醒读取失败"))
-            self._status_label.setStyleSheet("color: #b42318;")
-            return
-        data = result.data if isinstance(result.data, list) else []
-        self._items = [item for item in data if isinstance(item, dict)]
-        self._render()
-
-    def _render(self) -> None:
-        self._list.clear()
-        self._status_label.setStyleSheet("")
-        pending = sum(1 for item in self._items if not item.get("done"))
-        self._status_label.setText(f"共 {len(self._items)} 条提醒，未完成 {pending} 条")
-        if not self._items:
-            empty = QListWidgetItem("暂无提醒")
-            empty.setFlags(Qt.ItemFlag.NoItemFlags)
-            self._list.addItem(empty)
-            return
-        for reminder in self._items:
-            done = "已完成" if reminder.get("done") else "未完成"
-            item = QListWidgetItem(
-                "#{id} · {done} · {time}\n{text}".format(
-                    id=reminder.get("id", "?"),
-                    done=done,
-                    time=reminder.get("trigger_time") or "时间未知",
-                    text=reminder.get("text") or "",
-                )
-            )
-            item.setData(Qt.ItemDataRole.UserRole, reminder)
-            self._list.addItem(item)
-
-    def _add(self) -> None:
-        text = self._text_input.text().strip()
-        trigger_time = self._time_input.text().strip()
-        result = self._tool.invoke(
-            {"action": "add", "text": text, "trigger_time": trigger_time}
-        )
-        if not result.success:
-            QMessageBox.warning(self, "提醒管理", str(result.error or "新增失败"))
-            return
-        self._text_input.clear()
-        self._time_input.clear()
-        self._load()
-
-    def _done(self) -> None:
-        reminder_id = self._selected_id()
-        if reminder_id is None:
-            return
-        result = self._tool.invoke({"action": "done", "id": reminder_id})
-        if not result.success:
-            QMessageBox.warning(self, "提醒管理", str(result.error or "操作失败"))
-            return
-        self._load()
-
-    def _delete(self) -> None:
-        reminder_id = self._selected_id()
-        if reminder_id is None:
-            return
-        reply = QMessageBox.question(self, "删除提醒", f"确定删除提醒 #{reminder_id}？")
-        if reply != QMessageBox.StandardButton.Yes:
-            return
-        result = self._tool.invoke({"action": "delete", "id": reminder_id})
-        if not result.success:
-            QMessageBox.warning(self, "提醒管理", str(result.error or "删除失败"))
-            return
-        self._load()
-
-    def _selected_id(self) -> int | None:
-        item = self._list.currentItem()
-        if item is None:
-            return None
-        data = item.data(Qt.ItemDataRole.UserRole)
-        if not isinstance(data, dict):
-            return None
-        value = data.get("id")
-        return value if isinstance(value, int) else None
 
 
 class CalendarReminderDialog(QDialog):

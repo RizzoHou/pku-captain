@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Removed
+- The storage-only `ReminderTool` and its dashboard 提醒 entry (`RemindersDialog` + 页眉 button). It never fired notifications (storage + querying only), so it duplicated nothing the user could act on. Deleted `src/tools/reminder.py`, the `ToolRegistry` registration, the GUI button/dialog/handler, and the manual-test step. The macOS-Calendar DDL feature (`CalendarReminderTool` / 加入日历, real system alarms) is unaffected.
+
 ### Changed
 - Course-table grid cells now display the full course info inline (上课信息 / 教师 / 考试信息 / 备注), not just the title + note line; the previous info was only reachable via tooltip/click. `_clean_course_info` emits a labelled, newline-joined `detail` and the cell renders it in a new `CourseBlockDetail` label. (worktree `fix-course-note-absence`)
 - `LectureTool` description now tells the agent to pass a large `limit` when asked for the total / all lectures, so the count is not silently truncated at the default 10 if the curated dataset grows. (worktree `lecture-recommendation-improving`)

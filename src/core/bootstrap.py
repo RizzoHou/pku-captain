@@ -33,7 +33,6 @@ from ..tools import (
     PKU3bAssignmentsTool,
     PKU3bCourseTableTool,
     PLibMaterialsTool,
-    ReminderTool,
     TreeholeTool,
     TreeholeUpdatesTool,
 )
@@ -194,7 +193,6 @@ def _build_tools(
     registry = ToolRegistry()
     registry.register(ClockTool())
     registry.register(MemoryTool(store=memory))
-    registry.register(ReminderTool())
     if not offline:
         registry.register(PKU3bAssignmentsTool())
         registry.register(PKU3bAnnouncementsTool())

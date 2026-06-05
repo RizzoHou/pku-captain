@@ -1,9 +1,8 @@
 """CalendarReminderTool — push DDLs into macOS Calendar.app as alarmed events.
 
-Part of the core feature #3 tool set, and the notification path the
-storage-only `ReminderTool` deliberately leaves out. Each selected
-assignment deadline becomes a Calendar event with a ``display alarm`` so
-macOS fires a native notification ahead of the due time.
+Part of the core feature #3 tool set. Each selected assignment deadline
+becomes a Calendar event with a ``display alarm`` so macOS fires a native
+notification ahead of the due time.
 
 Events go into a dedicated ``PKU Captain`` calendar (created on first use)
 rather than the user's real calendars: it isolates the app's writes, makes
@@ -261,8 +260,8 @@ def _parse_item(raw: object) -> _Parsed:
 def _parse_local(value: str) -> datetime | None:
     """Parse an ISO-8601 deadline into local time for Calendar.
 
-    Naive timestamps are assumed Asia/Shanghai (matching ReminderTool); any
-    timestamp is then converted to the machine's local zone, since Calendar
+    Naive timestamps are assumed Asia/Shanghai; any timestamp is then
+    converted to the machine's local zone, since Calendar
     interprets the components we hand it as local wall-clock time.
     """
     try:

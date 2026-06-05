@@ -59,11 +59,11 @@ def test_require_tool_returns_registered_tool(
     app: QApplication, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # When the tool IS registered (online), the gate passes it through.
-    from src.tools import ReminderTool
+    from src.tools import ClockTool
 
     registry = ToolRegistry()
-    registry.register(ReminderTool())
+    registry.register(ClockTool())
     panel = DashboardPanel(mode_label="在线模式", tools=registry)
     monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
-    assert panel._require_tool("reminder", "提醒管理") is not None
+    assert panel._require_tool("clock", "时钟") is not None
     assert panel._require_tool("plib_materials", "P-Lib") is None
