@@ -13,12 +13,12 @@ Install the sibling repo next to pku-captain (``~/projects/pku-dean-cli``):
     cd pku-dean-cli && python3 -m venv .venv && .venv/bin/pip install -e .
 
 This tool exposes the **read** surface (sidebar, guide, rules, file
-listings). The CLI's file-download ``get`` actions (``download get`` /
-``openinfo get``) are deliberately **not** exposed in v1 — they write
-binaries to disk, a side effect outside this Q&A tool's scope; re-add them
-behind an explicit action if a product need appears. ``--all`` (fetch every
-page) is also omitted: it walks every page over HTTP and would risk the
-subprocess timeout and flood the conversation; callers page with ``page``.
+listings) plus the two file-download actions ``download_get`` /
+``openinfo_get`` — they fetch a file by id (or several) into a local
+directory (default ``downloads/dean/<kind>``, which is gitignored) and
+return the saved paths. ``--all`` (fetch every page) stays omitted: it
+walks every page over HTTP and would risk the subprocess timeout and flood
+the conversation; callers page with ``page``.
 """
 
 from __future__ import annotations
@@ -35,6 +35,9 @@ from .base import Tool, ToolResult
 
 DEFAULT_EXECUTABLE = "dean"
 DEFAULT_TIMEOUT = 60.0
+# Downloads stream a binary over HTTP, so they get a longer ceiling than the
+# read endpoints (mirrors plib's download timeout).
+DOWNLOAD_TIMEOUT = 180.0
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _WORKSPACE_ROOT = _REPO_ROOT.parent
 _LOCAL_EXECUTABLES = (
@@ -60,11 +63,15 @@ class DeanResourcesTool(Tool):
         "(content behind a sidebar link), `rules_list` (校级/国家 regulations, "
         "scope school|national), `rules_show` by id (full rule text), "
         "`notice_list` (教务部通知公告), `notice_show` by id (full notice text), "
-        "`download_list` (downloadable forms/handbooks), `openinfo_list` "
-        "(information-disclosure files). `guide` ids come from `sidebar` URLs, "
-        "`rules_show` ids from `rules_list`, and `notice_show` ids from "
-        "`notice_list`, so list first, then show. Use this for questions like "
-        "“选课手册在哪下载”, “本科生学籍管理办法怎么规定的”, “教务部最近发了什么通知”, "
+        "`download_list` (downloadable forms/handbooks), `download_get` by id(s) "
+        "(save those forms/handbooks to disk), `openinfo_list` "
+        "(information-disclosure files), `openinfo_get` by id(s) (save those "
+        "files to disk). `guide` ids come from `sidebar` URLs, "
+        "`rules_show` ids from `rules_list`, `notice_show` ids from "
+        "`notice_list`, `download_get` ids from `download_list`, and "
+        "`openinfo_get` ids from `openinfo_list`, so list first, then show/get. "
+        "Use this for questions like “选课手册在哪下载” (then `download_get` to save "
+        "it), “本科生学籍管理办法怎么规定的”, “教务部最近发了什么通知”, "
         "or “教务部最近公示了什么”."
     )
     parameters_schema: ClassVar[dict[str, Any]] = {
@@ -80,7 +87,9 @@ class DeanResourcesTool(Tool):
                     "notice_list",
                     "notice_show",
                     "download_list",
+                    "download_get",
                     "openinfo_list",
+                    "openinfo_get",
                 ],
                 "description": "Which dean.pku.edu.cn resource to fetch.",
             },
@@ -88,7 +97,23 @@ class DeanResourcesTool(Tool):
                 "type": "integer",
                 "description": (
                     "Resource id. Required for `guide`, `rules_show`, and "
-                    "`notice_show`."
+                    "`notice_show`; accepted (alongside `ids`) by `download_get` "
+                    "and `openinfo_get`."
+                ),
+            },
+            "ids": {
+                "type": "array",
+                "items": {"type": "integer"},
+                "description": (
+                    "File ids to download for `download_get` / `openinfo_get`. "
+                    "Combined with `id` if both are given."
+                ),
+            },
+            "output_dir": {
+                "type": "string",
+                "description": (
+                    "Directory to save downloaded files into for `download_get` "
+                    "/ `openinfo_get`. Default: downloads/dean/<kind>."
                 ),
             },
             "scope": {
@@ -141,8 +166,12 @@ class DeanResourcesTool(Tool):
             return self._run_json(["notice", "list", *self._page(args)])
         if action == "download_list":
             return self._run_json(["download", "list", *self._page(args)])
+        if action == "download_get":
+            return self._download("download", args)
         if action == "openinfo_list":
             return self._run_json(["openinfo", "list", *self._page(args)])
+        if action == "openinfo_get":
+            return self._download("openinfo", args)
         return ToolResult(success=False, error=f"unknown action: {action!r}")
 
     def _show(
@@ -158,6 +187,21 @@ class DeanResourcesTool(Tool):
         cli_args.append(str(resource_id))
         return self._run_json(cli_args)
 
+    def _download(self, kind: str, args: dict[str, Any]) -> ToolResult:
+        ids = [str(item) for item in args.get("ids") or [] if isinstance(item, int)]
+        if isinstance(args.get("id"), int):
+            ids.insert(0, str(args["id"]))
+        if not ids:
+            return ToolResult(
+                success=False, error=f"`{kind}_get` requires `id` or `ids`"
+            )
+        output_dir = str(
+            args.get("output_dir") or (_REPO_ROOT / "downloads" / "dean" / kind)
+        )
+        return self._run_json(
+            [kind, "get", *ids, "-o", output_dir], timeout=DOWNLOAD_TIMEOUT
+        )
+
     @staticmethod
     def _page(args: dict[str, Any]) -> list[str]:
         page = args.get("page")
@@ -165,9 +209,15 @@ class DeanResourcesTool(Tool):
             return ["--page", str(page)]
         return []
 
-    def _run_json(self, cli_args: Sequence[str]) -> ToolResult:
+    def _run_json(
+        self, cli_args: Sequence[str], *, timeout: float | None = None
+    ) -> ToolResult:
         try:
-            run = run_dean(cli_args, executable=self.executable, timeout=self.timeout)
+            run = run_dean(
+                cli_args,
+                executable=self.executable,
+                timeout=timeout if timeout is not None else self.timeout,
+            )
         except (DeanNotFoundError, DeanTimeoutError) as exc:
             return ToolResult(success=False, error=str(exc))
         if not run["ok"]:
