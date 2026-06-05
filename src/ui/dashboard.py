@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from collections.abc import Callable
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 from PyQt6.QtCore import Qt, QUrl, pyqtSignal
-from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtGui import QDesktopServices, QMouseEvent
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -39,6 +41,39 @@ from .tool_call_worker import run_async
 
 if TYPE_CHECKING:
     from ..core import MemoryLearnService
+
+
+TREEHOLE_WEB_URL = "https://treehole.pku.edu.cn/ch/web/"
+
+
+class ClickableFrame(QFrame):
+    clicked = pyqtSignal()
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    @override
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+
+
+def _open_external_url(url: str) -> bool:
+    target = url.strip()
+    if not target:
+        return False
+    if sys.platform == "darwin":
+        result = subprocess.run(
+            ["open", "-a", "Safari", target],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if result.returncode == 0:
+            return True
+    return QDesktopServices.openUrl(QUrl(target))
 
 
 class DashboardPanel(QWidget):
@@ -1287,9 +1322,11 @@ def _todo_row(item: dict[str, object]) -> QFrame:
 
 
 def _treehole_row(item: dict[str, object]) -> QFrame:
-    row = QFrame()
+    row = ClickableFrame()
     row.setObjectName("TreeholeRow")
     row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    row.setToolTip("点击在 Safari 打开树洞")
+    row.clicked.connect(lambda: _open_external_url(TREEHOLE_WEB_URL))
 
     pid = str(item.get("pid") or "?")
     delta = int(item.get("delta") or 0)
@@ -2198,7 +2235,7 @@ class LectureDetailDialog(QDialog):
 
     def _open_link(self) -> None:
         if self._link:
-            QDesktopServices.openUrl(QUrl(self._link))
+            _open_external_url(self._link)
 
 
 class LectureSearchDialog(QDialog):
@@ -3087,8 +3124,10 @@ def _plib_download_text(data: dict[str, object]) -> str:
 
 
 def _treehole_detail_row(item: dict[str, object]) -> QFrame:
-    row = QFrame()
+    row = ClickableFrame()
     row.setObjectName("TreeholeDetailRow")
+    row.setToolTip("点击在 Safari 打开树洞")
+    row.clicked.connect(lambda: _open_external_url(TREEHOLE_WEB_URL))
 
     pid = str(item.get("pid") or "?")
     delta = int(item.get("delta") or 0)
@@ -3118,8 +3157,12 @@ def _treehole_detail_row(item: dict[str, object]) -> QFrame:
 
 
 def _dean_update_row(item: dict[str, object]) -> QFrame:
-    row = QFrame()
+    url = str(item.get("url") or "").strip()
+    row = ClickableFrame() if url else QFrame()
     row.setObjectName("TodoRow")
+    if url and isinstance(row, ClickableFrame):
+        row.setToolTip("点击在 Safari 打开对应教务内容")
+        row.clicked.connect(lambda: _open_external_url(url))
     layout = QVBoxLayout(row)
     layout.setContentsMargins(8, 7, 8, 7)
     layout.setSpacing(3)
