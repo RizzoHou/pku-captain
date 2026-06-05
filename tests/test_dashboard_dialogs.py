@@ -118,6 +118,25 @@ def test_schedule_card_displays_official_note_smaller(app: QApplication) -> None
     assert [label.text() for label in note_labels] == ["与软件设计实践互斥"]
 
 
+def test_dean_updates_card_renders_new_items(app: QApplication) -> None:
+    card = dashboard.DeanUpdatesCard()
+    card.set_updates(
+        {
+            "message": "教务部有 1 条新内容",
+            "updates": [
+                {
+                    "title": "本科生学籍管理办法",
+                    "source_label": "校级规章",
+                    "date": "2026-06-05",
+                }
+            ],
+        }
+    )
+
+    titles = card.findChildren(QLabel, "TodoTitle")
+    assert [label.text() for label in titles] == ["本科生学籍管理办法"]
+
+
 def test_calendar_candidates_filters_and_sorts(app: QApplication) -> None:
     candidates = dashboard._calendar_candidates(
         [

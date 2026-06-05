@@ -161,6 +161,7 @@ class MainWindow(QMainWindow):
                 "pku3b_assignments": {},
                 "pku3b_announcements": {"limit": 5},
                 "treehole_updates": {"limit": 5},
+                "dean_updates": {"limit": 5},
                 "plib_materials": {"action": "quota"},
                 "lecture": {"limit": 5},
             },
@@ -359,6 +360,7 @@ class MainWindow(QMainWindow):
         "pku3b_assignments",
         "pku3b_announcements",
         "treehole_updates",
+        "dean_updates",
         "plib_materials",
         "lecture",
     )
@@ -452,6 +454,9 @@ class MainWindow(QMainWindow):
             return
         if key == "treehole_updates" and isinstance(data, dict):
             self._dashboard.set_treehole_updates(data)
+            return
+        if key == "dean_updates" and isinstance(data, dict):
+            self._dashboard.set_dean_updates(data)
             return
         if key == "plib_materials" and isinstance(data, dict):
             self._dashboard.set_plib_materials(data)
@@ -619,6 +624,8 @@ def _format_dashboard_data(key: str, data: object) -> str:
         return "\n".join(lines) if lines else "暂无可显示通知"
     if key == "treehole_updates" and isinstance(data, dict):
         return str(data.get("message") or "暂无树洞新回复")
+    if key == "dean_updates" and isinstance(data, dict):
+        return str(data.get("message") or "暂无教务部新内容")
     if key == "plib_materials" and isinstance(data, dict):
         remaining = data.get("download_remaining")
         return "今日剩余下载次数：未知" if remaining is None else f"今日剩余下载次数：{remaining}"

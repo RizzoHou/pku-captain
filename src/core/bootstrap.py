@@ -25,6 +25,7 @@ from ..tools import (
     CalendarReminderTool,
     ClockTool,
     DeanResourcesTool,
+    DeanUpdatesTool,
     KnowledgeSearchTool,
     LectureTool,
     MemoryTool,
@@ -201,6 +202,7 @@ def _build_tools(
         registry.register(TreeholeUpdatesTool())
         registry.register(CalendarReminderTool())
         registry.register(DeanResourcesTool())
+        registry.register(DeanUpdatesTool())
         if enable_knowledge:
             registry.register(KnowledgeSearchTool(_build_knowledge_base()))
         registry.register(LectureTool())
