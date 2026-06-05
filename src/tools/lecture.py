@@ -31,8 +31,11 @@ class LectureTool(Tool):
     description: ClassVar[str] = (
         "List recent / upcoming PKU campus lectures (title, time, location, "
         "speaker, link). Optionally filter by `keyword`, a `start_date` / "
-        "`end_date` range, and cap the count with `limit`. Data source: a "
-        "curated snapshot of PKU's lecture announcement platform."
+        "`end_date` range, and cap the count with `limit` (default 10). When "
+        "the user asks for the total count or for ALL lectures, pass a large "
+        "`limit` (e.g. 1000) so the result is not silently truncated at the "
+        "default. Data source: a curated snapshot of PKU's lecture "
+        "announcement platform."
     )
     parameters_schema: ClassVar[dict[str, Any]] = {
         "type": "object",

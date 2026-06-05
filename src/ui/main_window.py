@@ -163,7 +163,10 @@ class MainWindow(QMainWindow):
                 "treehole_updates": {"limit": 5},
                 "dean_updates": {"limit": 5},
                 "plib_materials": {"action": "quota"},
-                "lecture": {"limit": 5},
+                # Fetch a generous superset: the tool truncates earliest-first,
+                # and LecturesCard then filters to today-or-future, so a small
+                # limit would starve the upcoming set before the card sees it.
+                "lecture": {"limit": 50},
             },
         )
         self._dashboard_worker.moveToThread(self._dashboard_thread)

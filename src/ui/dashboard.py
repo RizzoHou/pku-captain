@@ -36,7 +36,7 @@ from ..tools.treehole_updates import (
     TreeholeInboxStore,
     TreeholeNotificationService,
 )
-from .formatters import parse_datetime, upcoming_assignments
+from .formatters import parse_datetime, upcoming_assignments, upcoming_lectures
 from .tool_call_worker import run_async
 
 if TYPE_CHECKING:
@@ -913,7 +913,10 @@ class LecturesCard(QFrame):
         self._toggle_button.hide()
 
     def set_lectures(self, data: list[object]) -> None:
-        self._lectures = [item for item in data if isinstance(item, dict)]
+        # Recommend only today-or-future lectures, sorted earliest-first. Done
+        # here (not at the call site) so both the live-fetch and the cold-start
+        # cache-seed paths — which both route through this setter — get filtered.
+        self._lectures = upcoming_lectures(data)
         self._summary_label.setText(f"近期 {len(self._lectures)} 场讲座")
         self._summary_label.setStyleSheet("")
         self._expanded = False

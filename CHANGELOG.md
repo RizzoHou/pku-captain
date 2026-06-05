@@ -8,9 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 - Course-table grid cells now display the full course info inline (上课信息 / 教师 / 考试信息 / 备注), not just the title + note line; the previous info was only reachable via tooltip/click. `_clean_course_info` emits a labelled, newline-joined `detail` and the cell renders it in a new `CourseBlockDetail` label. (worktree `fix-course-note-absence`)
+- `LectureTool` description now tells the agent to pass a large `limit` when asked for the total / all lectures, so the count is not silently truncated at the default 10 if the curated dataset grows. (worktree `lecture-recommendation-improving`)
 
 ### Fixed
 - Multi-session course cells (the same course concatenated at different weeks/rooms, e.g. 程序设计实习) no longer leak the next session's text into the previous one's 考试信息. `_clean_course_info` splits on the `<title>(主)` marker via `_split_sessions`, bounds each field to its session, and merges all sessions' 上课信息. (worktree `fix-course-note-absence`)
+- 讲座推荐 dashboard card now shows only today-or-future lectures, sorted earliest-first, and can reveal them all. Root causes: the fetch was capped at `limit: 5` (so 展开全部 could never reveal the rest), and the card rendered the raw earliest-first list with no upcoming filter (so it showed past lectures). New render-time `upcoming_lectures()` helper (`src/ui/formatters.py`, sibling to `upcoming_assignments`) applied in `LecturesCard.set_lectures`; dashboard fetch limit raised to 50 so the card-side filter is the authoritative cap. (worktree `lecture-recommendation-improving`)
 
 ## [2026-06-05]
 
