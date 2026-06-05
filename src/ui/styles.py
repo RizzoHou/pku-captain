@@ -314,6 +314,12 @@ def apply_app_style(app: QApplication) -> None:
             font-weight: 800;
         }}
 
+        QLabel#CourseBlockDetail {{
+            color: #ffe7df;
+            font-size: 9px;
+            font-weight: 500;
+        }}
+
         QLabel#CourseBlockNote {{
             color: #fff1cc;
             font-size: 9px;
