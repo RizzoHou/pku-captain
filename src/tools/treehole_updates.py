@@ -8,10 +8,8 @@ holes gained replies since the last baseline.
 from __future__ import annotations
 
 import json
-import math
 import os
 import plistlib
-import re
 import shutil
 import subprocess
 import sys
@@ -734,10 +732,9 @@ class TreeholeUpdatesTool(Tool):
 class TreeholeTool(Tool):
     name: ClassVar[str] = "treehole"
     description: ClassVar[str] = (
-        "Search PKU Treehole holes by a small number of space-separated keywords "
-        "or fetch one hole with a bounded recent-comment preview. For search, keep "
-        "keywords short; this tool splits whitespace keywords, searches at most "
-        "three terms, merges candidates, and ranks by relevance, replies, and likes."
+        "Search PKU Treehole holes by keyword or fetch one hole with its full "
+        "comment history. Use this when the user asks to search treehole content "
+        "or inspect a specific treehole pid."
     )
     parameters_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
@@ -749,10 +746,7 @@ class TreeholeTool(Tool):
             },
             "keyword": {
                 "type": "string",
-                "description": (
-                    "Keywords for `search`, separated by spaces. Use at most a few "
-                    "short terms; long sentences are split and trimmed by the tool."
-                ),
+                "description": "Keyword for `search`.",
             },
             "pid": {
                 "type": "string",
@@ -760,48 +754,14 @@ class TreeholeTool(Tool):
             },
             "limit": {
                 "type": "integer",
-                "description": (
-                    "Maximum returned search rows or fetched recent comments. "
-                    "Default: 10 for search, 8 for fetch."
-                ),
+                "description": "Page size / maximum returned search rows. Default: 10.",
                 "minimum": 1,
-                "maximum": 20,
+                "maximum": 50,
                 "default": 10,
-            },
-            "sort": {
-                "type": "string",
-                "enum": ["relevance", "latest", "hottest", "likes"],
-                "description": (
-                    "Search ranking mode. Default relevance combines keyword match, "
-                    "reply count, like count, and freshness."
-                ),
-                "default": "relevance",
-            },
-            "category": {
-                "type": "string",
-                "enum": [
-                    "课程/考试",
-                    "二手/交易",
-                    "失物招领",
-                    "校园生活",
-                    "情感/吐槽",
-                    "通知/求助",
-                    "其他",
-                ],
-                "description": "Optional lightweight category filter for search results.",
-            },
-            "comment_mode": {
-                "type": "string",
-                "enum": ["recent", "none"],
-                "description": "For fetch: return recent comments or no comments. Default: recent.",
-                "default": "recent",
             },
             "all": {
                 "type": "boolean",
-                "description": (
-                    "Deprecated for agent use. Full pagination is ignored so tool "
-                    "results stay within context."
-                ),
+                "description": "For `search`, paginate all results up to the library cap.",
                 "default": False,
             },
             "allow_relogin": {
@@ -845,22 +805,17 @@ class TreeholeTool(Tool):
         return ToolResult(success=False, error="`action` must be `search` or `fetch`")
 
     def _search(self, args: dict[str, Any]) -> ToolResult:
-        raw_keyword = str(args.get("keyword") or "").strip()
-        keywords, ignored_keywords = _split_treehole_keywords(raw_keyword)
-        if not keywords:
+        keyword = str(args.get("keyword") or "").strip()
+        if not keyword:
             return ToolResult(success=False, error="`search` requires a non-empty keyword")
-        limit = _bounded_int(args.get("limit"), default=10, minimum=1, maximum=20)
-        sort = _normalize_sort(args.get("sort"))
-        category = str(args.get("category") or "").strip()
-        per_keyword_limit = limit
+        limit = _bounded_int(args.get("limit"), default=10, minimum=1, maximum=50)
         try:
             client = self._build_client(args)
-            raw_results: list[dict[str, Any]] = []
-            for keyword in keywords:
-                data = client.search(keyword, limit=per_keyword_limit)
-                raw_results.extend(
-                    item for item in (data.get("list") or []) if isinstance(item, dict)
-                )
+            if bool(args.get("all", False)):
+                results = client.search_all(keyword, limit=limit)
+            else:
+                data = client.search(keyword, limit=limit)
+                results = data.get("list") or []
         except NeedSMSVerification as exc:
             return _treehole_action_status("needs_sms", f"需要短信验证：{exc}")
         except AuthError as exc:
@@ -872,44 +827,26 @@ class TreeholeTool(Tool):
         except OSError as exc:
             return _treehole_action_status("error", f"树洞状态文件不可用：{exc}")
 
-        ranked = _rank_treehole_results(raw_results, keywords, sort=sort)
-        if category:
-            ranked = [
-                item
-                for item in ranked
-                if _classify_treehole(str(item.get("text") or "")) == category
-            ]
-        payload = {
+        return ToolResult(
+            success=True,
+            data={
                 "status": "ok",
                 "action": "search",
-                "keyword": " ".join(keywords),
-                "keywords": keywords,
-                "ignored_keywords": ignored_keywords,
-                "sort": sort,
-                "category": category,
-                "message": f"树洞搜索返回 {min(len(ranked), limit)} 条候选",
-                "results": [_hole_to_summary(item, keywords) for item in ranked[:limit]],
-                "total_candidates": len(ranked),
-                "next_action_hint": (
-                    "如需详情，请选择一个 pid 调用 fetch；不要继续扩大关键词反复搜索。"
-                ),
-        }
-        return ToolResult(success=True, data=_fit_treehole_payload(payload))
+                "keyword": keyword,
+                "message": f"树洞搜索返回 {len(results)} 条结果",
+                "results": [_hole_to_dict(item) for item in results],
+            },
+        )
 
     def _fetch(self, args: dict[str, Any]) -> ToolResult:
         pid = str(args.get("pid") or "").strip().lstrip("#")
         if not pid:
             return ToolResult(success=False, error="`fetch` requires a non-empty pid")
-        limit = _bounded_int(args.get("limit"), default=8, minimum=1, maximum=20)
-        comment_mode = str(args.get("comment_mode") or "recent").strip()
+        limit = _bounded_int(args.get("limit"), default=50, minimum=1, maximum=100)
         try:
             client = self._build_client(args)
             hole = client.hole(pid)
-            comments = (
-                []
-                if comment_mode == "none"
-                else _fetch_recent_comments(client, pid, hole, limit=limit)
-            )
+            comments = client.comments_all(pid, limit=limit)
         except NeedSMSVerification as exc:
             return _treehole_action_status("needs_sms", f"需要短信验证：{exc}")
         except AuthError as exc:
@@ -921,19 +858,18 @@ class TreeholeTool(Tool):
         except OSError as exc:
             return _treehole_action_status("error", f"树洞状态文件不可用：{exc}")
 
-        payload = {
+        return ToolResult(
+            success=True,
+            data={
                 "status": "ok",
                 "action": "fetch",
                 "pid": pid,
-                "comment_mode": comment_mode,
-                "message": f"树洞 #{pid} 返回最近 {len(comments)} 条评论摘要",
-                "hole": _hole_to_summary(hole, []),
-                "comments": [_comment_to_summary(item) for item in comments],
-                "comment_count": int(hole.get("reply") or len(comments) or 0),
-                "returned_comments": len(comments),
-                "truncated": int(hole.get("reply") or 0) > len(comments),
-        }
-        return ToolResult(success=True, data=_fit_treehole_payload(payload))
+                "message": f"树洞 #{pid} 返回 {len(comments)} 条评论",
+                "hole": _hole_to_dict(hole),
+                "comments": [_hole_to_dict(item) for item in comments],
+                "comment_count": len(comments),
+            },
+        )
 
     def _build_client(self, args: dict[str, Any]) -> Any:
         factory = self._client_factory or build_client
@@ -987,197 +923,8 @@ def _bounded_int(value: object, *, default: int, minimum: int, maximum: int) -> 
     return max(minimum, min(maximum, number))
 
 
-_MAX_TREEHOLE_KEYWORDS = 3
-_KEYWORD_RE = re.compile(r"[^\s,，;；、]+")
-
-
-def _split_treehole_keywords(text: str) -> tuple[list[str], list[str]]:
-    """Treehole search works best with a few whitespace-separated keywords."""
-    seen: set[str] = set()
-    tokens: list[str] = []
-    for match in _KEYWORD_RE.findall(text):
-        token = match.strip()
-        key = token.casefold()
-        if not token or key in seen:
-            continue
-        seen.add(key)
-        tokens.append(token[:24])
-    return tokens[:_MAX_TREEHOLE_KEYWORDS], tokens[_MAX_TREEHOLE_KEYWORDS:]
-
-
-def _normalize_sort(value: object) -> str:
-    sort = str(value or "relevance").strip()
-    return sort if sort in {"relevance", "latest", "hottest", "likes"} else "relevance"
-
-
-def _rank_treehole_results(
-    results: list[dict[str, Any]], keywords: list[str], *, sort: str = "relevance"
-) -> list[dict[str, Any]]:
-    merged: dict[str, dict[str, Any]] = {}
-    for item in results:
-        pid = str(item.get("pid") or "").strip()
-        if not pid:
-            continue
-        current = merged.get(pid)
-        if current is None or _treehole_score(item, keywords) > _treehole_score(current, keywords):
-            merged[pid] = item
-    if sort == "latest":
-        def key(item: dict[str, Any]) -> tuple[int, float]:
-            return (int(item.get("timestamp") or 0), _treehole_score(item, keywords))
-    elif sort == "hottest":
-        def key(item: dict[str, Any]) -> tuple[int, int]:
-            return (int(item.get("reply") or 0), int(item.get("likenum") or 0))
-    elif sort == "likes":
-        def key(item: dict[str, Any]) -> tuple[int, int]:
-            return (int(item.get("likenum") or 0), int(item.get("reply") or 0))
-    else:
-        def key(item: dict[str, Any]) -> tuple[float, int, int]:
-            return (
-                _treehole_score(item, keywords),
-                int(item.get("reply") or 0),
-                int(item.get("likenum") or 0),
-            )
-    return sorted(
-        merged.values(),
-        key=key,
-        reverse=True,
-    )
-
-
-def _treehole_score(item: dict[str, Any], keywords: list[str]) -> float:
-    text = str(item.get("text") or "").casefold()
-    relevance = sum(1.0 for keyword in keywords if keyword.casefold() in text)
-    reply = max(0, int(item.get("reply") or 0))
-    like = max(0, int(item.get("likenum") or 0))
-    freshness = _freshness_score(item.get("timestamp"))
-    return (
-        relevance * 10
-        + math.log1p(reply) * 0.25
-        + math.log1p(like) * 0.35
-        + freshness * 0.15
-    )
-
-
-def _freshness_score(value: object) -> float:
-    try:
-        timestamp = int(value)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return 0.0
-    if timestamp <= 0:
-        return 0.0
-    age_days = max(0.0, (_now_timestamp() - timestamp) / 86_400)
-    return 1.0 / (1.0 + age_days)
-
-
-def _now_timestamp() -> int:
-    import time
-
-    return int(time.time())
-
-
-def _hole_to_summary(item: object, keywords: list[str]) -> dict[str, Any]:
-    if not isinstance(item, dict):
-        return {}
-    text = str(item.get("text") or "")
-    summary = {
-        "pid": str(item.get("pid") or ""),
-        "text": _clip_text(text, 260),
-        "category": _classify_treehole(text),
-        "reply": int(item.get("reply") or 0),
-        "likenum": int(item.get("likenum") or 0),
-        "timestamp": item.get("timestamp"),
-    }
-    if keywords:
-        summary["score"] = round(_treehole_score(item, keywords), 3)
-        summary["matched_keywords"] = [
-            keyword for keyword in keywords if keyword.casefold() in text.casefold()
-        ]
-    return summary
-
-
-def _comment_to_summary(item: object) -> dict[str, Any]:
-    if not isinstance(item, dict):
-        return {}
-    quote = item.get("quote") if isinstance(item.get("quote"), dict) else None
-    return {
-        "cid": item.get("cid"),
-        "text": _clip_text(str(item.get("text") or ""), 220),
-        "name_tag": item.get("name_tag"),
-        "timestamp": item.get("timestamp"),
-        "quote": _clip_text(str(quote.get("text") or ""), 80) if quote else "",
-    }
-
-
-def _fetch_recent_comments(
-    client: Any, pid: str, hole: dict[str, Any], *, limit: int
-) -> list[dict[str, Any]]:
-    reply_count = int(hole.get("reply") or 0)
-    if reply_count <= 0:
-        return []
-    page_size = max(limit, 10)
-    page = max(1, math.ceil(reply_count / page_size))
-    comments = client.comments(pid, page=page, limit=page_size)
-    while not comments and page > 1:
-        page -= 1
-        comments = client.comments(pid, page=page, limit=page_size)
-    return [item for item in comments[-limit:] if isinstance(item, dict)]
-
-
-def _clip_text(text: str, max_chars: int) -> str:
-    text = re.sub(r"\s+", " ", text).strip()
-    if len(text) <= max_chars:
-        return text
-    return text[: max(0, max_chars - 8)].rstrip() + "…"
-
-
-def _classify_treehole(text: str) -> str:
-    lowered = text.casefold()
-    categories = (
-        ("课程/考试", ("考试", "课程", "作业", "绩点", "期末", "选课", "老师")),
-        ("二手/交易", ("出", "收", "二手", "转让", "价格", "自取", "闲置")),
-        ("失物招领", ("丢", "捡", "遗失", "失物", "招领", "寻找")),
-        ("校园生活", ("食堂", "宿舍", "燕园", "校园", "校车", "图书馆")),
-        ("情感/吐槽", ("喜欢", "恋爱", "分手", "吐槽", "难过", "焦虑")),
-        ("通知/求助", ("通知", "公告", "报名", "讲座", "求助", "请问", "有没有", "怎么", "咨询")),
-    )
-    for label, markers in categories:
-        if any(marker in lowered for marker in markers):
-            return label
-    return "其他"
-
-
-_TREEHOLE_RESULT_MAX_CHARS = 6_000
-
-
-def _fit_treehole_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    fitted = dict(payload)
-    for key in ("results", "comments"):
-        values = fitted.get(key)
-        if isinstance(values, list):
-            fitted[key] = list(values)
-    while _json_size(fitted) > _TREEHOLE_RESULT_MAX_CHARS:
-        comments = fitted.get("comments")
-        results = fitted.get("results")
-        if isinstance(comments, list) and comments:
-            comments.pop()
-            fitted["returned_comments"] = len(comments)
-            fitted["truncated"] = True
-            continue
-        if isinstance(results, list) and results:
-            results.pop()
-            fitted["truncated"] = True
-            continue
-        hole = fitted.get("hole")
-        if isinstance(hole, dict) and len(str(hole.get("text") or "")) > 80:
-            hole["text"] = _clip_text(str(hole.get("text") or ""), 80)
-            fitted["truncated"] = True
-            continue
-        break
-    return fitted
-
-
-def _json_size(value: object) -> int:
-    return len(json.dumps(value, ensure_ascii=False, separators=(",", ":")))
+def _hole_to_dict(item: object) -> dict[str, Any]:
+    return dict(item) if isinstance(item, dict) else {}
 
 
 def _update_to_dict(update: object) -> dict[str, Any]:

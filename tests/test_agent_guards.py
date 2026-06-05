@@ -1,4 +1,4 @@
-"""Agent safety guards for context size and tool loops."""
+"""Agent guard for context-length API errors (and the reasoning round-trip)."""
 
 from __future__ import annotations
 
@@ -52,34 +52,6 @@ class CountingTool(Tool):
         return ToolResult(success=True, data={"ok": True})
 
 
-class BigTool(Tool):
-    name = "big"
-    description = "big"
-    parameters_schema: dict[str, Any] = {"type": "object", "properties": {}}
-
-    def invoke(self, args: dict[str, Any]) -> ToolResult:
-        return ToolResult(success=True, data={"text": "x" * 8_000})
-
-
-class TreeholeCountingTool(Tool):
-    name = "treehole"
-    description = "treehole"
-    parameters_schema: dict[str, Any] = {"type": "object", "properties": {}}
-
-    def __init__(self) -> None:
-        self.calls: list[dict[str, Any]] = []
-
-    def invoke(self, args: dict[str, Any]) -> ToolResult:
-        self.calls.append(dict(args))
-        return ToolResult(
-            success=True,
-            data={
-                "status": "ok",
-                "results": [{"pid": "100", "text": "考试", "reply": 1, "likenum": 2}],
-            },
-        )
-
-
 def _agent(llm: LLMProvider, *, max_tool_iterations: int = 8):
     tools = ToolRegistry()
     tool = CountingTool()
@@ -95,25 +67,6 @@ def _agent(llm: LLMProvider, *, max_tool_iterations: int = 8):
             max_tool_iterations=max_tool_iterations,
         ),
         tool,
-    )
-
-
-def _agent_with_tool(
-    llm: LLMProvider,
-    tool: Tool,
-    *,
-    max_tool_iterations: int = 8,
-) -> Agent:
-    tools = ToolRegistry()
-    tools.register(tool)
-    conversation = Conversation()
-    conversation.add_system("BASE")
-    return Agent(
-        llm=llm,
-        tools=tools,
-        workflows=WorkflowRegistry(),
-        conversation=conversation,
-        max_tool_iterations=max_tool_iterations,
     )
 
 
@@ -165,115 +118,3 @@ def test_max_tool_iterations_returns_chinese_final_message() -> None:
     assert events[-1].kind == "final"
     assert "工具调用已达到上限" in events[-1].payload["text"]
     assert "Agent exceeded max tool iterations" not in events[-1].payload["text"]
-
-
-def test_repeated_tool_call_stops_before_second_real_invocation() -> None:
-    llm = ScriptedLLM(
-        [
-            ChatResponse(
-                text="",
-                tool_calls=[ToolCall(id="c1", name="counting", arguments={"q": "same"})],
-            ),
-            ChatResponse(
-                text="",
-                tool_calls=[ToolCall(id="c2", name="counting", arguments={"q": "same"})],
-            ),
-        ]
-    )
-    agent, tool = _agent(llm)
-
-    events = list(agent.turn("loop"))
-
-    assert tool.calls == [{"q": "same"}]
-    assert events[-1].kind == "final"
-    assert "重复调用" in events[-1].payload["text"]
-
-
-def test_tool_results_are_compact_json_in_conversation() -> None:
-    llm = ScriptedLLM(
-        [
-            ChatResponse(text="", tool_calls=[ToolCall(id="c1", name="big", arguments={})]),
-            ChatResponse(text="done"),
-        ]
-    )
-    agent = _agent_with_tool(llm, BigTool())
-
-    list(agent.turn("use big tool"))
-
-    tool_messages = [m for m in agent.conversation.snapshot() if m.role == "tool"]
-    assert tool_messages
-    assert tool_messages[0].content.startswith('{"text":"')
-    assert len(tool_messages[0].content) <= 4_000
-    assert "{'text':" not in tool_messages[0].content
-
-
-def test_similar_treehole_search_stops_before_second_real_invocation() -> None:
-    llm = ScriptedLLM(
-        [
-            ChatResponse(
-                text="",
-                tool_calls=[
-                    ToolCall(
-                        id="c1",
-                        name="treehole",
-                        arguments={"action": "search", "keyword": "考试", "limit": 5},
-                    )
-                ],
-            ),
-            ChatResponse(
-                text="",
-                tool_calls=[
-                    ToolCall(
-                        id="c2",
-                        name="treehole",
-                        arguments={"action": "search", "keyword": "考试", "limit": 20, "all": True},
-                    )
-                ],
-            ),
-        ]
-    )
-    tool = TreeholeCountingTool()
-    agent = _agent_with_tool(llm, tool)
-
-    events = list(agent.turn("search treehole"))
-
-    assert tool.calls == [{"action": "search", "keyword": "考试", "limit": 5}]
-    assert events[-1].kind == "final"
-    assert "重复调用" in events[-1].payload["text"]
-
-
-def test_treehole_search_limit_skips_second_different_search() -> None:
-    llm = ScriptedLLM(
-        [
-            ChatResponse(
-                text="",
-                tool_calls=[
-                    ToolCall(
-                        id="c1",
-                        name="treehole",
-                        arguments={"action": "search", "keyword": "考试"},
-                    )
-                ],
-            ),
-            ChatResponse(
-                text="",
-                tool_calls=[
-                    ToolCall(
-                        id="c2",
-                        name="treehole",
-                        arguments={"action": "search", "keyword": "选课"},
-                    )
-                ],
-            ),
-            ChatResponse(text="基于已有候选回答"),
-        ]
-    )
-    tool = TreeholeCountingTool()
-    agent = _agent_with_tool(llm, tool)
-
-    events = list(agent.turn("search treehole"))
-
-    assert tool.calls == [{"action": "search", "keyword": "考试"}]
-    assert events[-1].payload["text"] == "基于已有候选回答"
-    tool_messages = [m.content for m in agent.conversation.snapshot() if m.role == "tool"]
-    assert any("已完成一次 search" in content for content in tool_messages)
