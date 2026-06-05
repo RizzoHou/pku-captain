@@ -6,7 +6,7 @@ import subprocess
 import sys
 from collections.abc import Callable
 from datetime import datetime
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices, QMouseEvent
@@ -53,8 +53,7 @@ class ClickableFrame(QFrame):
         super().__init__(parent)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
-    @override
-    def mousePressEvent(self, event: QMouseEvent) -> None:
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt callback.
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit()
         super().mousePressEvent(event)

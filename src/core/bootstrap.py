@@ -260,7 +260,14 @@ def _sync_pku3b_identity_memory(memory: MemoryStore) -> None:
     must stay robust: missing pku3b, expired login, OTP/network errors, or
     schema changes should leave memory unchanged rather than preventing the GUI
     from opening.
+
+    Sync-once: ``MemoryStore`` persists to disk, so once any identity field is
+    stored we skip the blocking ``pku3b identity`` subprocess on later launches.
+    This call runs on the GUI main thread inside ``build_agent``; re-authing the
+    portal every launch would freeze startup and risk tripping OTP/rate limits.
     """
+    if any(memory.get(key) is not None for key in _IDENTITY_MEMORY_FIELDS.values()):
+        return
     try:
         run = run_pku3b(["identity", "--format", "json"])
     except (Pku3bNotFoundError, Pku3bTimeoutError, OSError):

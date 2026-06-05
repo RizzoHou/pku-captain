@@ -60,6 +60,23 @@ def test_sync_pku3b_identity_memory_ignores_failed_cli(tmp_path, monkeypatch) ->
     assert store.list() == []
 
 
+def test_sync_pku3b_identity_memory_skips_when_already_synced(tmp_path, monkeypatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(args):
+        calls.append(list(args))
+        return Pku3bRun(returncode=0, stdout=json.dumps({"name": "新名字"}), stderr="")
+
+    monkeypatch.setattr(bootstrap, "run_pku3b", fake_run)
+    store = MemoryStore(tmp_path / "memory.json")
+    store.set("identity.name", "已存在")
+
+    bootstrap._sync_pku3b_identity_memory(store)
+
+    assert calls == []  # sync-once guard skips the blocking subprocess
+    assert store.get("identity.name").value == "已存在"
+
+
 def test_online_build_agent_runs_identity_sync(monkeypatch, tmp_path) -> None:
     from src.llm.echo import EchoLLMProvider
     from src.tools.base import ToolRegistry

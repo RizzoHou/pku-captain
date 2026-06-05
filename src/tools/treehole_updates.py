@@ -812,7 +812,7 @@ def _treehole_action_status(status: str, message: str) -> ToolResult:
 
 def _bounded_int(value: object, *, default: int, minimum: int, maximum: int) -> int:
     try:
-        number = int(value)  # type: ignore[arg-type]
+        number = int(value)  # type: ignore[call-overload]
     except (TypeError, ValueError):
         number = default
     return max(minimum, min(maximum, number))
