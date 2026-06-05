@@ -521,6 +521,111 @@ class TreeholeInboxStore:
             pass
 
 
+class TreeholeHistoryStore:
+    """Persistent, append-only log of every treehole new reply ever surfaced.
+
+    Distinct from :class:`TreeholeInboxStore`, which clears on read (it drives
+    the unread badge): this store *never* clears on read, so the dialog's 历史消息
+    tab can show the user's full history of new replies in time order. Records
+    are individual comments keyed by ``(pid, cid)`` so re-merging the same poll
+    (or an already-accumulated inbox snapshot) is idempotent. Each record keeps
+    the comment text/author/timestamp plus the parent hole's text for context.
+
+    ``entries()`` returns records newest-first by comment ``timestamp`` (records
+    with no timestamp sink to the bottom). Two deliberate limitations, inherited
+    from the upstream poll rather than introduced here: (1) a poll that reports
+    only a reply-*count* increase carries no comment text or timestamp, so it
+    contributes nothing here — history is therefore "every new reply we could
+    date", not literally every detected change; (2) the dashboard polls with a
+    per-interval ``limit``, so if more holes update in one interval than that
+    limit, the overflow never reaches this store either.
+
+    ``path=None`` keeps it in-memory (the GUI default and tests use this so they
+    never touch the repo's ``data/``); ``MainWindow`` injects a real path.
+    """
+
+    def __init__(self, path: str | Path | None = None) -> None:
+        self.path = Path(path) if path is not None else None
+        self._records: list[dict[str, Any]] = self._load()
+        self._seen: set[tuple[str, str]] = {
+            (str(r.get("pid")), str(r.get("cid"))) for r in self._records
+        }
+
+    def _load(self) -> list[dict[str, Any]]:
+        if self.path is None or not self.path.exists():
+            return []
+        try:
+            data = json.loads(self.path.read_text())
+        except (OSError, ValueError):
+            return []
+        records = data.get("records") if isinstance(data, dict) else data
+        if not isinstance(records, list):
+            return []
+        return [r for r in records if isinstance(r, dict) and r.get("cid") is not None]
+
+    def entries(self) -> list[dict[str, Any]]:
+        """All recorded comments, newest-first by timestamp (untimed last)."""
+        return sorted(
+            (dict(r) for r in self._records),
+            key=lambda r: int(r.get("timestamp") or 0),
+            reverse=True,
+        )
+
+    def count(self) -> int:
+        return len(self._records)
+
+    def merge(self, updates: list[dict[str, Any]]) -> None:
+        """Absorb each update's ``new_comments`` as dated history records.
+
+        Fed from the raw poll ``updates`` at the same point as the inbox, so the
+        history grows even though the inbox is cleared on read. Idempotent: a
+        ``(pid, cid)`` already seen is skipped.
+        """
+        added = False
+        for update in updates or []:
+            if not isinstance(update, dict):
+                continue
+            pid = str(update.get("pid") or "")
+            hole_text = update.get("text")
+            for comment in update.get("new_comments") or []:
+                if not isinstance(comment, dict) or comment.get("cid") is None:
+                    continue
+                cid = str(comment["cid"])
+                key = (pid, cid)
+                if key in self._seen:
+                    continue
+                self._seen.add(key)
+                self._records.append({
+                    "pid": pid,
+                    "cid": cid,
+                    "text": comment.get("text"),
+                    "name_tag": comment.get("name_tag"),
+                    "timestamp": comment.get("timestamp"),
+                    "hole_text": hole_text,
+                })
+                added = True
+        if added:
+            self._save()
+
+    def clear(self) -> None:
+        if not self._records:
+            return
+        self._records = []
+        self._seen = set()
+        self._save()
+
+    def _save(self) -> None:
+        if self.path is None:
+            return
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.write_text(
+                json.dumps({"records": self._records}, ensure_ascii=False)
+            )
+        except OSError:
+            pass
+
+
 class TreeholeUpdatesTool(Tool):
     name: ClassVar[str] = "treehole_updates"
     description: ClassVar[str] = (

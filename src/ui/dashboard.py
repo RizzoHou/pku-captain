@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -33,6 +34,7 @@ from ..tools.base import Tool, ToolRegistry
 from ..tools.treehole_updates import (
     DEFAULT_NOTIFY_INTERVAL,
     TreeholeAuthService,
+    TreeholeHistoryStore,
     TreeholeInboxStore,
     TreeholeNotificationService,
 )
@@ -92,6 +94,7 @@ class DashboardPanel(QWidget):
         tools: ToolRegistry | None = None,
         memory_learner: MemoryLearnService | None = None,
         treehole_inbox: TreeholeInboxStore | None = None,
+        treehole_history: TreeholeHistoryStore | None = None,
     ) -> None:
         super().__init__()
         self.setObjectName("DashboardPanel")
@@ -101,6 +104,9 @@ class DashboardPanel(QWidget):
         # card instead of vanishing on the next empty poll. In-memory by default
         # (tests / no-disk); MainWindow injects a persisted store.
         self._treehole_inbox = treehole_inbox or TreeholeInboxStore()
+        # Append-only log of every new reply ever surfaced, fed alongside the
+        # inbox but never cleared on read — backs the dialog's 历史消息 tab.
+        self._treehole_history = treehole_history or TreeholeHistoryStore()
 
         title = QLabel("PKU Captain")
         title.setObjectName("DashboardTitle")
@@ -283,7 +289,12 @@ class DashboardPanel(QWidget):
         """
         updates = data.get("updates")
         if isinstance(updates, list):
-            self._treehole_inbox.merge([u for u in updates if isinstance(u, dict)])
+            poll = [u for u in updates if isinstance(u, dict)]
+            # Feed both from the raw poll, before any mark-as-read clear: the
+            # inbox drives the unread badge (cleared on open), the history is a
+            # permanent time-ordered log (never cleared on open).
+            self._treehole_inbox.merge(poll)
+            self._treehole_history.merge(poll)
         self._render_treehole(
             fallback_message=str(data.get("message") or ""),
             status=str(data.get("status") or "ok"),
@@ -360,7 +371,9 @@ class DashboardPanel(QWidget):
     def _show_treehole_dialog(self) -> None:
         if self._require_tool("treehole_updates", "树洞新消息") is None:
             return
-        dialog = TreeholeMessagesDialog(self._treehole_data, self)
+        dialog = TreeholeMessagesDialog(
+            self._treehole_data, self, history=self._treehole_history
+        )
         dialog.auth_changed.connect(self._partial_refresh_emitter("treehole_updates"))
         # Opening the list marks the accumulated unread as read: empty the inbox
         # (the dialog already captured a snapshot) so the card/badge reset.
@@ -1358,11 +1371,23 @@ class TreeholeMessagesDialog(QDialog):
 
     auth_changed = pyqtSignal()
 
-    def __init__(self, data: dict[str, object], parent: QWidget | None = None) -> None:
+    # Cap the history tab so a semester of records can't spawn thousands of
+    # widgets in one scroll area; the store keeps everything, the view shows the
+    # most recent slice.
+    _HISTORY_DISPLAY_CAP = 200
+
+    def __init__(
+        self,
+        data: dict[str, object],
+        parent: QWidget | None = None,
+        *,
+        history: TreeholeHistoryStore | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("树洞新消息")
         self.resize(700, 680)
         self._auth = TreeholeAuthService()
+        self._history = history
         self._pending: object = None
 
         title = QLabel("树洞新消息")
@@ -1371,6 +1396,46 @@ class TreeholeMessagesDialog(QDialog):
         message.setObjectName("DialogSubtitle")
         message.setWordWrap(True)
 
+        tabs = QTabWidget()
+        tabs.setObjectName("TreeholeMessageTabs")
+        tabs.addTab(self._build_new_tab(data), "新消息")
+        tabs.addTab(self._build_history_tab(), "历史消息")
+
+        auth_panel = self._build_auth_panel()
+
+        notify_button = QPushButton("消息通知")
+        notify_button.setObjectName("SecondaryButton")
+        notify_button.setToolTip("设置 macOS 后台消息通知与检查间隔")
+        notify_button.clicked.connect(self._open_notification_settings)
+        self._clear_history_button = QPushButton("清空历史")
+        self._clear_history_button.setObjectName("SecondaryButton")
+        self._clear_history_button.setToolTip("清空全部历史消息记录")
+        self._clear_history_button.clicked.connect(self._clear_history)
+        self._clear_history_button.setEnabled(bool(history and history.count()))
+        close_button = QPushButton("关闭")
+        close_button.setObjectName("PrimaryButton")
+        close_button.clicked.connect(self.accept)
+
+        button_row = QHBoxLayout()
+        button_row.setContentsMargins(0, 0, 0, 0)
+        button_row.setSpacing(10)
+        button_row.addWidget(notify_button, 0, Qt.AlignmentFlag.AlignLeft)
+        button_row.addWidget(self._clear_history_button, 0, Qt.AlignmentFlag.AlignLeft)
+        button_row.addStretch()
+        button_row.addWidget(close_button, 0, Qt.AlignmentFlag.AlignRight)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+        layout.addWidget(title)
+        layout.addWidget(message)
+        layout.addWidget(auth_panel)
+        layout.addWidget(tabs, 1)
+        layout.addLayout(button_row)
+
+        self._refresh_auth_status()
+
+    def _build_new_tab(self, data: dict[str, object]) -> QScrollArea:
         host = QWidget()
         list_layout = QVBoxLayout(host)
         list_layout.setContentsMargins(0, 0, 0, 0)
@@ -1393,35 +1458,64 @@ class TreeholeMessagesDialog(QDialog):
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setWidget(host)
         scroll.setMinimumHeight(160)
-        scroll.setMaximumHeight(280)
+        return scroll
 
-        auth_panel = self._build_auth_panel()
+    def _build_history_tab(self) -> QScrollArea:
+        host = QWidget()
+        self._history_layout = QVBoxLayout(host)
+        self._history_layout.setContentsMargins(0, 0, 0, 0)
+        self._history_layout.setSpacing(8)
 
-        notify_button = QPushButton("消息通知")
-        notify_button.setObjectName("SecondaryButton")
-        notify_button.setToolTip("设置 macOS 后台消息通知与检查间隔")
-        notify_button.clicked.connect(self._open_notification_settings)
-        close_button = QPushButton("关闭")
-        close_button.setObjectName("PrimaryButton")
-        close_button.clicked.connect(self.accept)
+        scroll = QScrollArea()
+        scroll.setObjectName("TreeholeHistoryScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(host)
+        scroll.setMinimumHeight(160)
 
-        button_row = QHBoxLayout()
-        button_row.setContentsMargins(0, 0, 0, 0)
-        button_row.setSpacing(10)
-        button_row.addWidget(notify_button, 0, Qt.AlignmentFlag.AlignLeft)
-        button_row.addStretch()
-        button_row.addWidget(close_button, 0, Qt.AlignmentFlag.AlignRight)
+        self._render_history()
+        return scroll
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
-        layout.addWidget(title)
-        layout.addWidget(message)
-        layout.addWidget(auth_panel)
-        layout.addWidget(scroll, 1)
-        layout.addLayout(button_row)
+    def _render_history(self) -> None:
+        layout = self._history_layout
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
 
-        self._refresh_auth_status()
+        records = self._history.entries() if self._history is not None else []
+        if not records:
+            empty = QLabel("暂无历史消息")
+            empty.setObjectName("CardBody")
+            empty.setWordWrap(True)
+            layout.addWidget(empty)
+            layout.addStretch()
+            return
+
+        for record in records[: self._HISTORY_DISPLAY_CAP]:
+            layout.addWidget(_treehole_history_row(record))
+        hidden = len(records) - self._HISTORY_DISPLAY_CAP
+        if hidden > 0:
+            more = QLabel(f"仅显示最近 {self._HISTORY_DISPLAY_CAP} 条，另有 {hidden} 条更早记录。")
+            more.setObjectName("TodoCourse")
+            more.setWordWrap(True)
+            layout.addWidget(more)
+        layout.addStretch()
+
+    def _clear_history(self) -> None:
+        if self._history is None or not self._history.count():
+            return
+        confirm = QMessageBox.question(
+            self,
+            "清空历史消息",
+            "确定清空全部历史消息记录吗？此操作不可恢复。",
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+        self._history.clear()
+        self._render_history()
+        self._clear_history_button.setEnabled(False)
 
     def _open_notification_settings(self) -> None:
         TreeholeNotificationDialog(parent=self).exec()
@@ -3002,6 +3096,41 @@ def _treehole_detail_row(item: dict[str, object]) -> QFrame:
         hint.setObjectName("TodoCourse")
         hint.setWordWrap(True)
         layout.addWidget(hint)
+    return row
+
+
+def _treehole_history_row(record: dict[str, object]) -> QFrame:
+    """One historical reply: which hole, who, when, and the comment text.
+
+    History is flattened across holes (newest-first), so unlike the per-hole
+    detail row each row must carry its own ``#pid``.
+    """
+    row = ClickableFrame()
+    row.setObjectName("TreeholeDetailRow")
+    row.setToolTip("点击在 Safari 打开树洞")
+    row.clicked.connect(lambda: _open_external_url(TREEHOLE_WEB_URL))
+
+    pid = str(record.get("pid") or "?")
+    who = str(record.get("name_tag") or "洞友")
+    time_text = _timestamp_text(record.get("timestamp"))
+    header = QLabel(f"#{pid} · {who} · {time_text}")
+    header.setObjectName("TodoTitle")
+    body = QLabel(str(record.get("text") or "（无正文）"))
+    body.setObjectName("CardBody")
+    body.setWordWrap(True)
+
+    layout = QVBoxLayout(row)
+    layout.setContentsMargins(12, 10, 12, 10)
+    layout.setSpacing(4)
+    layout.addWidget(header)
+    layout.addWidget(body)
+
+    hole_text = str(record.get("hole_text") or "").strip()
+    if hole_text:
+        context = QLabel(_clip(hole_text, 72))
+        context.setObjectName("TodoCourse")
+        context.setWordWrap(True)
+        layout.addWidget(context)
     return row
 
 

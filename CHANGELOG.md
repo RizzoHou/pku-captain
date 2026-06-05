@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- 树洞新消息 dialog now has a 历史消息 tab: a persistent, time-ordered (newest-first) log of every new reply ever surfaced, alongside the existing 新消息 tab. Backed by `TreeholeHistoryStore` (`src/tools/treehole_updates.py`, persisted to `data/treehole_history.json`) — an append-only per-comment store keyed by `(pid, cid)`, fed from the raw poll alongside the unread inbox but **never cleared on read** (the inbox clears on open to reset the badge; history persists). Injected via `DashboardPanel(treehole_history=...)` by `MainWindow`. The tab renders the most-recent 200 records (`_treehole_history_row`, shows `#pid · 洞友 · 时间` + text) with a 清空历史 button. Two inherited limits (stated, not silent): a count-only poll (no comment text/timestamp) contributes nothing — history is "every reply we could date", not literally every detected change — and the dashboard's per-poll `limit:5` caps how many holes reach the store per interval. Tests: `tests/test_treehole_history.py` (store: dedup, time-order, persist, clear) + a `test_treehole_sync.py` case proving history survives an inbox clear. (worktree `treehole-message-caching-and-saving`)
+
 ### Removed
 - The storage-only `ReminderTool` and its dashboard 提醒 entry (`RemindersDialog` + 页眉 button). It never fired notifications (storage + querying only), so it duplicated nothing the user could act on. Deleted `src/tools/reminder.py`, the `ToolRegistry` registration, the GUI button/dialog/handler, and the manual-test step. The macOS-Calendar DDL feature (`CalendarReminderTool` / 加入日历, real system alarms) is unaffected.
 
