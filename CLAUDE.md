@@ -26,7 +26,7 @@ The GUI defaults to offline so first-time clones don't hit the network. Pass `--
 
 ### Worktrees (`claude --worktree`)
 
-`CLAUDE.md` is tracked, so every worktree already has it via git — listing it in `.worktreeinclude` would be a no-op (that file copies only *gitignored* files). A repo-root `.worktreeinclude` (gitignored) covers the paths git won't carry over: `secrets/` (API keys + P-Lib/treehole creds + cached treehole session) and `.local/` (the project-local `pku3b` cargo binary).
+`.worktreeinclude` (gitignored, per-machine) copies only *gitignored* paths git won't carry over — tracked files like `CLAUDE.md` come via git, so listing them is a no-op. It covers `secrets/` (API keys + P-Lib/treehole creds + session) and `.local/` (project-local `pku3b` binary), plus `.claude/*` + `!.claude/worktrees/` so a worktree gets local Claude config (`settings.local.json`) but not the 24 MB worktrees dir — use `.claude/*` not `.claude/`, else git prunes the dir before the `!`.
 
 `.venv/` is **not** copied (~1.2 GB per worktree). Worktrees share the main venv via a symlink — run once inside the worktree (its `.claude/worktrees/<name>/` location puts the repo root three levels up):
 
