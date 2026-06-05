@@ -20,7 +20,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PyQt6")
 
 from PyQt6.QtCore import QThreadPool  # noqa: E402
-from PyQt6.QtWidgets import QApplication  # noqa: E402
+from PyQt6.QtTest import QTest  # noqa: E402
+from PyQt6.QtWidgets import QApplication, QLabel  # noqa: E402
 
 import src.ui.dashboard as dashboard  # noqa: E402
 from src.tools.base import Tool, ToolResult  # noqa: E402
@@ -87,6 +88,116 @@ def test_all_dialogs_construct_with_injected_tool(
 
     dashboard.TreeholeNotificationDialog(service=FakeNotifyService())
     _drain()  # let any __init__-launched async calls settle
+
+
+def test_dashboard_title_preserves_only_product_name(app: QApplication) -> None:
+    panel = dashboard.DashboardPanel(mode_label="离线模式")
+    titles = panel.findChildren(QLabel, "DashboardTitle")
+
+    assert [title.text() for title in titles] == ["PKU Captain"]
+
+
+def test_schedule_card_displays_official_note_smaller(app: QApplication) -> None:
+    card = dashboard.ScheduleCard()
+    card.set_schedule(
+        {
+            "blocks": [
+                {
+                    "day_key": "mon",
+                    "day_name": "周一",
+                    "start_slot": 1,
+                    "end_slot": 2,
+                    "title": "程序设计实习",
+                    "detail": "理教407 | 教师：杨帅",
+                    "note": "与软件设计实践互斥",
+                }
+            ]
+        }
+    )
+
+    note_labels = card.findChildren(QLabel, "CourseBlockNote")
+    assert [label.text() for label in note_labels] == ["与软件设计实践互斥"]
+
+
+def test_dean_updates_card_renders_new_items(app: QApplication) -> None:
+    card = dashboard.DeanUpdatesCard()
+    card.set_updates(
+        {
+            "message": "教务部有 1 条新内容",
+            "updates": [
+                {
+                    "title": "本科生学籍管理办法",
+                    "source_label": "校级规章",
+                    "date": "2026-06-05",
+                }
+            ],
+        }
+    )
+
+    titles = card.findChildren(QLabel, "TodoTitle")
+    assert [label.text() for label in titles] == ["本科生学籍管理办法"]
+
+
+def test_open_external_url_prefers_safari_on_macos(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str]] = []
+
+    class Result:
+        returncode = 0
+
+    def fake_run(cmd: list[str], **_: object) -> Result:
+        calls.append(cmd)
+        return Result()
+
+    monkeypatch.setattr(dashboard.sys, "platform", "darwin")
+    monkeypatch.setattr(dashboard.subprocess, "run", fake_run)
+
+    assert dashboard._open_external_url("https://example.com")
+    assert calls == [["open", "-a", "Safari", "https://example.com"]]
+
+
+def test_open_external_url_falls_back_to_qdesktop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    opened: list[str] = []
+
+    monkeypatch.setattr(dashboard.sys, "platform", "linux")
+    monkeypatch.setattr(
+        dashboard.QDesktopServices,
+        "openUrl",
+        lambda url: opened.append(url.toString()) or True,
+    )
+
+    assert dashboard._open_external_url("https://example.com/fallback")
+    assert opened == ["https://example.com/fallback"]
+
+
+def test_clickable_rows_open_linked_sections(
+    app: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    opened: list[str] = []
+    monkeypatch.setattr(dashboard, "_open_external_url", lambda url: opened.append(url) or True)
+
+    dean_row = dashboard._dean_update_row(
+        {
+            "title": "本科生学籍管理办法",
+            "source_label": "校级规章",
+            "date": "2026-06-05",
+            "url": "https://dean.pku.edu.cn/web/rules/15",
+        }
+    )
+    treehole_row = dashboard._treehole_row({"pid": 123, "delta": 1, "text": "x"})
+    dean_row.show()
+    treehole_row.show()
+
+    QTest.mouseClick(dean_row, dashboard.Qt.MouseButton.LeftButton)
+    QTest.mouseClick(treehole_row, dashboard.Qt.MouseButton.LeftButton)
+
+    assert opened == [
+        "https://dean.pku.edu.cn/web/rules/15",
+        dashboard.TREEHOLE_WEB_URL,
+    ]
 
 
 def test_calendar_candidates_filters_and_sorts(app: QApplication) -> None:

@@ -37,6 +37,7 @@ class CourseBlock:
     end_slot: int
     title: str
     detail: str
+    note: str
 
 
 class PKU3bCourseTableTool(Tool):
@@ -113,7 +114,7 @@ def _parse_course_table(raw: dict[str, Any]) -> list[CourseBlock]:
 
     blocks: list[CourseBlock] = []
     for day_key, day_name in _DAYS:
-        day_slots: list[tuple[int, str, str]] = []
+        day_slots: list[tuple[int, str, str, str]] = []
         for index, slot in enumerate(slots, start=1):
             if not isinstance(slot, dict):
                 continue
@@ -123,15 +124,15 @@ def _parse_course_table(raw: dict[str, Any]) -> list[CourseBlock]:
             name = course.get("courseName")
             if not isinstance(name, str) or not name.strip():
                 continue
-            title, detail = _clean_course_info(name)
-            day_slots.append((index, title, detail))
+            title, detail, note = _clean_course_info(name)
+            day_slots.append((index, title, detail, note))
 
         i = 0
         while i < len(day_slots):
-            start, title, detail = day_slots[i]
+            start, title, detail, note = day_slots[i]
             end = start
             j = i + 1
-            while j < len(day_slots) and day_slots[j][1:] == (title, detail):
+            while j < len(day_slots) and day_slots[j][1:] == (title, detail, note):
                 end = day_slots[j][0]
                 j += 1
             blocks.append(
@@ -142,13 +143,14 @@ def _parse_course_table(raw: dict[str, Any]) -> list[CourseBlock]:
                     end_slot=end,
                     title=title,
                     detail=detail,
+                    note=note,
                 )
             )
             i = j
     return blocks
 
 
-def _clean_course_info(value: str) -> tuple[str, str]:
+def _clean_course_info(value: str) -> tuple[str, str, str]:
     text = unescape(_TAG_RE.sub(" ", value))
     text = re.sub(r"\s+", " ", text).strip()
     title = text.split("(主)", 1)[0].strip() or text
@@ -160,10 +162,11 @@ def _clean_course_info(value: str) -> tuple[str, str]:
     teacher = _after(text, "教师：")
     if teacher:
         details.append(f"教师：{teacher.split()[0]}")
+    note = _between(text, "备注：", "考试信息：")
     exam = _after(text, "考试信息：")
     if exam:
         details.append(f"考试：{exam}")
-    return title, " | ".join(details)
+    return title, " | ".join(details), note
 
 
 def _between(text: str, start: str, end: str) -> str:

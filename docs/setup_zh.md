@@ -53,7 +53,7 @@ brew install openssl pkg-config
 ### 安装
 
 ```bash
-cargo install --git https://github.com/RizzoHou/pku3b --branch feat/assignment-list-json-output
+cargo install --git https://github.com/RizzoHou/pku3b --branch master
 ```
 
 二进制会被放到 `~/.cargo/bin/pku3b`，确认它在 `PATH` 上（或自行 symlink 到 `~/.local/bin/`）。
@@ -63,6 +63,7 @@ cargo install --git https://github.com/RizzoHou/pku3b --branch feat/assignment-l
 ```bash
 pku3b --version                              # 0.13.0+，来自我们的分支
 pku3b assignment list --format json | jq .   # 验证 --format json 标志可用
+pku3b identity --format json | jq .          # 验证身份摘要 JSON 可用（不要使用 --raw）
 ```
 
 如果第二条命令报 `unknown flag --format`，说明装到了上游版本，重新跑上面的 `cargo install`。

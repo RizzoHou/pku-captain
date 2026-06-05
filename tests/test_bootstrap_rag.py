@@ -27,10 +27,14 @@ def test_knowledge_off_by_default() -> None:
     names = _names(offline=False, enable_knowledge=False)
     assert "knowledge_search" not in names
     assert "pku3b_assignments" in names  # other online tools still register
+    assert "treehole" in names
+    assert "dean_updates" in names
 
 
 def test_knowledge_never_registers_offline() -> None:
-    assert "knowledge_search" not in _names(offline=True, enable_knowledge=True)
+    names = _names(offline=True, enable_knowledge=True)
+    assert "knowledge_search" not in names
+    assert "treehole" not in names
 
 
 def test_knowledge_opt_in(monkeypatch: pytest.MonkeyPatch) -> None:

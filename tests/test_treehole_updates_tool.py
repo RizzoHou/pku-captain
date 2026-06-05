@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from src.tools.treehole_updates import NeedSMSVerification, TreeholeUpdatesTool
+from src.tools.treehole_updates import NeedSMSVerification, TreeholeTool, TreeholeUpdatesTool
 
 
 @dataclass(frozen=True)
@@ -95,4 +95,77 @@ def test_treehole_updates_tool_surfaces_sms_verification() -> None:
     assert result.success is True
     assert result.data["status"] == "needs_sms"
     assert result.data["unread_count"] == 0
+    assert "短信验证" in result.data["message"]
+
+
+class FakeTreeholeClient:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, object]] = []
+
+    def search(self, keyword: str, *, limit: int = 25) -> dict[str, object]:
+        self.calls.append(("search", {"keyword": keyword, "limit": limit}))
+        return {
+            "list": [
+                {
+                    "pid": "100",
+                    "text": "关键词命中内容",
+                    "reply": 3,
+                    "likenum": 8,
+                }
+            ]
+        }
+
+    def search_all(self, keyword: str, *, limit: int = 50) -> list[dict[str, object]]:
+        self.calls.append(("search_all", {"keyword": keyword, "limit": limit}))
+        return [{"pid": "101", "text": "全部搜索结果"}]
+
+    def hole(self, pid: str) -> dict[str, object]:
+        self.calls.append(("hole", pid))
+        return {"pid": pid, "text": "原洞内容", "reply": 2}
+
+    def comments_all(self, pid: str, *, limit: int = 50) -> list[dict[str, object]]:
+        self.calls.append(("comments_all", {"pid": pid, "limit": limit}))
+        return [{"cid": 1, "text": "第一条评论", "name_tag": "洞友"}]
+
+
+def test_treehole_tool_search_returns_results() -> None:
+    client = FakeTreeholeClient()
+    tool = TreeholeTool(client_factory=lambda *args, **kwargs: client)
+
+    result = tool.invoke({"action": "search", "keyword": "考试", "limit": 7})
+
+    assert result.success is True
+    assert result.data["action"] == "search"
+    assert result.data["results"][0]["pid"] == "100"
+    assert client.calls == [("search", {"keyword": "考试", "limit": 7})]
+
+
+def test_treehole_tool_fetch_returns_hole_and_comments() -> None:
+    client = FakeTreeholeClient()
+    tool = TreeholeTool(client_factory=lambda *args, **kwargs: client)
+
+    result = tool.invoke({"action": "fetch", "pid": "#100", "limit": 20})
+
+    assert result.success is True
+    assert result.data["action"] == "fetch"
+    assert result.data["pid"] == "100"
+    assert result.data["hole"]["text"] == "原洞内容"
+    assert result.data["comments"][0]["text"] == "第一条评论"
+    assert client.calls == [
+        ("hole", "100"),
+        ("comments_all", {"pid": "100", "limit": 20}),
+    ]
+
+
+def test_treehole_tool_surfaces_sms_verification() -> None:
+    class SMSClient:
+        def search(self, *_: object, **__: object) -> dict[str, object]:
+            raise NeedSMSVerification("请手机短信验证")
+
+    tool = TreeholeTool(client_factory=lambda *args, **kwargs: SMSClient())
+
+    result = tool.invoke({"action": "search", "keyword": "考试"})
+
+    assert result.success is True
+    assert result.data["status"] == "needs_sms"
     assert "短信验证" in result.data["message"]

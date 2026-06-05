@@ -177,7 +177,9 @@ def test_earlier_thinking_collapses_when_next_segment_starts(app: QApplication) 
 
 def test_toggle_hides_and_reveals_existing_windows(app: QApplication) -> None:
     panel = ChatPanel()
+    assert panel._thinking_toggle.property("thinkingVisible") is False
     panel._thinking_toggle.setChecked(True)  # exercise the real GUI entry point
+    assert panel._thinking_toggle.property("thinkingVisible") is True
     _drive(
         panel,
         [
@@ -189,9 +191,22 @@ def test_toggle_hides_and_reveals_existing_windows(app: QApplication) -> None:
     row = _thinking_rows(panel)[0]
     assert row.isHidden() is False
     panel._thinking_toggle.setChecked(False)
+    assert panel._thinking_toggle.property("thinkingVisible") is False
     assert row.isHidden() is True
     panel._thinking_toggle.setChecked(True)
+    assert panel._thinking_toggle.property("thinkingVisible") is True
     assert row.isHidden() is False
+
+
+def test_thinking_window_shrinks_for_short_text_and_caps_long_text(app: QApplication) -> None:
+    short = InlineThinking()
+    short.append("tiny")
+
+    long = InlineThinking()
+    long.append("x" * 2000)
+
+    assert short.width() < InlineThinking._MAX_WIDTH
+    assert long.width() == InlineThinking._MAX_WIDTH
 
 
 def test_history_replays_thinking_only_when_on(app: QApplication) -> None:

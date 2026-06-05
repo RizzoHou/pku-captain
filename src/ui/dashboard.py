@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from collections.abc import Callable
 from datetime import datetime
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import Qt, QUrl, pyqtSignal
-from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtGui import QDesktopServices, QMouseEvent
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -41,6 +43,38 @@ if TYPE_CHECKING:
     from ..core import MemoryLearnService
 
 
+TREEHOLE_WEB_URL = "https://treehole.pku.edu.cn/ch/web/"
+
+
+class ClickableFrame(QFrame):
+    clicked = pyqtSignal()
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt callback.
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+
+
+def _open_external_url(url: str) -> bool:
+    target = url.strip()
+    if not target:
+        return False
+    if sys.platform == "darwin":
+        result = subprocess.run(
+            ["open", "-a", "Safari", target],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if result.returncode == 0:
+            return True
+    return QDesktopServices.openUrl(QUrl(target))
+
+
 class DashboardPanel(QWidget):
     """Dashboard shell with the Week-2 core information widgets."""
 
@@ -68,7 +102,7 @@ class DashboardPanel(QWidget):
         # (tests / no-disk); MainWindow injects a persisted store.
         self._treehole_inbox = treehole_inbox or TreeholeInboxStore()
 
-        title = QLabel("PKU Captain 北大信息助手")
+        title = QLabel("PKU Captain")
         title.setObjectName("DashboardTitle")
         subtitle = QLabel(f"今日信息总览 · {mode_label}")
         subtitle.setObjectName("DashboardSubtitle")
@@ -121,6 +155,7 @@ class DashboardPanel(QWidget):
             "schedule": ScheduleCard(),
             "pku3b_assignments": AssignmentTodoCard(),
             "treehole_updates": TreeholeMessagesCard(),
+            "dean_updates": DeanUpdatesCard(),
             "plib_materials": PLibMaterialsCard(),
             "pku3b_announcements": AnnouncementsCard(),
             "lecture": LecturesCard(),
@@ -131,6 +166,9 @@ class DashboardPanel(QWidget):
             treehole_card.refresh_requested.connect(
                 self._partial_refresh_emitter("treehole_updates")
             )
+        dean_card = self._cards["dean_updates"]
+        if isinstance(dean_card, DeanUpdatesCard):
+            dean_card.refresh_requested.connect(self._partial_refresh_emitter("dean_updates"))
         plib_card = self._cards["plib_materials"]
         if isinstance(plib_card, PLibMaterialsCard):
             plib_card.login_requested.connect(self._show_plib_login_dialog)
@@ -161,9 +199,10 @@ class DashboardPanel(QWidget):
         grid.addWidget(self._cards["schedule"], 0, 0, 1, 2)
         grid.addWidget(self._cards["pku3b_assignments"], 1, 0)
         grid.addWidget(self._cards["treehole_updates"], 1, 1)
-        grid.addWidget(self._cards["plib_materials"], 2, 0)
+        grid.addWidget(self._cards["dean_updates"], 2, 0)
         grid.addWidget(self._cards["pku3b_announcements"], 2, 1)
-        grid.addWidget(self._cards["lecture"], 3, 0, 1, 2)
+        grid.addWidget(self._cards["plib_materials"], 3, 0)
+        grid.addWidget(self._cards["lecture"], 3, 1)
 
         scroll = QScrollArea()
         scroll.setObjectName("DashboardScroll")
@@ -274,6 +313,11 @@ class DashboardPanel(QWidget):
         card = self._cards.get("treehole_updates")
         if isinstance(card, TreeholeMessagesCard):
             card.set_updates(display)
+
+    def set_dean_updates(self, data: dict[str, object]) -> None:
+        card = self._cards.get("dean_updates")
+        if isinstance(card, DeanUpdatesCard):
+            card.set_updates(data)
 
     def set_plib_materials(self, data: dict[str, object]) -> None:
         card = self._cards.get("plib_materials")
@@ -629,6 +673,90 @@ class TreeholeMessagesCard(QFrame):
         hidden = len(updates) - self._COLLAPSED_LIMIT
         if hidden > 0:
             more = QLabel(f"还有 {hidden} 个树洞有更新，点击查看全部")
+            more.setObjectName("TodoMore")
+            self._list_layout.addWidget(more)
+        self._list_layout.addStretch()
+
+    def _clear_items(self) -> None:
+        while self._list_layout.count():
+            item = self._list_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+
+
+class DeanUpdatesCard(QFrame):
+    """Dashboard card for newly surfaced Dean's Office public resources."""
+
+    refresh_requested = pyqtSignal()
+    _COLLAPSED_LIMIT = 4
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setObjectName("DashboardCard")
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.setMinimumHeight(196)
+
+        title_label = QLabel("教务更新")
+        title_label.setObjectName("CardTitle")
+        self._summary_label = QLabel("上次检查以来的教务部新内容")
+        self._summary_label.setObjectName("CardBody")
+        self._summary_label.setWordWrap(True)
+
+        self._list_host = QWidget()
+        self._list_layout = QVBoxLayout(self._list_host)
+        self._list_layout.setContentsMargins(0, 0, 0, 0)
+        self._list_layout.setSpacing(7)
+
+        self._refresh_button = QPushButton("刷新")
+        self._refresh_button.setObjectName("InlineToggleButton")
+        self._refresh_button.clicked.connect(self.refresh_requested)
+        actions = QHBoxLayout()
+        actions.setContentsMargins(0, 0, 0, 0)
+        actions.addWidget(self._refresh_button, 0, Qt.AlignmentFlag.AlignLeft)
+        actions.addStretch()
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
+        layout.addWidget(title_label)
+        layout.addWidget(self._summary_label)
+        layout.addWidget(self._list_host)
+        layout.addLayout(actions)
+        layout.addStretch()
+
+        self.set_body("加载中...", "loading")
+
+    def set_body(self, text: str, state: str = "data") -> None:
+        colors = {
+            "loading": "#667085",
+            "data": "#475467",
+            "error": "#b42318",
+        }
+        self._summary_label.setText(text)
+        self._summary_label.setStyleSheet(f"color: {colors.get(state, colors['data'])};")
+        self._clear_items()
+
+    def set_updates(self, data: dict[str, object]) -> None:
+        message = str(data.get("message") or "暂无教务部新内容")
+        updates = data.get("updates")
+        self._summary_label.setText(message)
+        self._summary_label.setStyleSheet("")
+        self._clear_items()
+        if not isinstance(updates, list) or not updates:
+            empty = QLabel(message)
+            empty.setObjectName("CardBody")
+            empty.setWordWrap(True)
+            self._list_layout.addWidget(empty)
+            return
+        for item in updates[: self._COLLAPSED_LIMIT]:
+            if isinstance(item, dict):
+                self._list_layout.addWidget(_dean_update_row(item))
+        hidden = len(updates) - self._COLLAPSED_LIMIT
+        if hidden > 0:
+            more = QLabel(f"还有 {hidden} 条新内容")
             more.setObjectName("TodoMore")
             self._list_layout.addWidget(more)
         self._list_layout.addStretch()
@@ -1068,14 +1196,14 @@ class ScheduleCard(QFrame):
             end = int(item["end_slot"])
             title = str(item.get("title", "未命名课程"))
             detail = str(item.get("detail", ""))
-            button = QPushButton(title)
-            button.setObjectName("CourseBlock")
-            button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-            button.setToolTip(detail or title)
-            button.clicked.connect(
-                lambda _checked=False, course=dict(item): self._show_course_detail(course)
+            note = str(item.get("note", ""))
+            block = CourseBlockWidget(title=title, note=note)
+            block.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            block.setToolTip(" | ".join(part for part in (detail, note) if part) or title)
+            block.clicked.connect(
+                lambda course=dict(item): self._show_course_detail(course)
             )
-            self._calendar_layout.addWidget(button, start, column, end - start + 1, 1)
+            self._calendar_layout.addWidget(block, start, column, end - start + 1, 1)
 
         self._calendar_layout.setColumnMinimumWidth(0, 24)
         for column in range(1, 8):
@@ -1091,6 +1219,7 @@ class ScheduleCard(QFrame):
                 f"课程：{course.get('title', '未命名课程')}",
                 f"时间：{course.get('day_name', '')} {slot}",
                 f"详情：{course.get('detail') or '暂无详细信息'}",
+                f"备注：{course.get('note') or '暂无官方备注'}",
             ]
         )
         QMessageBox.information(self, "课程详情", message)
@@ -1116,6 +1245,42 @@ def _slot_label(text: str) -> QLabel:
     label.setAlignment(Qt.AlignmentFlag.AlignCenter)
     label.setObjectName("ScheduleSlot")
     return label
+
+
+class CourseBlockWidget(QFrame):
+    """Clickable course cell with a smaller official note line."""
+
+    clicked = pyqtSignal()
+
+    def __init__(self, *, title: str, note: str = "") -> None:
+        super().__init__()
+        self.setObjectName("CourseBlock")
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        title_label = QLabel(title)
+        title_label.setObjectName("CourseBlockTitle")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_label.setWordWrap(True)
+
+        self._note_label = QLabel(note)
+        self._note_label.setObjectName("CourseBlockNote")
+        self._note_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._note_label.setWordWrap(True)
+        self._note_label.setVisible(bool(note))
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(4, 3, 4, 3)
+        layout.setSpacing(2)
+        layout.addStretch()
+        layout.addWidget(title_label)
+        layout.addWidget(self._note_label)
+        layout.addStretch()
+
+    def mousePressEvent(self, event) -> None:  # noqa: ANN001,N802 - Qt callback.
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
 
 
 def _todo_row(item: dict[str, object]) -> QFrame:
@@ -1156,9 +1321,11 @@ def _todo_row(item: dict[str, object]) -> QFrame:
 
 
 def _treehole_row(item: dict[str, object]) -> QFrame:
-    row = QFrame()
+    row = ClickableFrame()
     row.setObjectName("TreeholeRow")
     row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    row.setToolTip("点击在 Safari 打开树洞")
+    row.clicked.connect(lambda: _open_external_url(TREEHOLE_WEB_URL))
 
     pid = str(item.get("pid") or "?")
     delta = int(item.get("delta") or 0)
@@ -2067,7 +2234,7 @@ class LectureDetailDialog(QDialog):
 
     def _open_link(self) -> None:
         if self._link:
-            QDesktopServices.openUrl(QUrl(self._link))
+            _open_external_url(self._link)
 
 
 class LectureSearchDialog(QDialog):
@@ -2956,8 +3123,10 @@ def _plib_download_text(data: dict[str, object]) -> str:
 
 
 def _treehole_detail_row(item: dict[str, object]) -> QFrame:
-    row = QFrame()
+    row = ClickableFrame()
     row.setObjectName("TreeholeDetailRow")
+    row.setToolTip("点击在 Safari 打开树洞")
+    row.clicked.connect(lambda: _open_external_url(TREEHOLE_WEB_URL))
 
     pid = str(item.get("pid") or "?")
     delta = int(item.get("delta") or 0)
@@ -2983,6 +3152,32 @@ def _treehole_detail_row(item: dict[str, object]) -> QFrame:
         hint.setObjectName("TodoCourse")
         hint.setWordWrap(True)
         layout.addWidget(hint)
+    return row
+
+
+def _dean_update_row(item: dict[str, object]) -> QFrame:
+    url = str(item.get("url") or "").strip()
+    row = ClickableFrame() if url else QFrame()
+    row.setObjectName("TodoRow")
+    if url and isinstance(row, ClickableFrame):
+        row.setToolTip("点击在 Safari 打开对应教务内容")
+        row.clicked.connect(lambda: _open_external_url(url))
+    layout = QVBoxLayout(row)
+    layout.setContentsMargins(8, 7, 8, 7)
+    layout.setSpacing(3)
+
+    title = QLabel(str(item.get("title") or "未命名教务内容"))
+    title.setObjectName("TodoTitle")
+    title.setWordWrap(True)
+    meta_parts = [
+        str(item.get("source_label") or "教务部"),
+        str(item.get("date") or ""),
+    ]
+    meta = QLabel(" · ".join(part for part in meta_parts if part))
+    meta.setObjectName("TodoCourse")
+    meta.setWordWrap(True)
+    layout.addWidget(title)
+    layout.addWidget(meta)
     return row
 
 

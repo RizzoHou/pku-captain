@@ -156,6 +156,8 @@ def _format_tool_result(name: str, body: Any) -> str:
         return _format_plib_materials(body)
     if name == "treehole_updates" and isinstance(body, dict):
         return _format_treehole_updates(body)
+    if name == "treehole" and isinstance(body, dict):
+        return _format_treehole(body)
     if name == "lecture" and isinstance(body, list):
         return _format_lectures(body)
     return _to_json(body)
@@ -214,6 +216,40 @@ def _format_treehole_updates(data: dict[str, Any]) -> str:
                 )
             )
     return "\n".join(lines)
+
+
+def _format_treehole(data: dict[str, Any]) -> str:
+    status = str(data.get("status") or "")
+    if status and status != "ok":
+        return str(data.get("message") or "树洞请求未完成。")
+    if data.get("action") == "fetch":
+        hole = data.get("hole")
+        pid = data.get("pid")
+        text = ""
+        if isinstance(hole, dict):
+            text = str(hole.get("text") or "")
+        return "树洞 #{pid}：{count} 条评论\n{body}".format(
+            pid=pid or "?",
+            count=data.get("comment_count", 0),
+            body=text[:120] or "未返回正文。",
+        )
+    results = data.get("results")
+    if isinstance(results, list):
+        if not results:
+            return str(data.get("message") or "树洞没有找到匹配内容。")
+        lines = [f"树洞搜索返回 {len(results)} 条结果，展示前 5 条："]
+        for item in results[:5]:
+            if isinstance(item, dict):
+                lines.append(
+                    "- #{pid} reply={reply} like={like}：{text}".format(
+                        pid=item.get("pid", "?"),
+                        reply=item.get("reply", "?"),
+                        like=item.get("likenum", "?"),
+                        text=str(item.get("text") or "")[:80],
+                    )
+                )
+        return "\n".join(lines)
+    return _to_json(data)
 
 
 def _format_plib_materials(data: dict[str, Any]) -> str:
