@@ -349,6 +349,33 @@ def apply_app_style(app: QApplication) -> None:
             border-color: #d8b9b5;
         }}
 
+        QPushButton#ThinkingToggleButton {{
+            background: #fffaf7;
+            color: {PKU_RED};
+            border: 1px solid #d8b9b5;
+            border-radius: 7px;
+            padding: 7px 12px;
+            font-weight: 700;
+        }}
+
+        QPushButton#ThinkingToggleButton:hover {{
+            background: #fff6ed;
+            border-color: {PKU_RED};
+            color: {PKU_RED_DARK};
+        }}
+
+        QPushButton#ThinkingToggleButton[thinkingVisible="true"] {{
+            background: {PKU_RED};
+            border-color: {PKU_RED};
+            color: #ffffff;
+        }}
+
+        QPushButton#ThinkingToggleButton[thinkingVisible="true"]:hover {{
+            background: {PKU_RED_DARK};
+            border-color: {PKU_RED_DARK};
+            color: #ffffff;
+        }}
+
         QPushButton#ListRowButton {{
             background: #fffaf7;
             color: {INK};

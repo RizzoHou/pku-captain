@@ -68,7 +68,7 @@ class DashboardPanel(QWidget):
         # (tests / no-disk); MainWindow injects a persisted store.
         self._treehole_inbox = treehole_inbox or TreeholeInboxStore()
 
-        title = QLabel("PKU Captain 北大信息助手")
+        title = QLabel("PKU Captain")
         title.setObjectName("DashboardTitle")
         subtitle = QLabel(f"今日信息总览 · {mode_label}")
         subtitle.setObjectName("DashboardSubtitle")

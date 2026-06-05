@@ -7,7 +7,7 @@ import re
 from typing import Any
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QKeyEvent, QTextCursor
+from PyQt6.QtGui import QFontMetrics, QKeyEvent, QTextCursor
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -80,9 +80,10 @@ class ChatPanel(QWidget):
         title = QLabel("对话")
         title.setObjectName("SectionTitle")
         self._thinking_toggle = QPushButton("💭 思考")
-        self._thinking_toggle.setObjectName("SecondaryButton")
+        self._thinking_toggle.setObjectName("ThinkingToggleButton")
         self._thinking_toggle.setCheckable(True)
         self._thinking_toggle.setChecked(False)
+        self._thinking_toggle.setProperty("thinkingVisible", False)
         self._thinking_toggle.setToolTip("显示 / 隐藏模型的思考过程（默认隐藏）")
         self._thinking_toggle.toggled.connect(self._on_thinking_toggled)
         self._new_chat_button = QPushButton("＋ 新对话")
@@ -184,6 +185,9 @@ class ChatPanel(QWidget):
 
     def _on_thinking_toggled(self, checked: bool) -> None:
         self._show_thinking = checked
+        self._thinking_toggle.setProperty("thinkingVisible", checked)
+        self._thinking_toggle.style().unpolish(self._thinking_toggle)
+        self._thinking_toggle.style().polish(self._thinking_toggle)
         # Hide/reveal already-rendered windows so the toggle affects the
         # current view, not just future segments. Reasoning that arrived while
         # off was dropped and can't be recovered.
@@ -448,13 +452,16 @@ class InlineThinking(QFrame):
     """
 
     _MAX_HEIGHT = 160
+    _MAX_WIDTH = 720
+    _FRAME_PADDING = 24
+    _TEXT_PADDING = 10
 
     def __init__(self) -> None:
         super().__init__()
         self.setObjectName("InlineThinking")
         self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-        self.setMaximumWidth(720)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
+        self.setMaximumWidth(self._MAX_WIDTH)
         self._expanded = True
         self._follow = True  # auto-scroll to newest while streaming
 
@@ -487,6 +494,7 @@ class InlineThinking(QFrame):
     def append(self, text: str) -> None:
         self._body.moveCursor(QTextCursor.MoveOperation.End)
         self._body.insertPlainText(text)
+        self._sync_width_to_text()
         # Cursor sits at the new end; ensureCursorVisible pins the window to the
         # newest thinking without depending on a (possibly stale) scrollbar max.
         if self._follow:
@@ -495,6 +503,7 @@ class InlineThinking(QFrame):
     def set_text(self, text: str) -> None:
         """Replace the whole body (history load — full text known up front)."""
         self._body.setPlainText(text)
+        self._sync_width_to_text()
 
     def mark_done(self) -> None:
         """Stop auto-following and retitle once the segment's CoT is complete."""
@@ -511,6 +520,20 @@ class InlineThinking(QFrame):
         self._expanded = not self._expanded
         self._body.setVisible(self._expanded)
         self._toggle_button.setText("收起" if self._expanded else "展开")
+
+    def _sync_width_to_text(self) -> None:
+        """Shrink the thinking window to short text, capped at the max width."""
+        text = self._body.toPlainText()
+        metrics = QFontMetrics(self._body.font())
+        widest = max((metrics.horizontalAdvance(line) for line in text.splitlines()), default=0)
+        content_width = widest + self._TEXT_PADDING
+        header_width = (
+            QFontMetrics(self._title_label.font()).horizontalAdvance(self._title_label.text())
+            + QFontMetrics(self._toggle_button.font()).horizontalAdvance(self._toggle_button.text())
+            + 64
+        )
+        width = min(self._MAX_WIDTH, max(content_width, header_width) + self._FRAME_PADDING)
+        self.setFixedWidth(width)
 
 
 def _message_html(text: str, role: str) -> str:

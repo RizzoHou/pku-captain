@@ -20,7 +20,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PyQt6")
 
 from PyQt6.QtCore import QThreadPool  # noqa: E402
-from PyQt6.QtWidgets import QApplication  # noqa: E402
+from PyQt6.QtWidgets import QApplication, QLabel  # noqa: E402
 
 import src.ui.dashboard as dashboard  # noqa: E402
 from src.tools.base import Tool, ToolResult  # noqa: E402
@@ -87,6 +87,13 @@ def test_all_dialogs_construct_with_injected_tool(
 
     dashboard.TreeholeNotificationDialog(service=FakeNotifyService())
     _drain()  # let any __init__-launched async calls settle
+
+
+def test_dashboard_title_preserves_only_product_name(app: QApplication) -> None:
+    panel = dashboard.DashboardPanel(mode_label="离线模式")
+    titles = panel.findChildren(QLabel, "DashboardTitle")
+
+    assert [title.text() for title in titles] == ["PKU Captain"]
 
 
 def test_calendar_candidates_filters_and_sorts(app: QApplication) -> None:
