@@ -1102,7 +1102,7 @@ class ScheduleCard(QFrame):
 
         title_label = QLabel("完整课表")
         title_label.setObjectName("CardTitle")
-        hint_label = QLabel("点击课程块查看上课信息")
+        hint_label = QLabel("点击课程块查看完整信息")
         hint_label.setObjectName("CardBody")
 
         self._calendar_host = QWidget()
@@ -1197,9 +1197,12 @@ class ScheduleCard(QFrame):
             title = str(item.get("title", "未命名课程"))
             detail = str(item.get("detail", ""))
             note = str(item.get("note", ""))
-            block = CourseBlockWidget(title=title, note=note)
+            block = CourseBlockWidget(title=title, detail=detail, note=note)
             block.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-            block.setToolTip(" | ".join(part for part in (detail, note) if part) or title)
+            tooltip_note = f"备注：{note}" if note else ""
+            block.setToolTip(
+                "\n".join(part for part in (title, detail, tooltip_note) if part)
+            )
             block.clicked.connect(
                 lambda course=dict(item): self._show_course_detail(course)
             )
@@ -1214,15 +1217,13 @@ class ScheduleCard(QFrame):
         start = course.get("start_slot", "?")
         end = course.get("end_slot", start)
         slot = f"第{start}节" if start == end else f"第{start}-{end}节"
-        message = "\n".join(
-            [
-                f"课程：{course.get('title', '未命名课程')}",
-                f"时间：{course.get('day_name', '')} {slot}",
-                f"详情：{course.get('detail') or '暂无详细信息'}",
-                f"备注：{course.get('note') or '暂无官方备注'}",
-            ]
-        )
-        QMessageBox.information(self, "课程详情", message)
+        lines = [
+            f"课程：{course.get('title', '未命名课程')}",
+            f"时间：{course.get('day_name', '')} {slot}",
+            str(course.get("detail") or "暂无详细信息"),
+            f"备注：{course.get('note') or '暂无官方备注'}",
+        ]
+        QMessageBox.information(self, "课程详情", "\n".join(lines))
 
     def _clear_calendar(self) -> None:
         while self._calendar_layout.count():
@@ -1248,11 +1249,12 @@ def _slot_label(text: str) -> QLabel:
 
 
 class CourseBlockWidget(QFrame):
-    """Clickable course cell with a smaller official note line."""
+    """Clickable course cell showing the full course info inline: title, the
+    class details (上课信息 / 教师 / 考试信息), and a smaller official note."""
 
     clicked = pyqtSignal()
 
-    def __init__(self, *, title: str, note: str = "") -> None:
+    def __init__(self, *, title: str, detail: str = "", note: str = "") -> None:
         super().__init__()
         self.setObjectName("CourseBlock")
         self.setFrameShape(QFrame.Shape.StyledPanel)
@@ -1263,6 +1265,12 @@ class CourseBlockWidget(QFrame):
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title_label.setWordWrap(True)
 
+        self._detail_label = QLabel(detail)
+        self._detail_label.setObjectName("CourseBlockDetail")
+        self._detail_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._detail_label.setWordWrap(True)
+        self._detail_label.setVisible(bool(detail))
+
         self._note_label = QLabel(note)
         self._note_label.setObjectName("CourseBlockNote")
         self._note_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1270,10 +1278,11 @@ class CourseBlockWidget(QFrame):
         self._note_label.setVisible(bool(note))
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 3, 4, 3)
+        layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(2)
         layout.addStretch()
         layout.addWidget(title_label)
+        layout.addWidget(self._detail_label)
         layout.addWidget(self._note_label)
         layout.addStretch()
 

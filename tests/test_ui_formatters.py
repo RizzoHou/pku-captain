@@ -59,3 +59,39 @@ def test_parse_course_table_merges_contiguous_slots() -> None:
         ("高等数学", 3, 3),
     ]
     assert blocks[0].note == "与软件设计实践互斥"
+
+
+def test_parse_course_table_multi_session_cell_does_not_leak() -> None:
+    """A cell holding two sessions of the same course must keep each field
+    bounded to its own session: 考试信息 must not swallow the next session's
+    text, and both rooms should surface under 上课信息."""
+    blocks = _parse_course_table(
+        {
+            "course": [
+                {
+                    "mon": {
+                        "courseName": (
+                            "程序设计实习(主)<br>上课信息：8-8周 每周 理教208 "
+                            "教师：杨帅 备注：与软件设计实践互斥<br>"
+                            "考试信息：20260626 星期五 下午 <br>"
+                            "程序设计实习(主)<br>上课信息：1-15周 每周 理教407 "
+                            "教师：杨帅 备注：与软件设计实践互斥<br>"
+                            "考试信息：20260626 星期五 下午 "
+                        )
+                    }
+                }
+            ]
+        }
+    )
+
+    assert len(blocks) == 1
+    block = blocks[0]
+    assert block.title == "程序设计实习"
+    assert block.note == "与软件设计实践互斥"
+    # 考试信息 stops at its own session — no leaked "程序设计实习(主)" tail.
+    assert block.detail == (
+        "上课信息：8-8周 每周 理教208；1-15周 每周 理教407\n"
+        "教师：杨帅\n"
+        "考试信息：20260626 星期五 下午"
+    )
+    assert "(主)" not in block.detail

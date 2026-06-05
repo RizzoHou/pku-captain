@@ -155,18 +155,40 @@ def _clean_course_info(value: str) -> tuple[str, str, str]:
     text = re.sub(r"\s+", " ", text).strip()
     title = text.split("(主)", 1)[0].strip() or text
 
+    # One cell can concatenate several sessions of the SAME course (different
+    # weeks / rooms). Splitting on the course marker keeps per-field extraction
+    # from swallowing the next session's text into the previous one's 考试信息.
+    sessions = _split_sessions(text, title)
+    first = sessions[0] if sessions else text
+
     details: list[str] = []
-    class_info = _between(text, "上课信息：", "教师：")
-    if class_info:
-        details.append(class_info)
-    teacher = _after(text, "教师：")
+    class_infos: list[str] = []
+    for session in sessions:
+        info = _between(session, "上课信息：", "教师：")
+        if info and info not in class_infos:
+            class_infos.append(info)
+    if class_infos:
+        details.append("上课信息：" + "；".join(class_infos))
+    teacher = _after(first, "教师：")
     if teacher:
         details.append(f"教师：{teacher.split()[0]}")
-    note = _between(text, "备注：", "考试信息：")
-    exam = _after(text, "考试信息：")
+    note = _between(first, "备注：", "考试信息：")
+    exam = _after(first, "考试信息：")
     if exam:
-        details.append(f"考试：{exam}")
-    return title, " | ".join(details), note
+        details.append(f"考试信息：{exam}")
+    return title, "\n".join(details), note
+
+
+def _split_sessions(text: str, title: str) -> list[str]:
+    """Split a possibly multi-session course cell into per-session segments.
+
+    Each session begins with ``<title>(主)``; the leading marker is dropped so
+    each segment starts at ``上课信息：``. Falls back to the whole text when the
+    marker is absent (e.g. a course name without the ``(主)`` tag)."""
+    marker = f"{title}(主)"
+    if marker not in text:
+        return [text]
+    return [part.strip() for part in text.split(marker) if part.strip()]
 
 
 def _between(text: str, start: str, end: str) -> str:
