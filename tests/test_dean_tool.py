@@ -138,6 +138,61 @@ def test_error_envelope_surfaces_message(monkeypatch) -> None:
     assert result.error == "no rule found"
 
 
+def test_download_get_single_id_argv(monkeypatch, tmp_path) -> None:
+    fake_run = _fake_envelope(
+        json.dumps({"ok": True, "data": {"saved": ["/tmp/out/手册.pdf"], "count": 1}})
+    )
+    _patch(monkeypatch, fake_run)
+
+    out = str(tmp_path / "dl")
+    result = DeanResourcesTool().invoke(
+        {"action": "download_get", "id": 224, "output_dir": out}
+    )
+
+    assert result.success is True
+    assert result.data["count"] == 1
+    assert fake_run.calls == [
+        ["/bin/dean", "--format", "json", "download", "get", "224", "-o", out]
+    ]
+    # downloads stream a binary → the longer ceiling is used, not the read timeout.
+    assert fake_run.kwargs[0]["timeout"] == 180.0
+
+
+def test_download_get_multi_id_argv(monkeypatch, tmp_path) -> None:
+    fake_run = _fake_envelope(json.dumps({"ok": True, "data": {"saved": [], "count": 2}}))
+    _patch(monkeypatch, fake_run)
+
+    out = str(tmp_path / "dl")
+    # `id` is prepended to `ids`, preserving the explicit-then-list order.
+    DeanResourcesTool().invoke(
+        {"action": "download_get", "id": 224, "ids": [225], "output_dir": out}
+    )
+
+    assert fake_run.calls == [
+        ["/bin/dean", "--format", "json", "download", "get", "224", "225", "-o", out]
+    ]
+
+
+def test_openinfo_get_default_output_dir(monkeypatch) -> None:
+    fake_run = _fake_envelope(json.dumps({"ok": True, "data": {"saved": [], "count": 1}}))
+    _patch(monkeypatch, fake_run)
+
+    DeanResourcesTool().invoke({"action": "openinfo_get", "ids": [17]})
+
+    argv = fake_run.calls[0]
+    assert argv[:6] == ["/bin/dean", "--format", "json", "openinfo", "get", "17"]
+    assert argv[6] == "-o"
+    # falls back to the gitignored downloads/dean/<kind> directory.
+    assert argv[7].endswith("/downloads/dean/openinfo")
+
+
+def test_download_get_requires_id() -> None:
+    result = DeanResourcesTool().invoke({"action": "download_get"})
+
+    assert result.success is False
+    assert result.error == "`download_get` requires `id` or `ids`"
+
+
 def test_unknown_action() -> None:
     result = DeanResourcesTool().invoke({"action": "nope"})
 
