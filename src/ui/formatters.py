@@ -2,8 +2,37 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
+
+
+def upcoming_lectures(items: object) -> list[dict[str, Any]]:
+    """Return lectures happening today or later, sorted earliest-first.
+
+    The dashboard "讲座推荐" card is a recommendation surface, so it shows only
+    upcoming events. Filtering at render time (rather than at fetch via the
+    tool's ``start_date``) re-evaluates "today" on every repaint, matching the
+    dashboard-cache invariant that raw payloads re-filter against the clock —
+    the same pattern as ``upcoming_assignments``. Lectures whose ``time`` is
+    missing or unparseable are dropped (a recommendation needs a date), and the
+    grain is the date, not the moment, so a lecture earlier today stays visible
+    all day.
+    """
+    if not isinstance(items, list):
+        return []
+
+    today = date.today()
+    dated: list[tuple[datetime, dict[str, Any]]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        when = parse_datetime(item.get("time"))
+        if when is None or when.date() < today:
+            continue
+        dated.append((when, item))
+
+    dated.sort(key=lambda pair: pair[0])
+    return [item for _, item in dated]
 
 
 def upcoming_assignments(items: object) -> list[dict[str, Any]]:

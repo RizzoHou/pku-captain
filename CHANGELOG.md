@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- 讲座推荐 dashboard card now shows only today-or-future lectures, sorted earliest-first, and can reveal them all. Root causes: the fetch was capped at `limit: 5` (so 展开全部 could never reveal the rest), and the card rendered the raw earliest-first list with no upcoming filter (so it showed past lectures). New render-time `upcoming_lectures()` helper (`src/ui/formatters.py`, sibling to `upcoming_assignments`) applied in `LecturesCard.set_lectures`; dashboard fetch limit raised to 50 so the card-side filter is the authoritative cap. (worktree `lecture-recommendation-improving`)
+
+### Changed
+- `LectureTool` description now tells the agent to pass a large `limit` when asked for the total / all lectures, so the count is not silently truncated at the default 10 if the curated dataset grows. (worktree `lecture-recommendation-improving`)
+
 ## [2026-06-05]
 
 ### Added
