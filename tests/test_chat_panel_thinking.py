@@ -209,6 +209,33 @@ def test_thinking_window_shrinks_for_short_text_and_caps_long_text(app: QApplica
     assert long.width() == InlineThinking._MAX_WIDTH
 
 
+def test_thinking_window_height_grows_with_text_and_caps(app: QApplication) -> None:
+    # Height is driven via setFixedHeight, so the body's fixed height tracks the
+    # text length deterministically (no show()/event-loop needed).
+    one_line = InlineThinking()
+    one_line.append("tiny")
+
+    five_lines = InlineThinking()
+    five_lines.set_text("\n".join(f"line {i}" for i in range(5)))
+
+    # A long single paragraph (no newlines) still wraps to many visual lines.
+    long_para = InlineThinking()
+    long_para.set_text("这是一段很长的思考内容，" * 80)
+
+    assert one_line._body.maximumHeight() < five_lines._body.maximumHeight()
+    assert five_lines._body.maximumHeight() < InlineThinking._MAX_HEIGHT
+    assert long_para._body.maximumHeight() == InlineThinking._MAX_HEIGHT
+
+
+def test_thinking_toggle_text_reflects_visibility(app: QApplication) -> None:
+    panel = ChatPanel()
+    assert panel._thinking_toggle.text() == "💭 思考可见"
+    panel._thinking_toggle.setChecked(True)
+    assert panel._thinking_toggle.text() == "💭 思考不可见"
+    panel._thinking_toggle.setChecked(False)
+    assert panel._thinking_toggle.text() == "💭 思考可见"
+
+
 def test_history_replays_thinking_only_when_on(app: QApplication) -> None:
     history = [
         ChatMessage(role="user", content="现在几点"),

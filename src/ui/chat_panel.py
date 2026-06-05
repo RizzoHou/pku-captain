@@ -79,7 +79,7 @@ class ChatPanel(QWidget):
 
         title = QLabel("对话")
         title.setObjectName("SectionTitle")
-        self._thinking_toggle = QPushButton("💭 思考")
+        self._thinking_toggle = QPushButton("💭 思考可见")
         self._thinking_toggle.setObjectName("ThinkingToggleButton")
         self._thinking_toggle.setCheckable(True)
         self._thinking_toggle.setChecked(False)
@@ -185,6 +185,9 @@ class ChatPanel(QWidget):
 
     def _on_thinking_toggled(self, checked: bool) -> None:
         self._show_thinking = checked
+        # Action label: when hidden, the button offers to reveal ("思考可见");
+        # when shown, it offers to hide ("思考不可见").
+        self._thinking_toggle.setText("💭 思考不可见" if checked else "💭 思考可见")
         self._thinking_toggle.setProperty("thinkingVisible", checked)
         self._thinking_toggle.style().unpolish(self._thinking_toggle)
         self._thinking_toggle.style().polish(self._thinking_toggle)
@@ -464,6 +467,8 @@ class InlineThinking(QFrame):
         self.setMaximumWidth(self._MAX_WIDTH)
         self._expanded = True
         self._follow = True  # auto-scroll to newest while streaming
+        self._wrap_width = self._MAX_WIDTH - self._FRAME_PADDING - self._TEXT_PADDING
+        self._saturated = False  # both size caps hit -> skip per-delta re-measure
 
         self._title_label = QLabel("💭 思考中…")
         self._title_label.setObjectName("InlineThinkingTitle")
@@ -484,6 +489,7 @@ class InlineThinking(QFrame):
         self._body.setMaximumHeight(self._MAX_HEIGHT)
         self._body.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self._body.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+        self._sync_height_to_text()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 8, 10, 8)
@@ -494,7 +500,12 @@ class InlineThinking(QFrame):
     def append(self, text: str) -> None:
         self._body.moveCursor(QTextCursor.MoveOperation.End)
         self._body.insertPlainText(text)
-        self._sync_width_to_text()
+        # Both size syncs scan the full text (O(total)); appended text only ever
+        # grows the box, so once it saturates both caps further deltas can't
+        # change its size — skip the scan and keep streaming O(delta), the way a
+        # huge max-effort CoT renders cheaply.
+        if not self._saturated:
+            self._sync_size_to_text()
         # Cursor sits at the new end; ensureCursorVisible pins the window to the
         # newest thinking without depending on a (possibly stale) scrollbar max.
         if self._follow:
@@ -503,7 +514,16 @@ class InlineThinking(QFrame):
     def set_text(self, text: str) -> None:
         """Replace the whole body (history load — full text known up front)."""
         self._body.setPlainText(text)
+        self._saturated = False  # replacement can shrink — always re-measure
+        self._sync_size_to_text()
+
+    def _sync_size_to_text(self) -> None:
         self._sync_width_to_text()
+        self._sync_height_to_text()
+        self._saturated = (
+            self.maximumWidth() == self._MAX_WIDTH
+            and self._body.maximumHeight() == self._MAX_HEIGHT
+        )
 
     def mark_done(self) -> None:
         """Stop auto-following and retitle once the segment's CoT is complete."""
@@ -534,6 +554,35 @@ class InlineThinking(QFrame):
         )
         width = min(self._MAX_WIDTH, max(content_width, header_width) + self._FRAME_PADDING)
         self.setFixedWidth(width)
+        # Text wraps at the body's inner width (frame minus its horizontal
+        # chrome). Stash it so height-sync can count wrapped lines synchronously,
+        # without waiting for the body's deferred resize to settle.
+        self._wrap_width = max(1, width - self._FRAME_PADDING - self._TEXT_PADDING)
+
+    def _sync_height_to_text(self) -> None:
+        """Grow the thinking window to fit its text, capped at the max height.
+
+        QPlainTextEdit lays out lazily off its (deferred) viewport width, so its
+        own document line count is stale right after a width change — and
+        ``QPlainTextDocumentLayout`` ignores ``setTextWidth``, so we can't force
+        it either. Instead we count wrapped lines directly from font metrics at
+        the known wrap width: synchronous, and correct even for a long single
+        paragraph (which wraps to many visual lines, not one). Short reasoning
+        shrinks the box; long reasoning saturates at the cap and the
+        sliding-window auto-follow takes over.
+        """
+        metrics = QFontMetrics(self._body.font())
+        # Reserve the vertical scrollbar width: once the box is tall enough to
+        # scroll, the bar eats that much of the text area, so wrap must assume it.
+        scrollbar = self._body.verticalScrollBar().sizeHint().width()
+        wrap = max(1, self._wrap_width - scrollbar)
+        lines = sum(
+            max(1, -(-metrics.horizontalAdvance(line) // wrap))  # ceil(advance / wrap)
+            for line in self._body.toPlainText().split("\n")
+        )
+        chrome = round(2 * self._body.document().documentMargin()) + 4
+        height = min(self._MAX_HEIGHT, lines * metrics.lineSpacing() + chrome)
+        self._body.setFixedHeight(height)
 
 
 def _message_html(text: str, role: str) -> str:

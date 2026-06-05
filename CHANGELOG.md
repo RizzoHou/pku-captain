@@ -8,9 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 - Course-table grid cells now display the full course info inline (上课信息 / 教师 / 考试信息 / 备注), not just the title + note line; the previous info was only reachable via tooltip/click. `_clean_course_info` emits a labelled, newline-joined `detail` and the cell renders it in a new `CourseBlockDetail` label. (worktree `fix-course-note-absence`)
+- Thinking-visibility toggle text is now an action label that flips on toggle — `💭 思考可见` when hidden, `💭 思考不可见` when shown (was the misleading static `💭 思考`). (worktree `fix-thinking-visibility-problems`)
 
 ### Fixed
 - Multi-session course cells (the same course concatenated at different weeks/rooms, e.g. 程序设计实习) no longer leak the next session's text into the previous one's 考试信息. `_clean_course_info` splits on the `<title>(主)` marker via `_split_sessions`, bounds each field to its session, and merges all sessions' 上课信息. (worktree `fix-course-note-absence`)
+- `InlineThinking` sliding window now auto-sizes its **height** to the reasoning length (≤160px cap), matching the existing width auto-sizing — short thinking no longer renders in a tall half-empty box. Height is counted from font metrics (`_sync_size_to_text`) since QPlainTextEdit's `documentSize` reads stale right after a width change; a `_saturated` flag keeps streaming O(delta) once both caps are hit. (worktree `fix-thinking-visibility-problems`)
 
 ## [2026-06-05]
 
