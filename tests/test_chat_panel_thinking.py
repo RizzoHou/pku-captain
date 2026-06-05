@@ -227,6 +227,34 @@ def test_thinking_window_height_grows_with_text_and_caps(app: QApplication) -> N
     assert long_para._body.maximumHeight() == InlineThinking._MAX_HEIGHT
 
 
+def test_thinking_height_uses_polished_stylesheet_font(app: QApplication) -> None:
+    # Regression: the first thinking window of a session was measured before its
+    # app QSS font (`#InlineThinkingBody { font-size: 11px }`) had been polished
+    # onto the body, so it kept a too-tall height (sized against the larger
+    # default font) that no later delta corrected — subsequent windows, created
+    # after the panel was already styled, were fine. Reproduce faithfully with
+    # the real app stylesheet on a freshly created, unparented window (the panel
+    # inserts the live one the same way); the measured height must match the
+    # height once the QSS font has resolved. Save/restore so the shared
+    # QApplication isn't polluted for other tests in the module.
+    from src.ui.styles import apply_app_style
+
+    previous = app.styleSheet()
+    apply_app_style(app)
+    try:
+        row = InlineThinking()
+        row.append("一些思考内容 " * 4)
+        measured = row._body.maximumHeight()
+
+        # Ground truth: the height once the stylesheet font is resolved.
+        row._body.ensurePolished()
+        row._sync_size_to_text()
+        assert row._body.font().pixelSize() == 11  # the QSS font actually resolved
+        assert measured == row._body.maximumHeight()  # measured against it, not default
+    finally:
+        app.setStyleSheet(previous)
+
+
 def test_thinking_toggle_text_reflects_visibility(app: QApplication) -> None:
     panel = ChatPanel()
     assert panel._thinking_toggle.text() == "💭 思考可见"
