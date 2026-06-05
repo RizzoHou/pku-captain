@@ -27,6 +27,7 @@ from ..core import (
 )
 from ..tools.treehole_updates import (
     MIN_NOTIFY_INTERVAL,
+    TreeholeHistoryStore,
     TreeholeInboxStore,
     TreeholeNotificationService,
 )
@@ -107,6 +108,9 @@ class MainWindow(QMainWindow):
             tools=agent.tools,
             memory_learner=memory_learner,
             treehole_inbox=TreeholeInboxStore(_REPO_ROOT / "data" / "treehole_inbox.json"),
+            treehole_history=TreeholeHistoryStore(
+                _REPO_ROOT / "data" / "treehole_history.json"
+            ),
         )
         self._chat_panel = ChatPanel()
 
