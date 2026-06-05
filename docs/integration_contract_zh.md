@@ -4,6 +4,8 @@
 
 本文件的优先级低于 `docs/design_reference_zh.md` 的"核心功能"清单，但高于任何临时口头约定。变更需在 PR 描述中显式标注 "BREAKING: integration contract"。
 
+> **BREAKING: integration contract** —— 新增 turn 取消：`Agent.turn` 多接受可选 `cancelled: Callable[[], bool]`（默认 None，行为不变），`AgentWorker` 新增线程安全的 `request_cancel()`，`ChatPanel` 新增 `stop_requested` 信号 + 「停止」按钮。详见 §2「取消」与 §6。
+
 ## 1. 公共 API 表面
 
 GUI 只允许从下列符号导入。其他模块视为内部实现，随时可能改动。
@@ -53,14 +55,22 @@ class AgentWorker(QObject):
 
     @pyqtSlot(str)
     def run_turn(self, user_message: str) -> None:
+        self._cancel_event.clear()    # 丢弃上一轮残留的取消标记
         try:
-            for ev in self.agent.turn(user_message):
+            for ev in self.agent.turn(user_message, cancelled=self._cancel_event.is_set):
                 self.event.emit(ev)
         except Exception as exc:
             self.error.emit(f"{type(exc).__name__}: {exc}")
         finally:
             self.finished.emit()
+
+    def request_cancel(self) -> None:  # 普通方法，**不是** @pyqtSlot
+        self._cancel_event.set()
 ```
+
+**取消（turn 中断）**：`Agent.turn(user_message, cancelled=None)` 多接受一个 `cancelled: Callable[[], bool]` 协作式取消谓词，在阻塞 I/O 之间的安全点轮询（每次 LLM 调用前、每个流式 token、每个工具分发前）。它**无法**中断已在途的 HTTP / 子进程调用，但会在下一个检查点停下，并让 `Conversation` 保持合法：每条取消路径都以一条纯文本 assistant 消息收尾（保持 user→assistant 交替），任何尚未分发的 tool_call 补一条「已被用户中断」结果（不留下缺答案的 `assistant(tool_calls)`）。取消时 `turn()` yield 一个 `kind="final"` 事件（文本为已生成的部分 + `（已被用户中断）`），**不新增事件种类**，GUI 当作普通 final 渲染即可。
+
+`AgentWorker.request_cancel()` 必须是**普通线程安全方法**（翻转一个 `threading.Event`），**不能**做成经 `QueuedConnection` 调用的 `@pyqtSlot`：worker 线程整段都阻塞在 `agent.turn` 里，排队的槽要等 turn 结束才会被处理，取消就失效了。GUI 直接调 `worker.request_cancel()`（`Event.set()` 跨线程安全）。`run_turn` 在开头 `clear()` 该 Event，避免上一次点击残留秒杀下一轮。
 
 启动模板（GUI 端，仅一次）：
 
@@ -79,7 +89,7 @@ self.thread.start()
 并发约束：
 
 - 同一时刻只允许一个 turn 在跑。GUI 在收到 `finished` 之前应禁用发送按钮。
-- 取消：v1 不支持中途取消。后端会在 `max_tool_iterations`（默认 8）触发上限后自然结束。如果 GUI 需要取消按钮，作为 v2 议题。
+- 取消：**已支持**（见上方 `request_cancel` + `Agent.turn(cancelled=...)`）。GUI 入口为对话面板输入区的「■ 停止」按钮——`set_busy(True)` 时它顶替「发送」出现，点击后调 `request_cancel()` 并把按钮改为「停止中…」给出即时反馈（取消是协作式的，在途工具 / LLM 调用结束才真正停下）。
 - 仪表盘的刷新走另一条 worker（见 §5），与 agent worker 互不干扰。
 
 ## 3. 事件流契约
@@ -131,7 +141,7 @@ GUI lane 与后端 lane 的接缝：后端保证 `Tool` / `Source` 的 `invoke` 
 
 下列条目目前**未**进入契约，需要时再单独 PR：
 
-- **turn 取消**：v1 不支持。如果加，需要在 `Agent.turn()` 中检查取消标记，并在 worker 层提供 `cancel()` 槽。
+- ~~**turn 取消**~~（**已实现**，见 §2「取消」）：`Agent.turn(cancelled=...)` 协作式轮询 + `AgentWorker.request_cancel()` 线程安全方法；复用 `final` 事件，不新增 kind。已知 v1 限制：取消是协作式的，无法中断已在途的单次 HTTP / 子进程调用——会等它返回再在下一个检查点停下。
 - **多 Agent 并发**：当前一个窗口一个 `Agent`。多 Agent（例如同时跑工作流 + 对话）需要重新设计 worker / signal 路由。
 - ~~**持久化 `Conversation`**~~（**已实现**，见 §1「多会话持久化」）：落盘到 `data/sessions/<id>.json`，GUI 经「历史会话」弹窗加载；加载后通过 `ChatPanel.load_history` 重绘，**不**重新触发 `final` 事件。已知 v1 限制：`tool` 消息只存了 `str(result.data)`，重绘的工具行展示字符串化结果而非结构化渲染。
 - **Workflow 事件流**：`Workflow.run()` 当前一次性返回 `WorkflowResult`，没有事件流。如果 GUI 要展示工作流的中间步骤，需要参照 `Agent.turn()` 改成生成器并扩展 `AgentEvent` 或新增 `WorkflowEvent`。
