@@ -1,13 +1,13 @@
 """Thin subprocess wrapper around the ``pku3b`` CLI.
 
 `pku3b` is an external Rust binary. PKU Captain ships against our fork
-at https://github.com/RizzoHou/pku3b (branch
-``feat/assignment-list-json-output``), which adds ``--format json`` to
+at https://github.com/RizzoHou/pku3b (branch ``master``), which adds
+``--format json`` to
 the relevant subcommands so Python consumers get structured data
 directly. Install with:
 
     cargo install --git https://github.com/RizzoHou/pku3b \\
-        --branch feat/assignment-list-json-output
+        --branch master
 
 This module isolates the subprocess mechanics — locating the
 executable, building argv, running with a timeout, and stripping ANSI
@@ -73,8 +73,7 @@ def resolve_executable(executable: str = DEFAULT_EXECUTABLE) -> str:
     raise Pku3bNotFoundError(
         f"could not find {executable!r} on PATH or at {_LOCAL_EXECUTABLE}. "
         "Install our fork with: cargo install --git "
-        "https://github.com/RizzoHou/pku3b --branch "
-        "feat/assignment-list-json-output"
+        "https://github.com/RizzoHou/pku3b --branch master"
     )
 
 

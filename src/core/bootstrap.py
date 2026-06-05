@@ -8,6 +8,7 @@ into the GUI lane.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +36,7 @@ from ..tools import (
     TreeholeUpdatesTool,
 )
 from ..tools.base import ToolRegistry
+from ..tools.pku3b import Pku3bNotFoundError, Pku3bTimeoutError, run_pku3b
 from ..workflows import HelloWorkflow, MorningBriefingWorkflow
 from ..workflows.base import WorkflowRegistry
 from .agent import Agent
@@ -96,6 +98,8 @@ def build_agent(*, offline: bool = False, enable_knowledge: bool = False) -> Age
     # the same path would never see mid-session writes (it loads once at
     # construction), so the feature would silently no-op — keep it shared.
     memory = MemoryStore()
+    if not offline:
+        _sync_pku3b_identity_memory(memory)
     tools = _build_tools(
         offline=offline, enable_knowledge=enable_knowledge, memory=memory
     )
@@ -231,6 +235,47 @@ def _build_embedder() -> APIEmbedder:
         )
     api_key = key_path.read_text(encoding="utf-8").strip()
     return APIEmbedder(api_key=api_key)
+
+
+_IDENTITY_MEMORY_FIELDS = {
+    "name": "identity.name",
+    "student_id": "identity.student_id",
+    "department": "identity.department",
+    "speciality": "identity.speciality",
+    "direction": "identity.direction",
+    "student_type": "identity.student_type",
+    "user_identity": "identity.user_identity",
+}
+
+
+def _sync_pku3b_identity_memory(memory: MemoryStore) -> None:
+    """Best-effort startup sync of pku3b identity into long-term memory.
+
+    Uses ``identity --format json`` rather than ``--raw`` so the CLI returns the
+    public student identity summary only, not the full portal record. Startup
+    must stay robust: missing pku3b, expired login, OTP/network errors, or
+    schema changes should leave memory unchanged rather than preventing the GUI
+    from opening.
+    """
+    try:
+        run = run_pku3b(["identity", "--format", "json"])
+    except (Pku3bNotFoundError, Pku3bTimeoutError, OSError):
+        return
+    if not run.ok:
+        return
+    try:
+        payload = json.loads(run.stdout)
+    except json.JSONDecodeError:
+        return
+    if not isinstance(payload, dict):
+        return
+    for field, key in _IDENTITY_MEMORY_FIELDS.items():
+        value = payload.get(field)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            memory.set(key, text)
 
 
 def _find_key_path(paths: tuple[Path, ...]) -> Path | None:

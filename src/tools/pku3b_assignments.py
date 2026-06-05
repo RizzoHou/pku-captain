@@ -1,7 +1,7 @@
 """PKU3bAssignmentsTool — fetch course assignments via the ``pku3b`` CLI.
 
 Calls ``pku3b assignment list --format json`` (from our fork at
-``github.com/RizzoHou/pku3b`` branch ``feat/assignment-list-json-output``)
+``github.com/RizzoHou/pku3b`` branch ``master``)
 and consumes the structured JSON directly — no text parsing.
 
 By default only outstanding assignments are returned; set
@@ -102,7 +102,7 @@ class PKU3bAssignmentsTool(Tool):
                     "Confirm the installed binary supports `--format json` "
                     "(install our fork: "
                     "`cargo install --git https://github.com/RizzoHou/pku3b "
-                    "--branch feat/assignment-list-json-output`)."
+                    "--branch master`)."
                 ),
             )
 
