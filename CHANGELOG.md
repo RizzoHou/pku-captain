@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- DEAN 通知公告 (notices) wired end-to-end on the upgraded `pku-dean-cli` (`dean notice list|show`): `DeanResourcesTool` gains `notice_list` / `notice_show` actions, and `DeanUpdatesTool` polls a new `通知公告` source alongside rules/downloads/openinfo. (worktree `dean-notice-adding-and-caching`)
+- DEAN message caching + history: `DeanInboxStore` + pure `merge_dean_updates` (`src/tools/dean_updates.py`) accumulate every item ever seen into `data/dean_inbox.json` (union by `key`, stamped `first_seen`, never lossy). The 教务更新 card shows a render-time recency window (`split_dean_items` in `src/ui/formatters.py` — notices 1 month, rules/downloads/openinfo half a year); clicking the card title opens `DeanMessagesDialog` with 近期 + 历史 sections (full archive). Notice/rule rows open `DeanDetailDialog` (full text via `notice_show`/`rules_show`) with an 在 Safari 打开 button; file rows open Safari directly. (worktree `dean-notice-adding-and-caching`)
+
+### Changed
+- The 教务更新 dashboard card now renders a cached recency window from the accumulator instead of only "new since last check", so DEAN content (which is sparse) stays visible across polls and restarts. The `DeanUpdatesTool` payload gained a full-snapshot `items` field feeding the GUI accumulator; the seen-baseline `updates`/`new_count` stay for the agent's "what's new" answer. (worktree `dean-notice-adding-and-caching`)
+
 ### Removed
 - The storage-only `ReminderTool` and its dashboard 提醒 entry (`RemindersDialog` + 页眉 button). It never fired notifications (storage + querying only), so it duplicated nothing the user could act on. Deleted `src/tools/reminder.py`, the `ToolRegistry` registration, the GUI button/dialog/handler, and the manual-test step. The macOS-Calendar DDL feature (`CalendarReminderTool` / 加入日历, real system alarms) is unaffected.
 
@@ -15,6 +22,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Thinking-visibility toggle text is now an action label that flips on toggle — `💭 思考可见` when hidden, `💭 思考不可见` when shown (was the misleading static `💭 思考`). (worktree `fix-thinking-visibility-problems`)
 
 ### Fixed
+- The 教务更新 card empty state no longer shows the redundant duplicate "暂无教务部新内容" line — only the single summary line remains. (worktree `dean-notice-adding-and-caching`)
+- DEAN items no longer vanish on the next (empty) poll: the new `DeanInboxStore` accumulator resolves the `DeanUpdatesCard` "replaces-not-accumulates" v1 limitation (PR #5). Downloads / openinfo rows are now openable too — `_normalize_item` reads their `download_url` field (they expose the link there, not `url`). (worktree `dean-notice-adding-and-caching`)
 - Multi-session course cells (the same course concatenated at different weeks/rooms, e.g. 程序设计实习) no longer leak the next session's text into the previous one's 考试信息. `_clean_course_info` splits on the `<title>(主)` marker via `_split_sessions`, bounds each field to its session, and merges all sessions' 上课信息. (worktree `fix-course-note-absence`)
 - `InlineThinking` sliding window now auto-sizes its **height** to the reasoning length (≤160px cap), matching the existing width auto-sizing — short thinking no longer renders in a tall half-empty box. Height is counted from font metrics (`_sync_size_to_text`) since QPlainTextEdit's `documentSize` reads stale right after a width change; a `_saturated` flag keeps streaming O(delta) once both caps are hit. (worktree `fix-thinking-visibility-problems`)
 - 讲座推荐 dashboard card now shows only today-or-future lectures, sorted earliest-first, and can reveal them all. Root causes: the fetch was capped at `limit: 5` (so 展开全部 could never reveal the rest), and the card rendered the raw earliest-first list with no upcoming filter (so it showed past lectures). New render-time `upcoming_lectures()` helper (`src/ui/formatters.py`, sibling to `upcoming_assignments`) applied in `LecturesCard.set_lectures`; dashboard fetch limit raised to 50 so the card-side filter is the authoritative cap. (worktree `lecture-recommendation-improving`)

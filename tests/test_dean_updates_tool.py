@@ -61,6 +61,32 @@ def test_dean_update_check_surfaces_only_new_items(tmp_path, monkeypatch) -> Non
     assert result.data["updates"][0]["source_label"] == "校级规章"
 
 
+def test_dean_update_includes_notices_and_full_snapshot(tmp_path, monkeypatch) -> None:
+    _patch_dean(
+        monkeypatch,
+        {
+            "notice list": [
+                {"id": 746, "title": "四六级考前通知", "date": "2026-06-03"}
+            ],
+            "rules list --scope school": [{"id": 1, "title": "学籍管理办法"}],
+        },
+    )
+    tool = DeanUpdatesTool(state_path=tmp_path / "dean.json")
+
+    result = tool.invoke({})
+
+    assert result.success is True
+    # Notices are now a polled source, keyed `notice:<id>`.
+    keys = {item["key"] for item in result.data["items"]}
+    assert "notice:746" in keys
+    assert "rules_school:1" in keys
+    # The full snapshot feeds the GUI accumulator; carries id + date for windowing.
+    notice = next(i for i in result.data["items"] if i["key"] == "notice:746")
+    assert notice["item_id"] == "746"
+    assert notice["date"] == "2026-06-03"
+    assert notice["source_label"] == "通知公告"
+
+
 def test_dean_update_check_errors_when_all_sources_fail(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
         "src.tools.dean_updates.run_dean",

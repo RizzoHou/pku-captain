@@ -30,14 +30,24 @@ from PyQt6.QtWidgets import (
 )
 
 from ..tools.base import Tool, ToolRegistry
+from ..tools.dean_updates import DeanInboxStore
 from ..tools.treehole_updates import (
     DEFAULT_NOTIFY_INTERVAL,
     TreeholeAuthService,
     TreeholeInboxStore,
     TreeholeNotificationService,
 )
-from .formatters import parse_datetime, upcoming_assignments, upcoming_lectures
+from .formatters import (
+    parse_datetime,
+    split_dean_items,
+    upcoming_assignments,
+    upcoming_lectures,
+)
 from .tool_call_worker import run_async
+
+# Dean sources whose items have fetchable full text (notice_show / rules_show);
+# their rows open an in-app detail dialog, others (download/openinfo) open Safari.
+_DEAN_DETAIL_SOURCES = {"notice", "rules_school", "rules_national"}
 
 if TYPE_CHECKING:
     from ..core import MemoryLearnService
@@ -92,6 +102,7 @@ class DashboardPanel(QWidget):
         tools: ToolRegistry | None = None,
         memory_learner: MemoryLearnService | None = None,
         treehole_inbox: TreeholeInboxStore | None = None,
+        dean_inbox: DeanInboxStore | None = None,
     ) -> None:
         super().__init__()
         self.setObjectName("DashboardPanel")
@@ -101,6 +112,10 @@ class DashboardPanel(QWidget):
         # card instead of vanishing on the next empty poll. In-memory by default
         # (tests / no-disk); MainWindow injects a persisted store.
         self._treehole_inbox = treehole_inbox or TreeholeInboxStore()
+        # Never-lossy accumulator of dean items; the card renders a recency
+        # window and the dialog exposes the full 近期 + 历史 archive. In-memory
+        # by default (tests / no-disk); MainWindow injects a persisted store.
+        self._dean_inbox = dean_inbox or DeanInboxStore()
 
         title = QLabel("PKU Captain")
         title.setObjectName("DashboardTitle")
@@ -164,6 +179,8 @@ class DashboardPanel(QWidget):
             )
         dean_card = self._cards["dean_updates"]
         if isinstance(dean_card, DeanUpdatesCard):
+            dean_card.view_requested.connect(self._show_dean_dialog)
+            dean_card.detail_requested.connect(self._show_dean_detail)
             dean_card.refresh_requested.connect(self._partial_refresh_emitter("dean_updates"))
         plib_card = self._cards["plib_materials"]
         if isinstance(plib_card, PLibMaterialsCard):
@@ -223,6 +240,9 @@ class DashboardPanel(QWidget):
         # Reflect unread carried over from a previous session before the first poll.
         if self._treehole_inbox.unread_count():
             self._render_treehole()
+        # Paint dean items restored from the persisted inbox before the first poll.
+        if self._dean_inbox.entries():
+            self._render_dean()
 
     def _partial_refresh_emitter(self, *keys: str) -> Callable[[], None]:
         """Build a slot that requests a refresh scoped to the given tool keys,
@@ -311,9 +331,34 @@ class DashboardPanel(QWidget):
             card.set_updates(display)
 
     def set_dean_updates(self, data: dict[str, object]) -> None:
+        """Merge a poll's snapshot into the inbox and re-render the windowed card.
+
+        Accumulates rather than replaces (the tool's ``items`` is the full
+        current snapshot), so a dean item stays cached and never vanishes on the
+        next poll; the card shows only the recency window and the rest is reached
+        via the 历史 section of the dialog.
+        """
+        items = data.get("items")
+        if isinstance(items, list):
+            self._dean_inbox.merge([i for i in items if isinstance(i, dict)])
+        self._render_dean()
+
+    def _render_dean(self, *, fallback_message: str = "", status: str = "ok") -> None:
+        entries = self._dean_inbox.entries()
+        recent, history = split_dean_items(entries)
+        if status == "error":
+            message = fallback_message or "教务部不可用"
+        elif recent:
+            message = f"近期教务部内容（{len(recent)} 条）"
+        elif history:
+            message = "近期暂无新内容，点击标题查看历史"
+        else:
+            message = fallback_message or "暂无教务部内容"
         card = self._cards.get("dean_updates")
         if isinstance(card, DeanUpdatesCard):
-            card.set_updates(data)
+            card.set_updates(
+                {"message": message, "updates": recent, "status": status}
+            )
 
     def set_plib_materials(self, data: dict[str, object]) -> None:
         card = self._cards.get("plib_materials")
@@ -332,6 +377,13 @@ class DashboardPanel(QWidget):
             card = self._cards.get("plib_materials")
             if isinstance(card, PLibMaterialsCard):
                 card.set_body(f"P-Lib 不可用：{message}", "error")
+            return
+        if key == "dean_updates":
+            # Keep accumulated dean items visible; only the summary shows the
+            # error, so a transient poll failure does not wipe the card.
+            self._render_dean(
+                fallback_message=f"教务部不可用：{message}", status="error"
+            )
             return
         if key in self._cards:
             self._cards[key].set_body(f"不可用：{message}", "error")
@@ -370,6 +422,19 @@ class DashboardPanel(QWidget):
         # The dialog nests the notification settings dialog; once it closes any
         # enable/disable/interval change is persisted, so reconfigure the timer.
         self.treehole_settings_changed.emit()
+
+    def _show_dean_dialog(self) -> None:
+        entries = self._dean_inbox.entries()
+        recent, history = split_dean_items(entries)
+        dialog = DeanMessagesDialog(recent, history, self)
+        dialog.detail_requested.connect(self._show_dean_detail)
+        dialog.exec()
+
+    def _show_dean_detail(self, item: dict[str, object]) -> None:
+        tool = self._require_tool("dean_resources", "教务详情")
+        if tool is None:
+            return
+        DeanDetailDialog(tool, item, self).exec()
 
     def _show_plib_dialog(self) -> None:
         tool = self._require_tool("plib_materials", "P-Lib 资料搜索")
@@ -677,8 +742,15 @@ class TreeholeMessagesCard(QFrame):
 
 
 class DeanUpdatesCard(QFrame):
-    """Dashboard card for newly surfaced Dean's Office public resources."""
+    """Dashboard card for recent Dean's Office public resources.
 
+    Shows a recency window of accumulated items; the clickable title opens the
+    full 近期 + 历史 archive dialog. Notice / rule rows open an in-app detail
+    dialog (``detail_requested``); file rows open Safari directly.
+    """
+
+    view_requested = pyqtSignal()
+    detail_requested = pyqtSignal(dict)
     refresh_requested = pyqtSignal()
     _COLLAPSED_LIMIT = 4
 
@@ -689,9 +761,18 @@ class DeanUpdatesCard(QFrame):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.setMinimumHeight(196)
 
-        title_label = QLabel("教务更新")
+        # Clickable title opens the 近期 / 历史 dialog (user-chosen entry point).
+        title_frame = ClickableFrame()
+        title_frame.setToolTip("点击查看全部教务消息（近期 / 历史）")
+        title_frame.clicked.connect(self.view_requested)
+        title_label = QLabel("教务更新 ▸")
         title_label.setObjectName("CardTitle")
-        self._summary_label = QLabel("上次检查以来的教务部新内容")
+        title_row = QHBoxLayout(title_frame)
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.addWidget(title_label, 0, Qt.AlignmentFlag.AlignLeft)
+        title_row.addStretch()
+
+        self._summary_label = QLabel("教务部近期内容")
         self._summary_label.setObjectName("CardBody")
         self._summary_label.setWordWrap(True)
 
@@ -711,7 +792,7 @@ class DeanUpdatesCard(QFrame):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(8)
-        layout.addWidget(title_label)
+        layout.addWidget(title_frame)
         layout.addWidget(self._summary_label)
         layout.addWidget(self._list_host)
         layout.addLayout(actions)
@@ -730,23 +811,25 @@ class DeanUpdatesCard(QFrame):
         self._clear_items()
 
     def set_updates(self, data: dict[str, object]) -> None:
-        message = str(data.get("message") or "暂无教务部新内容")
+        message = str(data.get("message") or "暂无教务部内容")
+        status = str(data.get("status") or "ok")
         updates = data.get("updates")
         self._summary_label.setText(message)
-        self._summary_label.setStyleSheet("")
+        self._summary_label.setStyleSheet(
+            "color: #b42318;" if status == "error" else ""
+        )
         self._clear_items()
+        # Empty state is a single line (the summary above); no duplicate label.
         if not isinstance(updates, list) or not updates:
-            empty = QLabel(message)
-            empty.setObjectName("CardBody")
-            empty.setWordWrap(True)
-            self._list_layout.addWidget(empty)
             return
         for item in updates[: self._COLLAPSED_LIMIT]:
             if isinstance(item, dict):
-                self._list_layout.addWidget(_dean_update_row(item))
+                self._list_layout.addWidget(
+                    _dean_update_row(item, on_detail=self.detail_requested.emit)
+                )
         hidden = len(updates) - self._COLLAPSED_LIMIT
         if hidden > 0:
-            more = QLabel(f"还有 {hidden} 条新内容")
+            more = QLabel(f"还有 {hidden} 条，点击标题查看全部")
             more.setObjectName("TodoMore")
             self._list_layout.addWidget(more)
         self._list_layout.addStretch()
@@ -2190,6 +2273,183 @@ class AnnouncementDetailDialog(QDialog):
         self._body_label.setText(_announcement_detail_text(announcement))
 
 
+class DeanMessagesDialog(QDialog):
+    """Modal list of dean items split into 近期 (recent) and 历史 (archive)."""
+
+    detail_requested = pyqtSignal(dict)
+
+    def __init__(
+        self,
+        recent: list[dict[str, object]],
+        history: list[dict[str, object]],
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("教务部消息")
+        self.resize(720, 680)
+
+        title = QLabel("教务部消息")
+        title.setObjectName("DialogTitle")
+        subtitle = QLabel(f"近期 {len(recent)} 条 · 历史 {len(history)} 条")
+        subtitle.setObjectName("DialogSubtitle")
+
+        host = QWidget()
+        list_layout = QVBoxLayout(host)
+        list_layout.setContentsMargins(0, 0, 0, 0)
+        list_layout.setSpacing(8)
+        self._add_section(list_layout, "近期", recent)
+        self._add_section(list_layout, "历史", history)
+        list_layout.addStretch()
+
+        scroll = QScrollArea()
+        scroll.setObjectName("DetailScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(host)
+
+        close_button = QPushButton("关闭")
+        close_button.setObjectName("PrimaryButton")
+        close_button.clicked.connect(self.accept)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+        layout.addWidget(title)
+        layout.addWidget(subtitle)
+        layout.addWidget(scroll, 1)
+        layout.addWidget(close_button, 0, Qt.AlignmentFlag.AlignRight)
+
+    def _add_section(
+        self, layout: QVBoxLayout, heading: str, items: list[dict[str, object]]
+    ) -> None:
+        header = QLabel(heading)
+        header.setObjectName("CardTitle")
+        layout.addWidget(header)
+        if not items:
+            empty = QLabel("（暂无）")
+            empty.setObjectName("CardBody")
+            layout.addWidget(empty)
+            return
+        for item in items:
+            if isinstance(item, dict):
+                layout.addWidget(
+                    _dean_update_row(item, on_detail=self.detail_requested.emit)
+                )
+
+
+class DeanDetailDialog(QDialog):
+    """Fetch and display one dean notice / rule, with an open-in-Safari fallback."""
+
+    _ACTION_BY_SOURCE = {
+        "notice": "notice_show",
+        "rules_school": "rules_show",
+        "rules_national": "rules_show",
+    }
+
+    def __init__(
+        self, tool: Tool, item: dict[str, object], parent: QWidget | None = None
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("教务详情")
+        self.resize(720, 620)
+        self._tool = tool
+        self._url = str(item.get("url") or "").strip()
+        self._pending: object = None
+
+        title = QLabel(str(item.get("title") or "教务详情"))
+        title.setObjectName("DialogTitle")
+        meta_parts = [
+            str(item.get("source_label") or "教务部"),
+            str(item.get("date") or ""),
+        ]
+        self._subtitle = QLabel(" · ".join(p for p in meta_parts if p))
+        self._subtitle.setObjectName("DialogSubtitle")
+        self._subtitle.setWordWrap(True)
+
+        self._body_label = QLabel("正在加载教务详情...")
+        self._body_label.setObjectName("DialogBody")
+        self._body_label.setWordWrap(True)
+        self._body_label.setTextInteractionFlags(
+            self._body_label.textInteractionFlags()
+            | Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+
+        scroll = QScrollArea()
+        scroll.setObjectName("DetailScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        body_host = QWidget()
+        body_layout = QVBoxLayout(body_host)
+        body_layout.setContentsMargins(10, 10, 10, 10)
+        body_layout.addWidget(self._body_label)
+        body_layout.addStretch()
+        scroll.setWidget(body_host)
+
+        open_button = QPushButton("在 Safari 打开")
+        open_button.setObjectName("SecondaryButton")
+        open_button.setEnabled(bool(self._url))
+        open_button.clicked.connect(self._open_in_safari)
+        close_button = QPushButton("关闭")
+        close_button.setObjectName("PrimaryButton")
+        close_button.clicked.connect(self.accept)
+
+        actions = QHBoxLayout()
+        actions.setContentsMargins(0, 0, 0, 0)
+        actions.addWidget(open_button, 0, Qt.AlignmentFlag.AlignLeft)
+        actions.addStretch()
+        actions.addWidget(close_button, 0, Qt.AlignmentFlag.AlignRight)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+        layout.addWidget(title)
+        layout.addWidget(self._subtitle)
+        layout.addWidget(scroll, 1)
+        layout.addLayout(actions)
+
+        self._load_detail(item)
+
+    def _load_detail(self, item: dict[str, object]) -> None:
+        action = self._ACTION_BY_SOURCE.get(str(item.get("source") or ""))
+        try:
+            resource_id = int(str(item.get("item_id") or ""))
+        except ValueError:
+            resource_id = 0
+        if action is None or resource_id <= 0:
+            self._body_label.setText("该条目不支持查看全文，可点击“在 Safari 打开”。")
+            return
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        self._pending = run_async(
+            lambda: self._tool.invoke({"action": action, "id": resource_id}),
+            on_done=self._on_detail_loaded,
+            on_error=self._on_detail_error,
+        )
+
+    def _on_detail_error(self, message: str) -> None:
+        QApplication.restoreOverrideCursor()
+        self._body_label.setStyleSheet("color: #b42318;")
+        self._body_label.setText(f"教务详情加载失败：{message}")
+
+    def _on_detail_loaded(self, result: object) -> None:
+        QApplication.restoreOverrideCursor()
+        if not getattr(result, "success", False):
+            self._body_label.setStyleSheet("color: #b42318;")
+            self._body_label.setText(
+                str(getattr(result, "error", "") or "教务详情加载失败")
+            )
+            return
+        data = result.data if isinstance(result.data, dict) else {}
+        text = str(data.get("text") or data.get("body") or data.get("content") or "").strip()
+        date = str(data.get("date") or "").strip()
+        if date and date not in self._subtitle.text():
+            self._subtitle.setText(f"{self._subtitle.text()} · {date}".strip(" ·"))
+        self._body_label.setText(text or "（无正文内容）")
+
+    def _open_in_safari(self) -> None:
+        if self._url:
+            _open_external_url(self._url)
+
+
 class LectureDetailDialog(QDialog):
     """Display one lecture and optionally open its source link."""
 
@@ -3005,13 +3265,27 @@ def _treehole_detail_row(item: dict[str, object]) -> QFrame:
     return row
 
 
-def _dean_update_row(item: dict[str, object]) -> QFrame:
+def _dean_update_row(
+    item: dict[str, object],
+    on_detail: Callable[[dict[str, object]], None] | None = None,
+) -> QFrame:
     url = str(item.get("url") or "").strip()
-    row = ClickableFrame() if url else QFrame()
+    source = str(item.get("source") or "")
+    item_id = str(item.get("item_id") or "").strip()
+    # Notice / rule rows fetch full text in-app; file rows open Safari.
+    wants_detail = (
+        on_detail is not None and source in _DEAN_DETAIL_SOURCES and bool(item_id)
+    )
+    clickable = wants_detail or bool(url)
+    row = ClickableFrame() if clickable else QFrame()
     row.setObjectName("TodoRow")
-    if url and isinstance(row, ClickableFrame):
-        row.setToolTip("点击在 Safari 打开对应教务内容")
-        row.clicked.connect(lambda: _open_external_url(url))
+    if clickable and isinstance(row, ClickableFrame):
+        if wants_detail:
+            row.setToolTip("点击查看全文")
+            row.clicked.connect(lambda it=dict(item): on_detail(it))
+        else:
+            row.setToolTip("点击在 Safari 打开对应教务内容")
+            row.clicked.connect(lambda u=url: _open_external_url(u))
     layout = QVBoxLayout(row)
     layout.setContentsMargins(8, 7, 8, 7)
     layout.setSpacing(3)
