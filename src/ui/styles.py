@@ -130,6 +130,95 @@ def apply_app_style(app: QApplication) -> None:
             padding-left: 4px;
         }}
 
+        /* Dean message category pill + columns (DeanMessagesDialog / card rows). */
+        QLabel#DeanTagPill {{
+            background: #eef0f2;
+            color: #475467;
+            border: 1px solid #d9dde2;
+            border-radius: 8px;
+            padding: 1px 7px;
+            font-size: 9px;
+            font-weight: 800;
+        }}
+
+        QLabel#DeanTagPill[deanSource="notice"] {{
+            background: #fde8e8;
+            color: {PKU_RED};
+            border-color: #f3c6c6;
+        }}
+
+        QLabel#DeanTagPill[deanSource="rules_school"] {{
+            background: #fbf0d8;
+            color: #8a6516;
+            border-color: #ecd9a8;
+        }}
+
+        QLabel#DeanTagPill[deanSource="rules_national"] {{
+            background: #e6eefb;
+            color: #1d4e89;
+            border-color: #c2d6f2;
+        }}
+
+        QLabel#DeanTagPill[deanSource="download"] {{
+            background: #e6f4ea;
+            color: #1b6b3a;
+            border-color: #bfe3cd;
+        }}
+
+        QLabel#DeanTagPill[deanSource="openinfo"] {{
+            background: #efe8fb;
+            color: #5b3a9b;
+            border-color: #d6c6f2;
+        }}
+
+        QFrame#DeanColumn {{
+            background: #fffdfb;
+            border: 1px solid {BORDER};
+            border-radius: 8px;
+        }}
+
+        QLabel#DeanColumnHeader {{
+            color: {PKU_RED_DARK};
+            font-size: 12px;
+            font-weight: 800;
+            padding-bottom: 4px;
+            border-bottom: 2px solid #eadbd5;
+        }}
+
+        QScrollArea#DeanColumnScroll {{
+            background: transparent;
+            border: none;
+        }}
+
+        QScrollArea#DeanColumnScroll > QWidget > QWidget {{
+            background: transparent;
+        }}
+
+        QTabWidget#DeanMessageTabs::pane {{
+            border: 1px solid {BORDER};
+            border-radius: 8px;
+            top: -1px;
+            background: {BACKGROUND};
+        }}
+
+        QTabWidget#DeanMessageTabs QTabBar::tab {{
+            background: #fffaf7;
+            color: {MUTED};
+            border: 1px solid {BORDER};
+            border-bottom: none;
+            border-top-left-radius: 7px;
+            border-top-right-radius: 7px;
+            padding: 6px 16px;
+            margin-right: 3px;
+            font-weight: 700;
+        }}
+
+        QTabWidget#DeanMessageTabs QTabBar::tab:selected {{
+            background: {PKU_RED};
+            color: #ffffff;
+            border-color: {PKU_RED};
+        }}
+
         QPushButton#InlineToggleButton {{
             background: transparent;
             border: none;

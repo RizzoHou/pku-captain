@@ -18,10 +18,18 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PyQt6")
 
-from PyQt6.QtWidgets import QApplication  # noqa: E402
+from PyQt6.QtWidgets import (  # noqa: E402
+    QApplication,  # noqa: E402
+    QFrame,
+    QLabel,
+)
 
 import src.ui.dashboard as dashboard  # noqa: E402
 from src.tools.dean_updates import DeanInboxStore  # noqa: E402
+from src.ui.formatters import (  # noqa: E402
+    DEAN_CATEGORY_ORDER,
+    group_dean_by_category,
+)
 
 
 @pytest.fixture(scope="module")
@@ -76,3 +84,50 @@ def test_dean_card_accumulates_across_polls(app: QApplication) -> None:
     panel.set_dean_updates({"items": [_item("notice:2", item_id="2")]})
     keys = {e["key"] for e in panel._dean_inbox.entries()}
     assert keys == {"notice:1", "notice:2"}
+
+
+def test_group_dean_by_category_canonical_order_and_empty_columns() -> None:
+    items = [
+        _item("notice:1", source="notice"),
+        _item("rules:1", source="rules_school"),
+        _item("notice:2", source="notice"),
+    ]
+    grouped = group_dean_by_category(items)
+    # Every known category appears, in canonical order, even when empty.
+    assert [src for src, _, _ in grouped] == [src for src, _ in DEAN_CATEGORY_ORDER]
+    by_source = {src: col for src, _, col in grouped}
+    assert [i["key"] for i in by_source["notice"]] == ["notice:1", "notice:2"]
+    assert [i["key"] for i in by_source["rules_school"]] == ["rules:1"]
+    assert by_source["download"] == []  # empty column kept, never dropped
+
+
+def test_group_dean_by_category_appends_unknown_source() -> None:
+    grouped = group_dean_by_category([_item("x:1", source="mystery")])
+    sources = [src for src, _, _ in grouped]
+    assert sources[: len(DEAN_CATEGORY_ORDER)] == [s for s, _ in DEAN_CATEGORY_ORDER]
+    assert sources[-1] == "mystery"  # unknown source appended after the known set
+
+
+def test_dean_messages_dialog_has_two_tabs_with_category_columns(
+    app: QApplication,
+) -> None:
+    recent = [_item("notice:1", source="notice")]
+    history = [_item("rules:9", source="rules_school")]
+    dialog = dashboard.DeanMessagesDialog(recent, history, None)
+    assert dialog._tabs.count() == 2
+    assert dialog._tabs.tabText(0).startswith("新消息")
+    assert dialog._tabs.tabText(1).startswith("历史消息")
+    # The 新消息 tab lays out one column per category (canonical order).
+    new_tab = dialog._tabs.widget(0)
+    columns = [
+        c for c in new_tab.findChildren(QFrame) if c.objectName() == "DeanColumn"
+    ]
+    assert len(columns) == len(DEAN_CATEGORY_ORDER)
+    headers = [
+        lbl.text()
+        for lbl in new_tab.findChildren(QLabel)
+        if lbl.objectName() == "DeanColumnHeader"
+    ]
+    assert "通知公告 · 1" in headers  # the one recent notice landed in its column
+    assert "资料下载 · 0" in headers  # an empty category still renders a column
+    dialog.deleteLater()

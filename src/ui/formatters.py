@@ -105,6 +105,46 @@ def split_dean_items(
     return [item for _, item in recent], [item for _, item in history]
 
 
+# Canonical category order + Chinese labels for the dean message columns, kept
+# in sync with ``DeanUpdatesTool._SOURCES``. Drives the per-category columns in
+# ``DeanMessagesDialog`` so every tab lists categories in the same stable order.
+DEAN_CATEGORY_ORDER: tuple[tuple[str, str], ...] = (
+    ("notice", "通知公告"),
+    ("rules_school", "校级规章"),
+    ("rules_national", "上级文件"),
+    ("download", "资料下载"),
+    ("openinfo", "信息公开"),
+)
+
+
+def group_dean_by_category(
+    items: object,
+) -> list[tuple[str, str, list[dict[str, Any]]]]:
+    """Group dean items into ``(source, label, items)`` columns, canonical order.
+
+    Known sources appear in ``DEAN_CATEGORY_ORDER`` even when empty (the dialog
+    renders a （暂无） column so the grid never looks broken); any unknown source
+    is appended after, labelled by its own ``source_label``. Item order within a
+    column is preserved from the input (``split_dean_items`` already sorts
+    newest-first), and no item is ever dropped.
+    """
+    buckets: dict[str, list[dict[str, Any]]] = {src: [] for src, _ in DEAN_CATEGORY_ORDER}
+    labels: dict[str, str] = dict(DEAN_CATEGORY_ORDER)
+    extra_order: list[str] = []
+    if isinstance(items, list):
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            source = str(item.get("source") or "")
+            if source not in buckets:
+                buckets[source] = []
+                extra_order.append(source)
+                labels[source] = str(item.get("source_label") or source or "其他")
+            buckets[source].append(item)
+    ordered = [src for src, _ in DEAN_CATEGORY_ORDER] + extra_order
+    return [(src, labels.get(src, src), buckets[src]) for src in ordered]
+
+
 def parse_datetime(value: object) -> datetime | None:
     if not isinstance(value, str) or not value:
         return None

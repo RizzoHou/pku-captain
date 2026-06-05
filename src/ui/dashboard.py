@@ -40,6 +40,7 @@ from ..tools.treehole_updates import (
     TreeholeNotificationService,
 )
 from .formatters import (
+    group_dean_by_category,
     parse_datetime,
     split_dean_items,
     upcoming_assignments,
@@ -2368,7 +2369,13 @@ class AnnouncementDetailDialog(QDialog):
 
 
 class DeanMessagesDialog(QDialog):
-    """Modal list of dean items split into 近期 (recent) and 历史 (archive)."""
+    """Modal dean archive: 新消息 / 历史消息 tabs, each split into category columns.
+
+    The two tabs separate recent from history; inside each tab every dean source
+    (通知公告 / 校级规章 / 上级文件 / 资料下载 / 信息公开) gets its own column with
+    an independent scroll, so the categories are browsable side by side instead of
+    a single flat list. Notice / rule rows still open the in-app detail dialog.
+    """
 
     detail_requested = pyqtSignal(dict)
 
@@ -2380,26 +2387,17 @@ class DeanMessagesDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("教务部消息")
-        self.resize(720, 680)
+        self.resize(980, 680)
 
         title = QLabel("教务部消息")
         title.setObjectName("DialogTitle")
-        subtitle = QLabel(f"近期 {len(recent)} 条 · 历史 {len(history)} 条")
+        subtitle = QLabel(f"新消息 {len(recent)} 条 · 历史 {len(history)} 条")
         subtitle.setObjectName("DialogSubtitle")
 
-        host = QWidget()
-        list_layout = QVBoxLayout(host)
-        list_layout.setContentsMargins(0, 0, 0, 0)
-        list_layout.setSpacing(8)
-        self._add_section(list_layout, "近期", recent)
-        self._add_section(list_layout, "历史", history)
-        list_layout.addStretch()
-
-        scroll = QScrollArea()
-        scroll.setObjectName("DetailScroll")
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setWidget(host)
+        self._tabs = QTabWidget()
+        self._tabs.setObjectName("DeanMessageTabs")
+        self._tabs.addTab(self._build_tab(recent), f"新消息 ({len(recent)})")
+        self._tabs.addTab(self._build_tab(history), f"历史消息 ({len(history)})")
 
         close_button = QPushButton("关闭")
         close_button.setObjectName("PrimaryButton")
@@ -2410,25 +2408,61 @@ class DeanMessagesDialog(QDialog):
         layout.setSpacing(12)
         layout.addWidget(title)
         layout.addWidget(subtitle)
-        layout.addWidget(scroll, 1)
+        layout.addWidget(self._tabs, 1)
         layout.addWidget(close_button, 0, Qt.AlignmentFlag.AlignRight)
 
-    def _add_section(
-        self, layout: QVBoxLayout, heading: str, items: list[dict[str, object]]
-    ) -> None:
-        header = QLabel(heading)
-        header.setObjectName("CardTitle")
-        layout.addWidget(header)
-        if not items:
+    def _build_tab(self, items: list[dict[str, object]]) -> QWidget:
+        host = QWidget()
+        row = QHBoxLayout(host)
+        row.setContentsMargins(2, 6, 2, 2)
+        row.setSpacing(8)
+        for _source, label, col_items in group_dean_by_category(items):
+            row.addWidget(self._build_column(label, col_items), 1)
+        return host
+
+    def _build_column(
+        self, label: str, items: list[dict[str, object]]
+    ) -> QFrame:
+        column = QFrame()
+        column.setObjectName("DeanColumn")
+        outer = QVBoxLayout(column)
+        outer.setContentsMargins(8, 8, 8, 8)
+        outer.setSpacing(6)
+
+        header = QLabel(f"{label} · {len(items)}")
+        header.setObjectName("DeanColumnHeader")
+        outer.addWidget(header)
+
+        list_host = QWidget()
+        list_layout = QVBoxLayout(list_host)
+        list_layout.setContentsMargins(0, 0, 0, 0)
+        list_layout.setSpacing(6)
+        if items:
+            for item in items:
+                if isinstance(item, dict):
+                    list_layout.addWidget(
+                        _dean_update_row(
+                            item,
+                            on_detail=self.detail_requested.emit,
+                            show_category=False,
+                        )
+                    )
+        else:
             empty = QLabel("（暂无）")
             empty.setObjectName("CardBody")
-            layout.addWidget(empty)
-            return
-        for item in items:
-            if isinstance(item, dict):
-                layout.addWidget(
-                    _dean_update_row(item, on_detail=self.detail_requested.emit)
-                )
+            list_layout.addWidget(empty)
+        list_layout.addStretch()
+
+        scroll = QScrollArea()
+        scroll.setObjectName("DeanColumnScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(list_host)
+        outer.addWidget(scroll, 1)
+
+        column.setMinimumWidth(168)
+        return column
 
 
 class DeanDetailDialog(QDialog):
@@ -3397,6 +3431,8 @@ def _treehole_history_row(record: dict[str, object]) -> QFrame:
 def _dean_update_row(
     item: dict[str, object],
     on_detail: Callable[[dict[str, object]], None] | None = None,
+    *,
+    show_category: bool = True,
 ) -> QFrame:
     url = str(item.get("url") or "").strip()
     source = str(item.get("source") or "")
@@ -3422,15 +3458,30 @@ def _dean_update_row(
     title = QLabel(str(item.get("title") or "未命名教务内容"))
     title.setObjectName("TodoTitle")
     title.setWordWrap(True)
-    meta_parts = [
-        str(item.get("source_label") or "教务部"),
-        str(item.get("date") or ""),
-    ]
-    meta = QLabel(" · ".join(part for part in meta_parts if part))
-    meta.setObjectName("TodoCourse")
-    meta.setWordWrap(True)
     layout.addWidget(title)
-    layout.addWidget(meta)
+
+    # The meta line carries a colored category pill (so the flat card list stays
+    # browsable by tag) plus the date. Inside the dialog's category columns the
+    # column header already names the category, so the pill is dropped there.
+    date_text = str(item.get("date") or "").strip()
+    meta_row = QHBoxLayout()
+    meta_row.setContentsMargins(0, 0, 0, 0)
+    meta_row.setSpacing(6)
+    has_meta = False
+    if show_category:
+        pill = QLabel(str(item.get("source_label") or "教务部"))
+        pill.setObjectName("DeanTagPill")
+        pill.setProperty("deanSource", source or "other")
+        meta_row.addWidget(pill, 0, Qt.AlignmentFlag.AlignLeft)
+        has_meta = True
+    if date_text:
+        date_label = QLabel(date_text)
+        date_label.setObjectName("TodoCourse")
+        meta_row.addWidget(date_label, 0, Qt.AlignmentFlag.AlignLeft)
+        has_meta = True
+    if has_meta:
+        meta_row.addStretch()
+        layout.addLayout(meta_row)
     return row
 
 
