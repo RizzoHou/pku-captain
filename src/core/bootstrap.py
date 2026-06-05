@@ -38,7 +38,7 @@ from ..tools import (
 )
 from ..tools.base import ToolRegistry
 from ..tools.pku3b import Pku3bNotFoundError, Pku3bTimeoutError, run_pku3b
-from ..workflows import HelloWorkflow, MorningBriefingWorkflow
+from ..workflows import HelloWorkflow, MorningBriefingWorkflow, WorkflowTool
 from ..workflows.base import WorkflowRegistry
 from .agent import Agent
 from .conversation import Conversation
@@ -105,6 +105,7 @@ def build_agent(*, offline: bool = False, enable_knowledge: bool = False) -> Age
         offline=offline, enable_knowledge=enable_knowledge, memory=memory
     )
     workflows = _build_workflows(tools)
+    _register_workflow_tools(tools, workflows)
 
     conversation = Conversation()
     conversation.add_system(_SYSTEM_PROMPT)
@@ -304,6 +305,30 @@ def _build_workflows(tools: ToolRegistry) -> WorkflowRegistry:
     registry.register(HelloWorkflow(tools))
     registry.register(MorningBriefingWorkflow(tools))
     return registry
+
+
+def _register_workflow_tools(
+    tools: ToolRegistry, workflows: WorkflowRegistry
+) -> None:
+    """Expose each agent-callable workflow to the LLM as a callable Tool.
+
+    `Agent.turn()` only serializes the ToolRegistry to the LLM, so without
+    this a workflow is reachable solely through the GUI workflow button —
+    the model never sees it. Wrapping each workflow in a `WorkflowTool` and
+    adding it to the same registry puts the workflow in `to_openai_schema()`
+    so DeepSeek can start it through the normal tool-call loop. The GUI
+    button path (`WorkflowWorker` over `agent.workflows`) is unaffected, and
+    recursion is impossible because workflows invoke tools by explicit name,
+    never by a workflow name.
+
+    Workflows that set `agent_callable = False` (offline reference stubs like
+    `HelloWorkflow`) are skipped: they stay in the `WorkflowRegistry` for the
+    loop/tests but never pollute the real agent toolset.
+    """
+    for workflow in workflows.all():
+        if not workflow.agent_callable:
+            continue
+        tools.register(WorkflowTool(workflow))
 
 
 def build_source_registry() -> SourceRegistry:
