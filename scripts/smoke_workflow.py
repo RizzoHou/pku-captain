@@ -39,9 +39,10 @@ def probe_model_invokes_workflow() -> None:
     print(f"\n== probe: ask for a briefing, expect a {_WORKFLOW_NAME} tool call ==")
     called: list[str] = []
     final_text: str | None = None
-    for event in agent.turn(
-        "现在请给我生成今天的晨间简报（morning briefing），用对应的工作流。"
-    ):
+    # Neutral prompt — no "use the workflow" instruction — so the run tests
+    # whether the model *reaches for* morning_briefing on its own, not just
+    # whether it can call a named tool when told to.
+    for event in agent.turn("现在请给我生成今天的晨间简报。"):
         if event.kind == "tool_call":
             called.append(event.payload["name"])
             print(f"  [tool_call] {event.payload['name']} args={event.payload['arguments']}")
