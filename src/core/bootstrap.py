@@ -12,21 +12,21 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..llm import ChatMessage, DeepSeekProvider, EchoLLMProvider, LLMProvider
-from ..rag import (
-    APIEmbedder,
-    CalendarSource,
-    Chunk,
-    DeanSource,
-    KnowledgeBase,
-    SourceRegistry,
+from ..llm import (
+    ChatMessage,
+    DeepSeekProvider,
+    EchoLLMProvider,
+    KimiProvider,
+    LLMProvider,
 )
+from ..rag import CalendarSource, DeanSource, SourceRegistry
 from ..tools import (
     CalendarReminderTool,
     ClockTool,
     DeanResourcesTool,
     DeanUpdatesTool,
-    KnowledgeSearchTool,
+    DocBaseReadTool,
+    DocBaseSearchTool,
     LectureTool,
     MemoryTool,
     PKU3bAnnouncementsTool,
@@ -59,9 +59,9 @@ _DEEPSEEK_KEY_PATHS = (
     _SECRETS_DIR / "api_keys" / "deepseek_key.txt",
     _SECRETS_DIR / "deepseek_key.txt",
 )
-_EMBEDDING_KEY_PATHS = (
-    _SECRETS_DIR / "api_keys" / "embedding_key.txt",
-    _SECRETS_DIR / "embedding_key.txt",
+_KIMI_KEY_PATHS = (
+    _SECRETS_DIR / "api_keys" / "kimi_key.txt",
+    _SECRETS_DIR / "kimi_key.txt",
 )
 
 _SYSTEM_PROMPT = (
@@ -78,20 +78,25 @@ _SYSTEM_PROMPT = (
     "a previously stored one. Do not store one-off or transient details. "
     "Any facts already known about the user are listed under \"Known facts "
     "about the user\" below; use them to personalize replies and never ask "
-    "again for something already stored."
+    "again for something already stored.\n"
+    "For questions about PKU 培养方案 (curriculum / 学分 requirements / 课程设置), "
+    "选课 (course selection handbook), or 辅修/双学位, first call `doc_search` to "
+    "find the right document by 学院/专业, then call `doc_read` with that "
+    "document's `path` (and a focused `question`) to read its actual tables — "
+    "do not guess credit numbers or course lists from memory."
 )
 
 
-def build_agent(*, offline: bool = False, enable_knowledge: bool = False) -> Agent:
+def build_agent(*, offline: bool = False) -> Agent:
     """Assemble the Agent the GUI runs against.
 
     `offline=True` swaps in `EchoLLMProvider` and drops any tool that
     touches the network or a subprocess, so the GUI lane can develop
     without an API key or live PKU endpoints.
 
-    `enable_knowledge` is opt-in (default off): RAG `knowledge_search`
-    registers only when it is True *and* the agent is online. Leaving it
-    off keeps startup free of any embedding-API calls.
+    The doc base replaces the old RAG knowledge base: `doc_search` registers
+    in every mode (it reads the committed manifest, no index to build), and
+    `doc_read` registers online when a vision provider (Kimi) is available.
     """
     llm = _build_llm(offline=offline)
     # One shared store: the MemoryTool writes to it and the Agent reads it
@@ -101,9 +106,8 @@ def build_agent(*, offline: bool = False, enable_knowledge: bool = False) -> Age
     memory = MemoryStore()
     if not offline:
         _sync_pku3b_identity_memory(memory)
-    tools = _build_tools(
-        offline=offline, enable_knowledge=enable_knowledge, memory=memory
-    )
+    vision = None if offline else build_vision_llm()
+    tools = _build_tools(offline=offline, vision=vision, memory=memory)
     workflows = _build_workflows(tools)
     _register_workflow_tools(tools, workflows)
 
@@ -189,11 +193,17 @@ def _build_llm(*, offline: bool) -> LLMProvider:
 
 
 def _build_tools(
-    *, offline: bool, enable_knowledge: bool = False, memory: MemoryStore | None = None
+    *,
+    offline: bool,
+    vision: LLMProvider | None = None,
+    memory: MemoryStore | None = None,
 ) -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(ClockTool())
     registry.register(MemoryTool(store=memory))
+    # The doc base is committed static content with no index to build, so its
+    # search registers in every mode (offline included).
+    registry.register(DocBaseSearchTool())
     if not offline:
         registry.register(PKU3bAssignmentsTool())
         registry.register(PKU3bAnnouncementsTool())
@@ -204,40 +214,29 @@ def _build_tools(
         registry.register(CalendarReminderTool())
         registry.register(DeanResourcesTool())
         registry.register(DeanUpdatesTool())
-        if enable_knowledge:
-            registry.register(KnowledgeSearchTool(_build_knowledge_base()))
+        # doc_read shells to pdftoppm and calls a vision API, so it registers
+        # only online and only when a vision provider (Kimi key) is available.
+        if vision is not None:
+            registry.register(DocBaseReadTool(vision_llm=vision))
         registry.register(LectureTool())
     return registry
 
 
-def _build_knowledge_base() -> KnowledgeBase:
-    """Build an in-memory KnowledgeBase seeded from the registered Sources.
+def build_vision_llm() -> KimiProvider | None:
+    """Build the Kimi vision provider for doc_read, or None if no key is set.
 
-    Pulls chunks from every `Source` in `build_source_registry()` so the
-    knowledge base retrieves over the same authoritative content the
-    dashboard shows. Embedding goes through the DashScope API (no local
-    model download), so indexing here calls the network — which is why
-    the tool is opt-in (`enable_knowledge`) and online only.
+    Uses the 32k vision model so `doc_read` can read a typical multi-page
+    培养方案 whole (an image page costs ~1k tokens), while long documents are
+    read in slices via the tool's `pages` argument. Returns None when no Kimi
+    key is present, so the agent simply omits `doc_read` rather than failing.
     """
-    knowledge_base = KnowledgeBase(embedder=_build_embedder())
-    chunks: list[Chunk] = []
-    for source in build_source_registry().all():
-        chunks.extend(source.fetch())
-    knowledge_base.index(chunks)
-    return knowledge_base
-
-
-def _build_embedder() -> APIEmbedder:
-    """Construct the API embedder from the local key file."""
-    key_path = _find_embedding_key_path()
+    key_path = _find_key_path(_KIMI_KEY_PATHS)
     if key_path is None:
-        expected = " or ".join(str(path) for path in _EMBEDDING_KEY_PATHS)
-        raise FileNotFoundError(
-            f"Embedding API key not found at {expected}. "
-            "RAG knowledge search needs it; omit enable_knowledge to run without RAG."
-        )
+        return None
     api_key = key_path.read_text(encoding="utf-8").strip()
-    return APIEmbedder(api_key=api_key)
+    if not api_key:
+        return None
+    return KimiProvider(api_key=api_key, model="moonshot-v1-32k-vision-preview")
 
 
 _IDENTITY_MEMORY_FIELDS = {
@@ -294,10 +293,6 @@ def _find_key_path(paths: tuple[Path, ...]) -> Path | None:
         if path.exists():
             return path
     return None
-
-
-def _find_embedding_key_path() -> Path | None:
-    return _find_key_path(_EMBEDDING_KEY_PATHS)
 
 
 def _build_workflows(tools: ToolRegistry) -> WorkflowRegistry:

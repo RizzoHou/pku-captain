@@ -29,9 +29,9 @@ agent = build_agent(offline=True)  # 离线：EchoLLMProvider + 仅 ClockTool
 
 `offline=True` 时挂 `EchoLLMProvider` + 离线工具子集（当前为 `ClockTool`），便于 GUI 在没有 API Key 时也能跑通。GUI 只调 `build_agent()`，不应感知 `DeepSeekProvider`、`PKU3bAssignmentsTool` 等具体子类的存在 —— 这些会在演示窗口内频繁增删。系统提示由 `bootstrap` 注入，GUI 不需要也不应该自行追加。
 
-`build_agent(enable_knowledge=True)` 是 RAG 检索的**显式开关，默认关闭**：仅当它为 True **且**在线时，才注册 `KnowledgeSearchTool`。关闭时启动不会触发任何嵌入 API 调用。嵌入走 DashScope `text-embedding-v4` 云端 API（不再下载本地模型），所以开启需要 `secrets/api_keys/embedding_key.txt`。GUI 通过 `--rag` 启动标志暴露该开关（`src/__main__.py` → `MainWindow(enable_knowledge=...)`），CLI 同样有 `--rag`。
+**文档库（doc base）取代了原 RAG 知识库**：检索分两步，都通过工厂注册，无需任何开关。`doc_search` 在**任意模式**（含离线）都注册 —— 它只读已提交的 `doc_base/manifest.json`，没有索引要建、不发网络请求；`doc_read`（用 Kimi 视觉模型阅读 PDF 页面并回答）**仅在线且有视觉模型时**注册，由 `build_vision_llm()` 读 `secrets/api_keys/kimi_key.txt` 决定（缺 key 则省略 `doc_read`）。GUI 仍只调 `build_agent()`，文档库面板通过注册表成员判断（`"doc_search" in tools` / `"doc_read" in tools`）。
 
-> **BREAKING: integration contract** —— 旧的 `skip_knowledge`（默认 False、需显式 `=True` 才跳过）已被 `enable_knowledge`（默认 False、需显式 `=True` 才开启）取代，语义反转。GUI 侧 `build_agent(offline=offline, skip_knowledge=True)` 应改为 `build_agent(offline=offline, enable_knowledge=...)`；本仓库内已同步更新。
+> **BREAKING: integration contract** —— `build_agent` / `MainWindow` 去掉了 `enable_knowledge` 形参，`--rag` 启动标志同步移除；嵌入式 `KnowledgeSearchTool` 不再注册（类与 `src/rag` 基础设施保留，作为 OOP 展示）。GUI 侧 `build_agent(offline=offline, enable_knowledge=...)` 改为 `build_agent(offline=offline)`；本仓库内已同步更新。
 
 `Conversation` 对 GUI 是只读的：渲染历史时通过 `for msg in agent.conversation` 或 `agent.conversation.snapshot()` 拿 `ChatMessage` 列表，不要直接调 `add_user / add_assistant / add_tool_result`。所有写入由 `Agent.turn()` 完成（多会话的重置 / 恢复写入也走 `src.core` 的工厂，见下）。
 

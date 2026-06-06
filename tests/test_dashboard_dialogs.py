@@ -69,7 +69,7 @@ def test_all_dialogs_construct_with_injected_tool(
     dashboard.LectureSearchDialog(tool)
     dashboard.CalendarReminderDialog(tool, [])
     dashboard.MemoryDialog(tool)
-    dashboard.KnowledgeSearchDialog(tool)
+    dashboard.DocBaseDialog(tool, None)
     dashboard.TreeholeMessagesDialog({"message": "x", "updates": []})
 
     # Notification dialog takes an injected service so it stays hermetic

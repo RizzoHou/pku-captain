@@ -87,7 +87,7 @@ def _should_render(loading: bool, current_sig: str | None, fresh_sig: str) -> bo
 class MainWindow(QMainWindow):
     """Top-level window. Layout: dashboard | chat with inline tool calls."""
 
-    def __init__(self, *, offline: bool = True, enable_knowledge: bool = False) -> None:
+    def __init__(self, *, offline: bool = True) -> None:
         super().__init__()
         self.setWindowTitle("PKU Captain")
         self.resize(1680, 920)
@@ -97,7 +97,7 @@ class MainWindow(QMainWindow):
         mode_label = "在线模式" if not offline else "离线模式"
         effective_offline = offline
         try:
-            agent = build_agent(offline=offline, enable_knowledge=enable_knowledge)
+            agent = build_agent(offline=offline)
         except Exception as exc:  # noqa: BLE001 - any online failure falls back to offline
             agent = build_agent(offline=True)
             effective_offline = True

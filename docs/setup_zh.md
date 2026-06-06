@@ -9,7 +9,7 @@ secrets/
   api_keys/
     deepseek_key.txt     # 在线必需 —— DeepSeek 对话模型
     embedding_key.txt    # 仅 RAG 需要 —— 阿里云百炼 DashScope 嵌入模型
-    kimi_key.txt         # 预留 —— Kimi 视觉模型（当前 agent 尚未接入，留作后续视觉功能）
+    kimi_key.txt         # 文档库阅读用 —— Kimi 视觉模型（doc_read 用它读 PDF 里的表格）
   plib/
     email                # P-Lib（PKUHUB）账号邮箱
     password             # P-Lib 账号密码
@@ -143,6 +143,8 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 ## 文档库 doc_base（拆分重建——仅在源 PDF 更新时需要）
 
 `doc_base/` 用「拆分后的小 PDF + 视觉读取」取代了原先的向量知识库（培养方案 PDF 里大量图表，嵌入模型读不动）。`doc_base/original/` 放教务部原始大 PDF（培养方案文/理科卷、辅修双专业、选课手册），`scripts/split_doc_base.py` 把它们按大纲 / 印刷目录拆成 `学部/院系/专业.pdf` 这样的层级小文件，并生成 `doc_base/manifest.json` 索引。拆分结果**已提交进仓库**，正常使用无需重跑；只有当 `original/` 换了新一年的 PDF 时才需要重建。
+
+**运行时**（用文档库回答问题，不是重建）：`doc_search` 只读 `manifest.json`，离线也能用，无依赖；`doc_read` 让 Kimi 视觉模型阅读 PDF 页面，需要 (1) `secrets/api_keys/kimi_key.txt`，(2) 运行机上有 `pdftoppm`（`brew install poppler`）。缺 Kimi key 时 agent 不注册 `doc_read`，GUI 文档库里的「让 Captain 阅读」按钮也会禁用，仍可浏览 / 打开 PDF。
 
 重建依赖三个系统 CLI（不进 venv，`brew install` 即可）：
 

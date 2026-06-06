@@ -6,6 +6,7 @@ import subprocess
 import sys
 from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import Qt, QUrl, pyqtSignal
@@ -19,16 +20,20 @@ from PyQt6.QtWidgets import (
     QFrame,
     QGridLayout,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QScrollArea,
     QSizePolicy,
     QSpinBox,
     QTabWidget,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -162,9 +167,9 @@ class DashboardPanel(QWidget):
         self._memory_button = QPushButton("记忆")
         self._memory_button.setObjectName("SecondaryButton")
         self._memory_button.clicked.connect(self._show_memory_dialog)
-        self._knowledge_button = QPushButton("知识库")
+        self._knowledge_button = QPushButton("文档库")
         self._knowledge_button.setObjectName("SecondaryButton")
-        self._knowledge_button.clicked.connect(self._show_knowledge_dialog)
+        self._knowledge_button.clicked.connect(self._show_docbase_dialog)
 
         header = QGridLayout()
         header.addWidget(title, 0, 0)
@@ -251,7 +256,7 @@ class DashboardPanel(QWidget):
         # registered (offline mode), so the GUI never reaches a network /
         # subprocess tool that the agent factory deliberately left out.
         self._treehole_button.setEnabled("treehole_updates" in (self._tools or ()))
-        self._knowledge_button.setEnabled("knowledge_search" in (self._tools or ()))
+        self._knowledge_button.setEnabled("doc_search" in (self._tools or ()))
         if isinstance(assignment_card, AssignmentTodoCard):
             assignment_card.set_calendar_enabled("calendar_reminder" in (self._tools or ()))
 
@@ -519,16 +524,15 @@ class DashboardPanel(QWidget):
             return
         MemoryDialog(tool, self, learner=self._memory_learner).exec()
 
-    def _show_knowledge_dialog(self) -> None:
-        tool = self._online_tool("knowledge_search")
-        if tool is None:
-            QMessageBox.information(
-                self,
-                "知识库检索",
-                "知识库检索未开启。请用 --rag 启动，并确认 embedding API key 可用。",
-            )
+    def _show_docbase_dialog(self) -> None:
+        search_tool = self._online_tool("doc_search")
+        if search_tool is None:
+            QMessageBox.information(self, "文档库", "文档库不可用。")
             return
-        KnowledgeSearchDialog(tool, self).exec()
+        # doc_read is online + Kimi-key gated; pass it when present so the
+        # dialog can offer "让 Captain 阅读", else it is browse / open-PDF only.
+        read_tool = self._online_tool("doc_read")
+        DocBaseDialog(search_tool, read_tool, self).exec()
 
 
 class DashboardCard(QFrame):
@@ -3401,56 +3405,68 @@ class MemoryDialog(QDialog):
         return data if isinstance(data, dict) else {}
 
 
-class KnowledgeSearchDialog(QDialog):
-    """Manual RAG search panel for KnowledgeSearchTool."""
+class DocBaseDialog(QDialog):
+    """Browse the doc base and read documents with Captain (vision LLM).
 
-    def __init__(self, tool: Tool, parent: QWidget | None = None) -> None:
+    Replaces the embedding `KnowledgeSearchDialog`. The tree is built from the
+    `doc_search` tool's browse payload (volume → 学部/院系 breadcrumb → 文档);
+    the filter box re-runs `doc_search`. Double-click or 打开 PDF opens the real
+    PDF in the OS viewer; 让 Captain 阅读 runs `doc_read` (vision LLM) when it is
+    available and shows the distilled answer.
+    """
+
+    def __init__(
+        self,
+        search_tool: Tool,
+        read_tool: Tool | None,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("知识库检索")
-        self.resize(820, 680)
-        self._tool = tool
-        self._hits: list[dict[str, object]] = []
+        self.setWindowTitle("文档库")
+        self.resize(900, 720)
+        self._search_tool = search_tool
+        self._read_tool = read_tool
+        self._docs: list[dict[str, object]] = []
         self._pending: object = None
 
-        title = QLabel("知识库检索")
+        title = QLabel("文档库")
         title.setObjectName("DialogTitle")
-        subtitle = QLabel("检索已索引的教务、校历等知识库片段。")
+        subtitle = QLabel(
+            "浏览北大本科培养方案 / 选课手册 / 辅修双专业文档；"
+            "双击打开 PDF，或让 Captain 阅读并回答其中的表格内容。"
+        )
         subtitle.setObjectName("DialogSubtitle")
         subtitle.setWordWrap(True)
 
-        self._query_input = QLineEdit()
-        self._query_input.setPlaceholderText("输入检索问题或关键词")
-        self._query_input.returnPressed.connect(self._search)
-        self._top_k_combo = QComboBox()
-        self._top_k_combo.addItems(["5", "10", "20"])
-        search_button = QPushButton("搜索")
-        search_button.setObjectName("PrimaryButton")
-        search_button.clicked.connect(self._search)
+        self._filter_input = QLineEdit()
+        self._filter_input.setPlaceholderText("输入关键词筛选（学院 / 专业 / 文档名）")
+        self._filter_input.textChanged.connect(self._apply_filter)
 
-        form = QGridLayout()
-        form.setContentsMargins(0, 0, 0, 0)
-        form.setHorizontalSpacing(10)
-        form.addWidget(self._query_input, 0, 0)
-        form.addWidget(self._top_k_combo, 0, 1)
-        form.addWidget(search_button, 0, 2)
-        form.setColumnStretch(0, 1)
+        self._tree = QTreeWidget()
+        self._tree.setObjectName("DocBaseTree")
+        self._tree.setHeaderLabels(["文档", "页数"])
+        self._tree.setColumnWidth(0, 580)
+        self._tree.itemDoubleClicked.connect(lambda _item, _col: self._open_pdf())
+        self._tree.currentItemChanged.connect(lambda *_: self._sync_buttons())
 
-        self._status_label = QLabel("输入关键词后开始搜索")
+        self._status_label = QLabel("")
         self._status_label.setObjectName("CardBody")
         self._status_label.setWordWrap(True)
-        self._result_list = QListWidget()
-        self._result_list.setObjectName("PLibResultList")
-        self._result_list.itemDoubleClicked.connect(lambda _item: self._show_selected())
 
-        detail_button = QPushButton("查看片段")
-        detail_button.setObjectName("SecondaryButton")
-        detail_button.clicked.connect(self._show_selected)
+        self._open_button = QPushButton("打开 PDF")
+        self._open_button.setObjectName("SecondaryButton")
+        self._open_button.clicked.connect(self._open_pdf)
+        self._read_button = QPushButton("让 Captain 阅读")
+        self._read_button.setObjectName("PrimaryButton")
+        self._read_button.clicked.connect(self._read_doc)
         close_button = QPushButton("关闭")
         close_button.setObjectName("InlineToggleButton")
         close_button.clicked.connect(self.accept)
+
         actions = QHBoxLayout()
         actions.setContentsMargins(0, 0, 0, 0)
-        actions.addWidget(detail_button)
+        actions.addWidget(self._open_button)
+        actions.addWidget(self._read_button)
         actions.addStretch()
         actions.addWidget(close_button)
 
@@ -3459,73 +3475,170 @@ class KnowledgeSearchDialog(QDialog):
         layout.setSpacing(12)
         layout.addWidget(title)
         layout.addWidget(subtitle)
-        layout.addLayout(form)
+        layout.addWidget(self._filter_input)
+        layout.addWidget(self._tree, 1)
         layout.addWidget(self._status_label)
-        layout.addWidget(self._result_list, 1)
         layout.addLayout(actions)
 
-    def _search(self) -> None:
-        query = self._query_input.text().strip()
+        self._load_all()
+
+    def _load_all(self) -> None:
+        result = self._search_tool.invoke({})  # empty query → browse all
+        data = result.data if getattr(result, "success", False) else []
+        self._docs = [doc for doc in data if isinstance(doc, dict)]
+        self._build_tree(self._docs)
+        self._status_label.setText(f"共 {len(self._docs)} 篇文档")
+
+    def _apply_filter(self, text: str) -> None:
+        query = text.strip()
         if not query:
-            QMessageBox.warning(self, "知识库检索", "请输入检索关键词。")
+            self._build_tree(self._docs)
+            self._status_label.setText(f"共 {len(self._docs)} 篇文档")
             return
+        result = self._search_tool.invoke({"query": query, "top_k": 50})
+        data = result.data if getattr(result, "success", False) else []
+        docs = [doc for doc in data if isinstance(doc, dict)]
+        self._build_tree(docs)
+        self._status_label.setText(f"匹配 {len(docs)} 篇文档")
+
+    def _build_tree(self, docs: list[dict[str, object]]) -> None:
+        self._tree.clear()
+        groups: dict[tuple[str, ...], QTreeWidgetItem] = {}
+
+        def group_for(parts: tuple[str, ...]) -> QTreeWidgetItem | None:
+            node: QTreeWidgetItem | None = None
+            key: tuple[str, ...] = ()
+            for part in parts:
+                key = (*key, part)
+                if key not in groups:
+                    item = QTreeWidgetItem([part, ""])
+                    if node is None:
+                        self._tree.addTopLevelItem(item)
+                    else:
+                        node.addChild(item)
+                    groups[key] = item
+                node = groups[key]
+            return node
+
+        for doc in docs:
+            crumb = [str(p) for p in (doc.get("breadcrumb") or [])]
+            parts = tuple([str(doc.get("volume") or "")] + crumb)
+            parent = group_for(parts)
+            leaf = QTreeWidgetItem(
+                [str(doc.get("title") or "未命名"), str(doc.get("pages") or "")]
+            )
+            leaf.setData(0, Qt.ItemDataRole.UserRole, doc)
+            if parent is None:
+                self._tree.addTopLevelItem(leaf)
+            else:
+                parent.addChild(leaf)
+        self._tree.expandToDepth(0)
+        self._sync_buttons()
+
+    def _selected_doc(self) -> dict[str, object] | None:
+        item = self._tree.currentItem()
+        if item is None:
+            return None
+        data = item.data(0, Qt.ItemDataRole.UserRole)
+        return data if isinstance(data, dict) else None
+
+    def _sync_buttons(self) -> None:
+        doc = self._selected_doc()
+        self._open_button.setEnabled(doc is not None)
+        self._read_button.setEnabled(doc is not None and self._read_tool is not None)
+        if self._read_tool is None:
+            self._read_button.setToolTip("需要在线模式 + Kimi 视觉模型")
+
+    def _open_pdf(self) -> None:
+        doc = self._selected_doc()
+        if doc is None:
+            return
+        path = str(doc.get("abs_path") or "")
+        if not path or not Path(path).exists():
+            QMessageBox.warning(self, "文档库", "未找到该 PDF 文件。")
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+
+    def _read_doc(self) -> None:
+        doc = self._selected_doc()
+        if doc is None or self._read_tool is None:
+            return
+        question, ok = QInputDialog.getText(
+            self,
+            "让 Captain 阅读",
+            f"想了解《{doc.get('title') or '该文档'}》的什么？（留空则给出整体摘要）",
+        )
+        if not ok:
+            return
+        read_tool = self._read_tool
+        args: dict[str, object] = {"path": doc.get("path")}
+        if question.strip():
+            args["question"] = question.strip()
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         self._status_label.setStyleSheet("")
-        self._status_label.setText("检索中...")
+        self._status_label.setText("Captain 正在阅读文档...")
         self._pending = run_async(
-            lambda: self._tool.invoke(
-                {"query": query, "top_k": int(self._top_k_combo.currentText())}
-            ),
-            on_done=self._on_search_result,
-            on_error=self._on_search_error,
+            lambda: read_tool.invoke(args),
+            on_done=self._on_read_done,
+            on_error=self._on_read_error,
         )
 
-    def _on_search_error(self, message: str) -> None:
+    def _on_read_error(self, message: str) -> None:
         QApplication.restoreOverrideCursor()
         self._status_label.setStyleSheet("color: #b42318;")
-        self._status_label.setText(f"检索失败：{message}")
+        self._status_label.setText(f"阅读失败：{message}")
 
-    def _on_search_result(self, result: object) -> None:
+    def _on_read_done(self, result: object) -> None:
         QApplication.restoreOverrideCursor()
-        if not getattr(result, "success", False):
-            self._status_label.setText(str(getattr(result, "error", "") or "检索失败"))
-            self._status_label.setStyleSheet("color: #b42318;")
-            return
-        data = result.data if isinstance(result.data, list) else []
-        self._hits = [item for item in data if isinstance(item, dict)]
-        self._render()
-
-    def _render(self) -> None:
-        self._result_list.clear()
         self._status_label.setStyleSheet("")
-        self._status_label.setText(f"返回 {len(self._hits)} 条片段")
-        if not self._hits:
-            empty = QListWidgetItem("暂无匹配片段")
-            empty.setFlags(Qt.ItemFlag.NoItemFlags)
-            self._result_list.addItem(empty)
-            return
-        for index, hit in enumerate(self._hits, start=1):
-            item = QListWidgetItem(
-                "{index}. {source} / {identifier} · score {score:.3f}\n{text}".format(
-                    index=index,
-                    source=hit.get("source") or "unknown",
-                    identifier=hit.get("identifier") or "",
-                    score=float(hit.get("score") or 0),
-                    text=_clip(str(hit.get("text") or ""), 110),
-                )
+        self._status_label.setText(f"共 {len(self._docs)} 篇文档")
+        if not getattr(result, "success", False):
+            QMessageBox.warning(
+                self, "文档库", str(getattr(result, "error", "") or "阅读失败")
             )
-            item.setData(Qt.ItemDataRole.UserRole, hit)
-            self._result_list.addItem(item)
-        self._result_list.setCurrentRow(0)
+            return
+        data = result.data if isinstance(result.data, dict) else {}
+        DocReadResultDialog(data, self).exec()
 
-    def _show_selected(self) -> None:
-        item = self._result_list.currentItem()
-        if item is None:
-            return
-        data = item.data(Qt.ItemDataRole.UserRole)
-        if not isinstance(data, dict):
-            return
-        QMessageBox.information(self, "知识库片段", _knowledge_hit_text(data))
+
+class DocReadResultDialog(QDialog):
+    """Shows a doc_read answer (vision-distilled) in a read-only panel."""
+
+    def __init__(self, data: dict[str, object], parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Captain 阅读结果")
+        self.resize(720, 560)
+
+        title = QLabel(str(data.get("title") or "阅读结果"))
+        title.setObjectName("DialogTitle")
+        pages = data.get("pages_read") or []
+        meta_bits = [str(data.get("volume") or "")]
+        if isinstance(pages, list) and pages:
+            meta_bits.append(f"第 {pages[0]}–{pages[-1]} 页 / 共 {data.get('total_pages')} 页")
+        subtitle = QLabel(" · ".join(bit for bit in meta_bits if bit))
+        subtitle.setObjectName("DialogSubtitle")
+        subtitle.setWordWrap(True)
+
+        body = QPlainTextEdit()
+        body.setReadOnly(True)
+        answer = str(data.get("answer") or "")
+        note = str(data.get("note") or "")
+        body.setPlainText(f"{answer}\n\n{note}".strip())
+
+        close_button = QPushButton("关闭")
+        close_button.setObjectName("InlineToggleButton")
+        close_button.clicked.connect(self.accept)
+        actions = QHBoxLayout()
+        actions.addStretch()
+        actions.addWidget(close_button)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+        layout.addWidget(title)
+        layout.addWidget(subtitle)
+        layout.addWidget(body, 1)
+        layout.addLayout(actions)
 
 
 def _announcement_detail_text(announcement: dict[str, object]) -> str:
@@ -3563,18 +3676,6 @@ def _lecture_detail_text(lecture: dict[str, object]) -> str:
     return "\n".join(f"{label}：{value}" for label, value in fields if value)
 
 
-def _knowledge_hit_text(hit: dict[str, object]) -> str:
-    metadata = hit.get("metadata")
-    lines = [
-        f"来源：{hit.get('source') or 'unknown'}",
-        f"标识：{hit.get('identifier') or ''}",
-        f"分数：{float(hit.get('score') or 0):.4f}",
-    ]
-    if isinstance(metadata, dict) and metadata:
-        lines.append(f"元数据：{metadata}")
-    lines.append("")
-    lines.append(str(hit.get("text") or ""))
-    return "\n".join(lines)
 
 
 def _material_id(material: dict[str, object]) -> int | None:
