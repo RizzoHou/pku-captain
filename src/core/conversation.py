@@ -38,6 +38,19 @@ class Conversation:
     def add_user(self, content: str) -> None:
         self._messages.append(ChatMessage(role="user", content=content))
 
+    def add_user_parts(self, parts: list[dict]) -> None:
+        """Append a multimodal user message (a list of content parts).
+
+        Used by the agent to feed doc_read's rendered page images to a
+        vision-capable chat brain after the tool result. `ChatMessage.content`
+        is typed `str` but holds the part list at runtime; the vision provider
+        passes user content through as-is. Persisted history collapses these to
+        a text placeholder (see `session_store`), so disk files stay small.
+        """
+        self._messages.append(
+            ChatMessage(role="user", content=parts)  # type: ignore[arg-type]
+        )
+
     def add_assistant(
         self,
         content: str,

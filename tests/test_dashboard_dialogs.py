@@ -69,7 +69,7 @@ def test_all_dialogs_construct_with_injected_tool(
     dashboard.LectureSearchDialog(tool)
     dashboard.CalendarReminderDialog(tool, [])
     dashboard.MemoryDialog(tool)
-    dashboard.KnowledgeSearchDialog(tool)
+    dashboard.DocBaseDialog(tool, None)
     dashboard.TreeholeMessagesDialog({"message": "x", "updates": []})
 
     # Notification dialog takes an injected service so it stays hermetic
@@ -87,6 +87,67 @@ def test_all_dialogs_construct_with_injected_tool(
 
     dashboard.TreeholeNotificationDialog(service=FakeNotifyService())
     _drain()  # let any __init__-launched async calls settle
+
+
+def test_docbase_read_path_reaches_result_dialog(
+    app: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Drive the 让 Captain 阅读 glue end-to-end: select a doc → question prompt
+    # → run_async(doc_read) → _on_read_done → DocReadResultDialog. Construction
+    # tests cover the widgets; this covers the wiring between them.
+    doc = {
+        "volume": "本科培养方案2025-理科卷",
+        "breadcrumb": [],
+        "title": "基础数学",
+        "pages": 6,
+        "path": "x.pdf",
+        "abs_path": "/tmp/x.pdf",
+    }
+    search = FakeTool([doc])  # invoke({}) → browse payload (one leaf)
+
+    class FakeReader:
+        def read(
+            self,
+            path: str,
+            question: str | None = None,
+            pages: str | None = None,
+        ) -> ToolResult:
+            return ToolResult(
+                success=True,
+                data={
+                    "title": "基础数学",
+                    "volume": "本科培养方案2025-理科卷",
+                    "pages_read": [1, 2],
+                    "total_pages": 6,
+                    "answer": "毕业总学分：138",
+                    "note": "",
+                },
+            )
+
+    read = FakeReader()
+    monkeypatch.setattr(
+        dashboard.QInputDialog, "getText", lambda *a, **k: ("毕业总学分？", True)
+    )
+    captured: dict[str, Any] = {}
+
+    class FakeResultDialog:
+        def __init__(self, data: Any, parent: Any = None) -> None:
+            captured["data"] = data
+
+        def exec(self) -> int:
+            captured["execed"] = True
+            return 0
+
+    monkeypatch.setattr(dashboard, "DocReadResultDialog", FakeResultDialog)
+
+    dlg = dashboard.DocBaseDialog(search, read)
+    leaf = dlg._tree.topLevelItem(0).child(0)
+    dlg._tree.setCurrentItem(leaf)
+    dlg._read_doc()
+    _drain()
+
+    assert captured.get("execed") is True
+    assert captured["data"]["answer"] == "毕业总学分：138"
 
 
 def test_dashboard_title_preserves_only_product_name(app: QApplication) -> None:

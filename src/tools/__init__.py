@@ -3,6 +3,7 @@ from .calendar_reminder import CalendarReminderTool
 from .clock import ClockTool
 from .dean_resources import DeanResourcesTool
 from .dean_updates import DeanUpdatesTool
+from .doc_base import DocBaseReader, DocBaseReadTool, DocBaseSearchTool
 from .knowledge_search import KnowledgeSearchTool
 from .lecture import LectureTool
 from .memory import MemoryTool
@@ -17,6 +18,9 @@ __all__ = [
     "ClockTool",
     "DeanResourcesTool",
     "DeanUpdatesTool",
+    "DocBaseReadTool",
+    "DocBaseReader",
+    "DocBaseSearchTool",
     "KnowledgeSearchTool",
     "LectureTool",
     "MemoryTool",

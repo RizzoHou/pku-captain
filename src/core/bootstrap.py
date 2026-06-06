@@ -12,21 +12,22 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..llm import ChatMessage, DeepSeekProvider, EchoLLMProvider, LLMProvider
-from ..rag import (
-    APIEmbedder,
-    CalendarSource,
-    Chunk,
-    DeanSource,
-    KnowledgeBase,
-    SourceRegistry,
+from ..llm import (
+    ChatMessage,
+    DeepSeekProvider,
+    EchoLLMProvider,
+    KimiProvider,
+    LLMProvider,
 )
+from ..rag import CalendarSource, DeanSource, SourceRegistry
 from ..tools import (
     CalendarReminderTool,
     ClockTool,
     DeanResourcesTool,
     DeanUpdatesTool,
-    KnowledgeSearchTool,
+    DocBaseReader,
+    DocBaseReadTool,
+    DocBaseSearchTool,
     LectureTool,
     MemoryTool,
     PKU3bAnnouncementsTool,
@@ -59,10 +60,27 @@ _DEEPSEEK_KEY_PATHS = (
     _SECRETS_DIR / "api_keys" / "deepseek_key.txt",
     _SECRETS_DIR / "deepseek_key.txt",
 )
-_EMBEDDING_KEY_PATHS = (
-    _SECRETS_DIR / "api_keys" / "embedding_key.txt",
-    _SECRETS_DIR / "embedding_key.txt",
+_KIMI_KEY_PATHS = (
+    _SECRETS_DIR / "api_keys" / "kimi_key.txt",
+    _SECRETS_DIR / "kimi_key.txt",
 )
+
+# Selectable chat brains, in display order. `vision` brains can read the page
+# images doc_read renders directly; text brains cannot (see the model switcher
+# in the chat header + `apply_chat_model`). DeepSeek is the default brain.
+DEFAULT_CHAT_MODEL = "deepseek"
+_CHAT_MODELS: dict[str, dict[str, Any]] = {
+    "deepseek": {
+        "label": "DeepSeek V4 Pro",
+        "keys": _DEEPSEEK_KEY_PATHS,
+        "vision": False,
+    },
+    "kimi": {
+        "label": "Kimi K2.6",
+        "keys": _KIMI_KEY_PATHS,
+        "vision": True,
+    },
+}
 
 _SYSTEM_PROMPT = (
     "You are PKU Captain, a desktop AI assistant for Peking University "
@@ -78,20 +96,27 @@ _SYSTEM_PROMPT = (
     "a previously stored one. Do not store one-off or transient details. "
     "Any facts already known about the user are listed under \"Known facts "
     "about the user\" below; use them to personalize replies and never ask "
-    "again for something already stored."
+    "again for something already stored.\n"
+    "For questions about PKU 培养方案 (curriculum / 学分 requirements / 课程设置), "
+    "选课 (course selection handbook), or 辅修/双学位, first call `doc_search` to "
+    "find the right document by 学院/专业, then call `doc_read` with that "
+    "document's `path` (and a focused `question`) to read its actual tables — "
+    "do not guess credit numbers or course lists from memory."
 )
 
 
-def build_agent(*, offline: bool = False, enable_knowledge: bool = False) -> Agent:
+def build_agent(*, offline: bool = False) -> Agent:
     """Assemble the Agent the GUI runs against.
 
     `offline=True` swaps in `EchoLLMProvider` and drops any tool that
     touches the network or a subprocess, so the GUI lane can develop
     without an API key or live PKU endpoints.
 
-    `enable_knowledge` is opt-in (default off): RAG `knowledge_search`
-    registers only when it is True *and* the agent is online. Leaving it
-    off keeps startup free of any embedding-API calls.
+    The doc base replaces the old RAG knowledge base: `doc_search` registers
+    in every mode (it reads the committed manifest, no index to build). The
+    `doc_read` tool feeds page images to a vision-capable chat brain, so it is
+    registered only while the active brain is Kimi (the default brain is
+    DeepSeek, so it starts unregistered; `apply_chat_model` toggles it).
     """
     llm = _build_llm(offline=offline)
     # One shared store: the MemoryTool writes to it and the Agent reads it
@@ -101,9 +126,7 @@ def build_agent(*, offline: bool = False, enable_knowledge: bool = False) -> Age
     memory = MemoryStore()
     if not offline:
         _sync_pku3b_identity_memory(memory)
-    tools = _build_tools(
-        offline=offline, enable_knowledge=enable_knowledge, memory=memory
-    )
+    tools = _build_tools(offline=offline, memory=memory)
     workflows = _build_workflows(tools)
     _register_workflow_tools(tools, workflows)
 
@@ -174,26 +197,87 @@ def restore_conversation(agent: Agent, raw_messages: list[dict[str, Any]]) -> No
     )
 
 
-def _build_llm(*, offline: bool) -> LLMProvider:
+def build_chat_llm(model_key: str, *, offline: bool) -> LLMProvider:
+    """Build the named chat brain (DeepSeek / Kimi K2.6), or Echo when offline.
+
+    The GUI model switcher swaps brains through here. Reads the brain's own key
+    file; raises if the key is missing (the caller gates the option on
+    `available_chat_models`, so this only fires on a misconfiguration).
+    """
     if offline:
         return EchoLLMProvider()
-    key_path = _find_key_path(_DEEPSEEK_KEY_PATHS)
+    info = _CHAT_MODELS.get(model_key)
+    if info is None:
+        raise ValueError(f"unknown chat model: {model_key!r}")
+    key_path = _find_key_path(info["keys"])
     if key_path is None:
-        expected = " or ".join(str(path) for path in _DEEPSEEK_KEY_PATHS)
+        expected = " or ".join(str(path) for path in info["keys"])
         raise FileNotFoundError(
-            f"DeepSeek API key not found at {expected}. "
+            f"{info['label']} API key not found at {expected}. "
             "Either provide the key file or call build_agent(offline=True)."
         )
     api_key = key_path.read_text(encoding="utf-8").strip()
+    if model_key == "kimi":
+        return KimiProvider(api_key=api_key, model="kimi-k2.6")
     return DeepSeekProvider(api_key=api_key)
 
 
+def available_chat_models(*, offline: bool) -> list[tuple[str, str]]:
+    """`(key, label)` for each chat brain whose key file is present.
+
+    Offline → empty (Echo only, no switching). The GUI shows the switcher only
+    when at least two brains are available.
+    """
+    if offline:
+        return []
+    return [
+        (key, info["label"])
+        for key, info in _CHAT_MODELS.items()
+        if _find_key_path(info["keys"]) is not None
+    ]
+
+
+def apply_chat_model(agent: Agent, model_key: str, *, offline: bool) -> None:
+    """Swap the agent's chat brain in place (mutates `agent.llm`).
+
+    Also gates `doc_read` on the new brain: it feeds page images the brain must
+    read itself, so it registers only for a vision-capable brain (Kimi) and is
+    removed on a switch to a text brain (DeepSeek). The caller resets the
+    conversation afterwards (reset-on-switch keeps every conversation
+    single-model, so no history mixes DeepSeek and Kimi formats).
+    """
+    agent.llm = build_chat_llm(model_key, offline=offline)
+    vision_capable = (not offline) and bool(
+        _CHAT_MODELS.get(model_key, {}).get("vision")
+    )
+    _set_doc_read_registered(agent.tools, vision_capable)
+
+
+def _set_doc_read_registered(tools: ToolRegistry, enabled: bool) -> None:
+    """Add or remove the image-feeding `doc_read` tool (idempotent)."""
+    present = "doc_read" in tools
+    if enabled and not present:
+        tools.register(DocBaseReadTool())
+    elif not enabled and present:
+        tools.unregister("doc_read")
+
+
+def _build_llm(*, offline: bool) -> LLMProvider:
+    return build_chat_llm(DEFAULT_CHAT_MODEL, offline=offline)
+
+
 def _build_tools(
-    *, offline: bool, enable_knowledge: bool = False, memory: MemoryStore | None = None
+    *,
+    offline: bool,
+    memory: MemoryStore | None = None,
 ) -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(ClockTool())
     registry.register(MemoryTool(store=memory))
+    # The doc base is committed static content with no index to build, so its
+    # search registers in every mode (offline included). The `doc_read` image
+    # tool is brain-gated and added later by `apply_chat_model` (Kimi only).
+    registry.register(DocBaseSearchTool())
     if not offline:
         registry.register(PKU3bAssignmentsTool())
         registry.register(PKU3bAnnouncementsTool())
@@ -204,40 +288,35 @@ def _build_tools(
         registry.register(CalendarReminderTool())
         registry.register(DeanResourcesTool())
         registry.register(DeanUpdatesTool())
-        if enable_knowledge:
-            registry.register(KnowledgeSearchTool(_build_knowledge_base()))
         registry.register(LectureTool())
     return registry
 
 
-def _build_knowledge_base() -> KnowledgeBase:
-    """Build an in-memory KnowledgeBase seeded from the registered Sources.
+def build_vision_llm() -> KimiProvider | None:
+    """Build a Kimi K2.6 vision provider, or None if no key is set.
 
-    Pulls chunks from every `Source` in `build_source_registry()` so the
-    knowledge base retrieves over the same authoritative content the
-    dashboard shows. Embedding goes through the DashScope API (no local
-    model download), so indexing here calls the network — which is why
-    the tool is opt-in (`enable_knowledge`) and online only.
+    Powers the dashboard's standalone `DocBaseReader` (the chat path instead
+    swaps the whole brain to Kimi). Returns None when no Kimi key is present.
     """
-    knowledge_base = KnowledgeBase(embedder=_build_embedder())
-    chunks: list[Chunk] = []
-    for source in build_source_registry().all():
-        chunks.extend(source.fetch())
-    knowledge_base.index(chunks)
-    return knowledge_base
-
-
-def _build_embedder() -> APIEmbedder:
-    """Construct the API embedder from the local key file."""
-    key_path = _find_embedding_key_path()
+    key_path = _find_key_path(_KIMI_KEY_PATHS)
     if key_path is None:
-        expected = " or ".join(str(path) for path in _EMBEDDING_KEY_PATHS)
-        raise FileNotFoundError(
-            f"Embedding API key not found at {expected}. "
-            "RAG knowledge search needs it; omit enable_knowledge to run without RAG."
-        )
+        return None
     api_key = key_path.read_text(encoding="utf-8").strip()
-    return APIEmbedder(api_key=api_key)
+    if not api_key:
+        return None
+    return KimiProvider(api_key=api_key, model="kimi-k2.6")
+
+
+def build_doc_reader() -> DocBaseReader | None:
+    """Build the dashboard's standalone doc reader, or None without a Kimi key.
+
+    Encapsulated vision Q&A (render → ask Kimi → text answer) for the 文档库
+    dialog's 让 Captain 阅读 button, decoupled from the chat brain so it works
+    whichever brain the chat is on. Injected into the dashboard like the other
+    GUI services (`memory_learner`); the GUI never constructs it directly.
+    """
+    vision = build_vision_llm()
+    return None if vision is None else DocBaseReader(vision)
 
 
 _IDENTITY_MEMORY_FIELDS = {
@@ -294,10 +373,6 @@ def _find_key_path(paths: tuple[Path, ...]) -> Path | None:
         if path.exists():
             return path
     return None
-
-
-def _find_embedding_key_path() -> Path | None:
-    return _find_key_path(_EMBEDDING_KEY_PATHS)
 
 
 def _build_workflows(tools: ToolRegistry) -> WorkflowRegistry:

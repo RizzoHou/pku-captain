@@ -7,9 +7,9 @@
 ```
 secrets/
   api_keys/
-    deepseek_key.txt     # 在线必需 —— DeepSeek 对话模型
-    embedding_key.txt    # 仅 RAG 需要 —— 阿里云百炼 DashScope 嵌入模型
-    kimi_key.txt         # 预留 —— Kimi 视觉模型（当前 agent 尚未接入，留作后续视觉功能）
+    deepseek_key.txt     # 在线必需 —— DeepSeek V4 Pro 对话模型（默认 brain）
+    embedding_key.txt    # 已弃用 —— 旧 RAG 嵌入模型（文档库取代后不再使用）
+    kimi_key.txt         # Kimi K2.6 —— 可切换的对话 brain + 文档库视觉阅读
   plib/
     email                # P-Lib（PKUHUB）账号邮箱
     password             # P-Lib 账号密码
@@ -19,14 +19,14 @@ secrets/
 ```
 
 - `api_keys/deepseek_key.txt`（在线必需）—— DeepSeek 对话模型。缺失时 `--online` 会回退到离线模式（`EchoLLMProvider`）。也兼容旧布局 `secrets/deepseek_key.txt`。
-- `api_keys/embedding_key.txt`（仅 RAG 需要）—— 阿里云百炼 DashScope 嵌入模型（`text-embedding-v4`，OpenAI 兼容端点）。**只有显式开启 RAG（`--rag`）时才需要**；RAG 默认关闭，不开则启动不读此文件、也不发任何嵌入请求。获取 Key：<https://help.aliyun.com/zh/model-studio/get-api-key>。
+- `api_keys/kimi_key.txt`（Kimi 必需）—— Moonshot Kimi K2.6（`kimi-k2.6`，`https://api.moonshot.cn/v1`，OpenAI 兼容）。两用：(1) 对话表头可把 brain 从 DeepSeek 切到 **Kimi K2.6**（256k 上下文、原生多模态）；(2) 文档库阅读——在 Kimi brain 上 `doc_read` 把 PDF 页面图片直接喂给模型自己看，仪表盘「让 Captain 阅读」用封装式 `DocBaseReader` 直接问 Kimi。缺此 key：对话只剩 DeepSeek，文档库只能浏览 / 打开 PDF。
+- `api_keys/embedding_key.txt`（已弃用）—— 旧 RAG 的阿里云百炼嵌入模型。文档库（拆分 PDF + 视觉阅读）取代 RAG 后不再读取此文件，保留仅为历史兼容。
 - `plib/{email,password}`（P-Lib 必需）—— `PLibMaterialsTool` 会在每次调用前自动注入为 `PLIB_EMAIL` / `PLIB_PASSWORD` 环境变量，所以 search / quota / download 无需手动 `login`（P-Lib 登录是自愈的）。
 - `treehole/{id,password}`（树洞必需）—— `TreeholeUpdatesTool` / `TreeholeAuthService` 从此目录读取登录凭据；首次在线运行会提示“需要短信验证”，在 GUI 树洞面板完成一次短信验证后会缓存 `secrets/treehole/session.json` 并复用。
 
 ```bash
-python -m src --online          # DeepSeek + 实时工具，RAG 关闭（默认）
-python -m src --online --rag     # 额外开启 RAG knowledge_search（需 embedding key）
-python -m src.cli --rag          # CLI 同样支持 --rag
+python -m src --online          # DeepSeek + 实时工具；表头可切换到 Kimi K2.6（需 kimi key）
+python -m src.cli               # CLI 走真实 DeepSeek
 ```
 
 ## pku3b（必需）
@@ -139,3 +139,19 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 ```
 
 工具暴露的是**只读**检索动作（`sidebar` / `guide` / `rules_list` / `rules_show` / `notice_list` / `notice_show` / `download_list` / `openinfo_list`）；CLI 的文件下载动作（`download get` / `openinfo get`，会把二进制写到磁盘）v1 暂未接入。`--all`（抓全部分页）也未暴露——它会逐页串行抓取、容易撑爆超时和对话上下文，调用方用 `page` 翻页即可（返回里带 `last_page`）。
+
+## 文档库 doc_base（拆分重建——仅在源 PDF 更新时需要）
+
+`doc_base/` 用「拆分后的小 PDF + 视觉读取」取代了原先的向量知识库（培养方案 PDF 里大量图表，嵌入模型读不动）。`doc_base/original/` 放教务部原始大 PDF（培养方案文/理科卷、辅修双专业、选课手册），`scripts/split_doc_base.py` 把它们按大纲 / 印刷目录拆成 `学部/院系/专业.pdf` 这样的层级小文件，并生成 `doc_base/manifest.json` 索引。拆分结果**已提交进仓库**，正常使用无需重跑；只有当 `original/` 换了新一年的 PDF 时才需要重建。
+
+**运行时**（用文档库回答问题，不是重建）：`doc_search` 只读 `manifest.json`，离线也能用，无依赖。读文档需要 (1) `secrets/api_keys/kimi_key.txt`，(2) 运行机上有 `pdftoppm`（`brew install poppler`）。两条路径：**对话里**——把 brain 切到 Kimi K2.6（或问培养方案类问题时自动切换），`doc_read` 把 PDF 页面图片直接喂给 Kimi 自己看图作答（DeepSeek brain 下不注册 `doc_read`）；**仪表盘文档库弹窗**——「让 Captain 阅读」用封装式 `DocBaseReader` 直接问 Kimi 返回文本答案。缺 Kimi key 时两条路径都不可用，文档库仍可浏览 / 打开 PDF。
+
+重建依赖三个系统 CLI（不进 venv，`brew install` 即可）：
+
+```bash
+brew install qpdf poppler ghostscript   # qpdf 拆页 / poppler 取文字+大纲 / ghostscript 重做字体子集
+.venv/bin/python scripts/split_doc_base.py        # 重建全部卷，覆写各卷目录（original/ 不动）
+.venv/bin/python scripts/split_doc_base.py --dry-run   # 只算边界与逐页核对，不写文件
+```
+
+每卷的拆分策略见脚本顶部 `SOURCES`：培养方案两卷走 PDF 大纲（`outline`），选课手册与辅修双专业卷大纲不可靠 / 没有书签，改用脚本里人工核对过的章节表（`EXPLICIT_SECTIONS`）。脚本对每卷做逐页核对（拆出页数 + 丢弃页数 == 原始页数），并用 ghostscript 把每个小 PDF 的字体重新子集化（体积约降到 1/4，文字与图表无可见变化；`gs` 缺失或加 `--no-shrink` 时跳过，结果仍正确只是更大）。源 PDF 换版后需重新核对 `EXPLICIT_SECTIONS` 的页码（辅修双专业卷的页码 = 印刷目录页码 + 12，偏移量逐项验证过）。

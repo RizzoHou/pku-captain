@@ -13,6 +13,7 @@ os.environ.setdefault("QTWEBENGINE_DISABLE_SANDBOX", "1")
 from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QFontMetrics, QKeyEvent, QTextCursor
 from PyQt6.QtWidgets import (
+    QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -51,6 +52,9 @@ class ChatPanel(QWidget):
     stop_requested = pyqtSignal()
     new_chat_requested = pyqtSignal()
     history_requested = pyqtSignal()
+    # Emits the selected chat-model key ("deepseek" / "kimi") when the user
+    # picks a different brain from the header switcher.
+    model_change_requested = pyqtSignal(str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -109,6 +113,15 @@ class ChatPanel(QWidget):
 
         title = QLabel("对话")
         title.setObjectName("SectionTitle")
+        # Chat-model switcher (DeepSeek ⇄ Kimi K2.6). Hidden until MainWindow
+        # populates it with ≥2 available brains via `set_models`. Uses
+        # `activated` (user-only) so programmatic `set_active_model` never
+        # echoes back as a change request.
+        self._model_combo = QComboBox()
+        self._model_combo.setObjectName("ModelSwitcher")
+        self._model_combo.setToolTip("切换对话使用的模型（切换会开启新对话）")
+        self._model_combo.hide()
+        self._model_combo.activated.connect(self._emit_model_change)
         self._thinking_toggle = QPushButton("💭 思考可见")
         self._thinking_toggle.setObjectName("ThinkingToggleButton")
         self._thinking_toggle.setCheckable(True)
@@ -127,6 +140,7 @@ class ChatPanel(QWidget):
         header_row.setSpacing(8)
         header_row.addWidget(title)
         header_row.addStretch()
+        header_row.addWidget(self._model_combo)
         header_row.addWidget(self._thinking_toggle)
         header_row.addWidget(self._new_chat_button)
         header_row.addWidget(self._history_button)
@@ -149,6 +163,38 @@ class ChatPanel(QWidget):
     ) -> None:
         """Update the context-occupation meter (driven by MainWindow)."""
         self._context_meter.set_usage(used, window, estimated=estimated)
+
+    def set_models(
+        self, models: list[tuple[str, str]], current_key: str | None
+    ) -> None:
+        """Populate the model switcher with `(key, label)` brains.
+
+        Shown only when ≥2 brains are available (offline / single-key setups
+        have nothing to switch between). The key rides as item data so
+        `_emit_model_change` can report it.
+        """
+        self._model_combo.blockSignals(True)
+        self._model_combo.clear()
+        for key, label in models:
+            self._model_combo.addItem(label, key)
+        self._model_combo.blockSignals(False)
+        if current_key is not None:
+            self.set_active_model(current_key)
+        self._model_combo.setVisible(len(models) >= 2)
+
+    def set_active_model(self, key: str) -> None:
+        """Select `key` without emitting `model_change_requested`."""
+        index = self._model_combo.findData(key)
+        if index < 0:
+            return
+        self._model_combo.blockSignals(True)
+        self._model_combo.setCurrentIndex(index)
+        self._model_combo.blockSignals(False)
+
+    def _emit_model_change(self, index: int) -> None:
+        key = self._model_combo.itemData(index)
+        if key:
+            self.model_change_requested.emit(str(key))
 
     def set_busy(self, busy: bool) -> None:
         """Disable input while a turn is running.

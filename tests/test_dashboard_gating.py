@@ -32,7 +32,9 @@ def test_offline_dashboard_disables_online_only_buttons(app: QApplication) -> No
     tools = build_agent(offline=True).tools
     panel = DashboardPanel(mode_label="离线模式", tools=tools)
     assert not panel._treehole_button.isEnabled()
-    assert not panel._knowledge_button.isEnabled()
+    # 文档库 reads the committed manifest (no network), so it stays enabled
+    # offline — unlike the old online-only 知识库 button it replaced.
+    assert panel._knowledge_button.isEnabled()
 
 
 def test_offline_dashboard_refuses_network_dialogs(
@@ -51,8 +53,9 @@ def test_offline_dashboard_refuses_network_dialogs(
     panel._show_plib_login_dialog()
     panel._show_announcement_detail("anything")
     panel._show_lecture_search_dialog()
-    panel._show_knowledge_dialog()
-    assert len(shown) == 6
+    # _show_docbase_dialog is deliberately omitted: doc_search registers
+    # offline, so the 文档库 dialog opens rather than bailing at the gate.
+    assert len(shown) == 5
 
 
 def test_require_tool_returns_registered_tool(

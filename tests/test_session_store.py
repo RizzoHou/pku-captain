@@ -12,7 +12,34 @@ from src.core.session_store import (
     drop_incomplete_tool_calls,
     serialize_messages,
 )
-from src.llm.base import ChatMessage, ToolCall
+from src.llm.base import ChatMessage, ToolCall, image_part, text_part
+
+
+def test_serialize_collapses_multimodal_user_content() -> None:
+    # A doc_read page-image user message must not bloat the saved file with
+    # base64; it collapses to its text label (image-grounded follow-ups after a
+    # reload then see text, not pages — the v1 trade-off).
+    parts = [
+        image_part("data:image/png;base64," + "Q" * 5000),
+        image_part("data:image/png;base64," + "Q" * 5000),
+        text_part("以上是《基础数学》第 1–2 页"),
+    ]
+    msg = ChatMessage(role="user", content=parts)  # type: ignore[arg-type]
+    dumped = serialize_messages([msg])
+    assert dumped[0]["content"] == "以上是《基础数学》第 1–2 页"
+    # round-trips to a plain string message (no base64 anywhere)
+    blob = str(dumped)
+    assert "base64" not in blob
+    restored = deserialize_messages(dumped)
+    assert restored[0].content == "以上是《基础数学》第 1–2 页"
+
+
+def test_serialize_labels_imageonly_content() -> None:
+    msg = ChatMessage(
+        role="user",
+        content=[image_part("data:image/png;base64,x")],  # type: ignore[arg-type]
+    )
+    assert serialize_messages([msg])[0]["content"] == "[文档页面图片 ×1]"
 
 
 def _sample_messages() -> list[ChatMessage]:

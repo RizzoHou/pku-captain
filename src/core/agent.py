@@ -15,7 +15,13 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..llm.base import ChatMessage, LLMProvider, estimate_tokens
+from ..llm.base import (
+    ChatMessage,
+    LLMProvider,
+    estimate_tokens,
+    image_part,
+    text_part,
+)
 from ..tools.base import ToolRegistry
 from ..workflows.base import WorkflowRegistry
 from .conversation import Conversation
@@ -133,6 +139,13 @@ class Agent:
                 yield AgentEvent(kind="final", payload={"text": response.text})
                 return
 
+            # Page images a vision tool (doc_read) produced this iteration. They
+            # are injected as one multimodal user message *after* every tool
+            # result is recorded, so the assistant(tool_calls) → tool(results)
+            # → user(images) order stays valid and a vision-capable brain (Kimi)
+            # reads the pages on the next iteration.
+            pending_images: list[str] = []
+            pending_notes: list[str] = []
             for index, call in enumerate(response.tool_calls):
                 if is_cancelled():
                     # Answer every still-pending call so the assistant(tool_calls)
@@ -163,6 +176,21 @@ class Agent:
                         str(result.data) if result.success else f"ERROR: {result.error}"
                     ),
                 )
+                if result.images:
+                    pending_images.extend(result.images)
+                    note = ""
+                    if isinstance(result.data, dict):
+                        note = str(result.data.get("note") or result.data.get("title") or "")
+                    if note:
+                        pending_notes.append(note)
+
+            if pending_images:
+                label = "；".join(pending_notes) or "文档页面"
+                parts = [image_part(uri) for uri in pending_images]
+                parts.append(
+                    text_part(f"以上是{label}的页面图片，请据此回答用户的问题。")
+                )
+                self.conversation.add_user_parts(parts)
 
         text = (
             f"工具调用已达到上限（{self.max_tool_iterations} 轮）。"
