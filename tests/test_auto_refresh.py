@@ -66,7 +66,7 @@ def test_detect_assignment_add_and_deadline_change() -> None:
     ]
 
 
-def test_detect_added_announcements_and_lectures() -> None:
+def test_detect_added_announcements() -> None:
     announcement_changes = detect_dashboard_changes(
         "pku3b_announcements",
         {"announcements": [{"id": "old", "course": "C", "title": "旧通知"}]},
@@ -77,17 +77,8 @@ def test_detect_added_announcements_and_lectures() -> None:
             ]
         },
     )
-    lecture_changes = detect_dashboard_changes(
-        "lecture",
-        [{"title": "旧讲座", "time": "2026-06-01"}],
-        [
-            {"title": "旧讲座", "time": "2026-06-01"},
-            {"title": "新讲座", "time": "2026-06-02"},
-        ],
-    )
 
     assert [(c.source, c.title) for c in announcement_changes] == [("课程通知", "新通知")]
-    assert [(c.source, c.title) for c in lecture_changes] == [("讲座推荐", "新讲座")]
 
 
 def test_digest_uses_llm_and_falls_back_on_error() -> None:

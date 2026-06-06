@@ -1,6 +1,6 @@
 # PKU Captain
 
-面向北大学生的桌面 AI 助手。统一信息总站（课表、DDL、课程通知、讲座、天气）+ 对话式智能助手。OOP / 程序设计实践课程作业，三人团队作品。
+面向北大学生的桌面 AI 助手。统一信息总站（课表、DDL、课程通知）+ 对话式智能助手。OOP / 程序设计实践课程作业，三人团队作品。
 
 ## 文档
 
@@ -14,7 +14,7 @@
 
 ```bash
 .venv/bin/python -m src          # 离线 GUI：EchoLLMProvider + 离线工具子集
-.venv/bin/python -m src --online # 在线 GUI：DeepSeek + pku3b / 天气 / 讲座等实时工具
+.venv/bin/python -m src --online # 在线 GUI：DeepSeek + pku3b 等实时工具
 ```
 
 在线模式需要 `secrets/deepseek_key.txt` 和 fork 版 `pku3b`。缺少 DeepSeek key 时 GUI 会自动回退离线模式；缺少 `pku3b` 时 DDL / 通知相关卡片会显示错误状态。

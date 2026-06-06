@@ -52,7 +52,6 @@ from .formatters import (
     parse_datetime,
     split_dean_items,
     upcoming_assignments,
-    upcoming_lectures,
 )
 from .tool_call_worker import run_async
 
@@ -198,7 +197,6 @@ class DashboardPanel(QWidget):
             "dean_updates": DeanUpdatesCard(),
             "plib_materials": PLibMaterialsCard(),
             "pku3b_announcements": AnnouncementsCard(),
-            "lecture": LecturesCard(),
         }
         treehole_card = self._cards["treehole_updates"]
         if isinstance(treehole_card, TreeholeMessagesCard):
@@ -224,13 +222,6 @@ class DashboardPanel(QWidget):
             announcements_card.refresh_requested.connect(
                 self._partial_refresh_emitter("pku3b_announcements")
             )
-        lecture_card = self._cards["lecture"]
-        if isinstance(lecture_card, LecturesCard):
-            lecture_card.detail_requested.connect(self._show_lecture_detail)
-            lecture_card.search_requested.connect(self._show_lecture_search_dialog)
-            lecture_card.refresh_requested.connect(
-                self._partial_refresh_emitter("lecture")
-            )
         assignment_card = self._cards["pku3b_assignments"]
         if isinstance(assignment_card, AssignmentTodoCard):
             assignment_card.add_to_calendar_requested.connect(self._show_calendar_dialog)
@@ -244,7 +235,6 @@ class DashboardPanel(QWidget):
         grid.addWidget(self._cards["dean_updates"], 2, 0)
         grid.addWidget(self._cards["pku3b_announcements"], 2, 1)
         grid.addWidget(self._cards["plib_materials"], 3, 0)
-        grid.addWidget(self._cards["lecture"], 3, 1)
 
         scroll = QScrollArea()
         scroll.setObjectName("DashboardScroll")
@@ -327,11 +317,6 @@ class DashboardPanel(QWidget):
         if isinstance(card, AnnouncementsCard):
             return card.history_items()
         return []
-
-    def set_lectures(self, data: list[object]) -> None:
-        card = self._cards.get("lecture")
-        if isinstance(card, LecturesCard):
-            card.set_lectures(data)
 
     def set_treehole_updates(self, data: dict[str, object]) -> None:
         """Merge a poll's updates into the unread inbox and re-render the card.
@@ -505,16 +490,6 @@ class DashboardPanel(QWidget):
         if tool is None:
             return
         AnnouncementDetailDialog(tool, announcement, self).exec()
-
-    def _show_lecture_detail(self, lecture: dict[str, object]) -> None:
-        dialog = LectureDetailDialog(lecture, self)
-        dialog.exec()
-
-    def _show_lecture_search_dialog(self) -> None:
-        tool = self._require_tool("lecture", "讲座筛选")
-        if tool is None:
-            return
-        LectureSearchDialog(tool, self).exec()
 
     def _show_calendar_dialog(self) -> None:
         tool = self._require_tool("calendar_reminder", "加入日历提醒")
@@ -1058,131 +1033,6 @@ class PLibMaterialsCard(QFrame):
         else:
             self.set_body("已接入 P-Lib 搜索与下载", "data")
             self._quota_label.setText(f"今日剩余下载次数：{remaining}")
-
-
-class LecturesCard(QFrame):
-    """Dashboard card for campus lectures."""
-
-    detail_requested = pyqtSignal(dict)
-    search_requested = pyqtSignal()
-    refresh_requested = pyqtSignal()
-    _COLLAPSED_LIMIT = 4
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.setObjectName("DashboardCard")
-        self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        self.setMinimumHeight(220)
-        self._lectures: list[dict[str, object]] = []
-        self._expanded = False
-
-        title_label = QLabel("讲座推荐")
-        title_label.setObjectName("CardTitle")
-        self._summary_label = QLabel("近期校园讲座")
-        self._summary_label.setObjectName("CardBody")
-        self._summary_label.setWordWrap(True)
-
-        self._list_host = QWidget()
-        self._list_layout = QVBoxLayout(self._list_host)
-        self._list_layout.setContentsMargins(0, 0, 0, 0)
-        self._list_layout.setSpacing(7)
-
-        self._toggle_button = QPushButton("展开全部")
-        self._toggle_button.setObjectName("InlineToggleButton")
-        self._toggle_button.clicked.connect(self._toggle_expanded)
-        search_button = QPushButton("筛选")
-        search_button.setObjectName("InlineToggleButton")
-        search_button.clicked.connect(self.search_requested)
-        refresh_button = QPushButton("刷新")
-        refresh_button.setObjectName("InlineToggleButton")
-        refresh_button.clicked.connect(self.refresh_requested)
-
-        actions = QHBoxLayout()
-        actions.setContentsMargins(0, 0, 0, 0)
-        actions.setSpacing(12)
-        actions.addWidget(self._toggle_button, 0, Qt.AlignmentFlag.AlignLeft)
-        actions.addWidget(search_button, 0, Qt.AlignmentFlag.AlignLeft)
-        actions.addWidget(refresh_button, 0, Qt.AlignmentFlag.AlignLeft)
-        actions.addStretch()
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(8)
-        layout.addWidget(title_label)
-        layout.addWidget(self._summary_label)
-        layout.addWidget(self._list_host)
-        layout.addLayout(actions)
-        layout.addStretch()
-        self.set_body("加载中...", "loading")
-
-    def set_body(self, text: str, state: str = "data") -> None:
-        self._lectures = []
-        self._expanded = False
-        self._summary_label.setText(text)
-        colors = {
-            "loading": "#667085",
-            "data": "#475467",
-            "error": "#b42318",
-        }
-        self._summary_label.setStyleSheet(f"color: {colors.get(state, colors['data'])};")
-        self._clear_items()
-        self._toggle_button.hide()
-
-    def set_lectures(self, data: list[object]) -> None:
-        # Recommend only today-or-future lectures, sorted earliest-first. Done
-        # here (not at the call site) so both the live-fetch and the cold-start
-        # cache-seed paths — which both route through this setter — get filtered.
-        self._lectures = upcoming_lectures(data)
-        self._summary_label.setText(f"近期 {len(self._lectures)} 场讲座")
-        self._summary_label.setStyleSheet("")
-        self._expanded = False
-        self._render()
-
-    def _render(self) -> None:
-        self._clear_items()
-        if not self._lectures:
-            empty = QLabel("近期暂无讲座")
-            empty.setObjectName("CardBody")
-            empty.setWordWrap(True)
-            self._list_layout.addWidget(empty)
-            self._toggle_button.hide()
-            return
-        visible = (
-            self._lectures
-            if self._expanded
-            else self._lectures[: self._COLLAPSED_LIMIT]
-        )
-        for lecture in visible:
-            self._list_layout.addWidget(self._lecture_row(lecture))
-        self._toggle_button.setVisible(len(self._lectures) > self._COLLAPSED_LIMIT)
-        hidden = len(self._lectures) - len(visible)
-        self._toggle_button.setText("收起" if self._expanded else f"展开全部（还有 {hidden} 场）")
-        self._list_layout.addStretch()
-
-    def _lecture_row(self, lecture: dict[str, object]) -> QPushButton:
-        time_text = _lecture_time_text(lecture.get("time"))
-        title = str(lecture.get("title") or "未命名讲座")
-        location = str(lecture.get("location") or "地点待定")
-        button = QPushButton(f"{time_text} · {location}\n{title}")
-        button.setObjectName("ListRowButton")
-        button.setToolTip("点击查看讲座详情")
-        button.clicked.connect(
-            lambda _checked=False, item=dict(lecture): self.detail_requested.emit(item)
-        )
-        return button
-
-    def _toggle_expanded(self) -> None:
-        self._expanded = not self._expanded
-        self._render()
-
-    def _clear_items(self) -> None:
-        while self._list_layout.count():
-            item = self._list_layout.takeAt(0)
-            widget = item.widget()
-            if widget is not None:
-                widget.setParent(None)
-                widget.deleteLater()
 
 
 class AssignmentTodoCard(QFrame):
@@ -2864,174 +2714,6 @@ class DeanDetailDialog(QDialog):
             _open_external_url(self._url)
 
 
-class LectureDetailDialog(QDialog):
-    """Display one lecture and optionally open its source link."""
-
-    def __init__(self, lecture: dict[str, object], parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("讲座详情")
-        self.resize(640, 420)
-        self._link = str(lecture.get("link") or "")
-
-        title = QLabel(str(lecture.get("title") or "未命名讲座"))
-        title.setObjectName("DialogTitle")
-        subtitle = QLabel(_lecture_time_text(lecture.get("time")))
-        subtitle.setObjectName("DialogSubtitle")
-        subtitle.setWordWrap(True)
-
-        body = QLabel(_lecture_detail_text(lecture))
-        body.setObjectName("DialogBody")
-        body.setWordWrap(True)
-        body.setTextInteractionFlags(
-            body.textInteractionFlags() | Qt.TextInteractionFlag.TextSelectableByMouse
-        )
-
-        open_button = QPushButton("打开链接")
-        open_button.setObjectName("SecondaryButton")
-        open_button.setEnabled(bool(self._link))
-        open_button.clicked.connect(self._open_link)
-        close_button = QPushButton("关闭")
-        close_button.setObjectName("PrimaryButton")
-        close_button.clicked.connect(self.accept)
-
-        actions = QHBoxLayout()
-        actions.setContentsMargins(0, 0, 0, 0)
-        actions.addWidget(open_button, 0, Qt.AlignmentFlag.AlignLeft)
-        actions.addStretch()
-        actions.addWidget(close_button, 0, Qt.AlignmentFlag.AlignRight)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
-        layout.addWidget(title)
-        layout.addWidget(subtitle)
-        layout.addWidget(body, 1)
-        layout.addLayout(actions)
-
-    def _open_link(self) -> None:
-        if self._link:
-            _open_external_url(self._link)
-
-
-class LectureSearchDialog(QDialog):
-    """Filter lectures through the existing LectureTool."""
-
-    def __init__(self, tool: Tool, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("讲座筛选")
-        self.resize(760, 620)
-        self._tool = tool
-        self._lectures: list[dict[str, object]] = []
-
-        title = QLabel("讲座筛选")
-        title.setObjectName("DialogTitle")
-        subtitle = QLabel("按关键词和日期范围筛选仓库内讲座数据。")
-        subtitle.setObjectName("DialogSubtitle")
-
-        self._keyword_input = QLineEdit()
-        self._keyword_input.setPlaceholderText("关键词：标题、主讲人或地点")
-        self._start_input = QLineEdit()
-        self._start_input.setPlaceholderText("开始日期 YYYY-MM-DD")
-        self._end_input = QLineEdit()
-        self._end_input.setPlaceholderText("结束日期 YYYY-MM-DD")
-        self._limit_combo = QComboBox()
-        self._limit_combo.addItems(["5", "10", "20"])
-        search_button = QPushButton("筛选")
-        search_button.setObjectName("PrimaryButton")
-        search_button.clicked.connect(self._search)
-
-        filters = QGridLayout()
-        filters.setContentsMargins(0, 0, 0, 0)
-        filters.setHorizontalSpacing(10)
-        filters.setVerticalSpacing(8)
-        filters.addWidget(self._keyword_input, 0, 0, 1, 4)
-        filters.addWidget(self._start_input, 1, 0)
-        filters.addWidget(self._end_input, 1, 1)
-        filters.addWidget(self._limit_combo, 1, 2)
-        filters.addWidget(search_button, 1, 3)
-        filters.setColumnStretch(0, 1)
-        filters.setColumnStretch(1, 1)
-
-        self._status_label = QLabel("点击筛选查看结果")
-        self._status_label.setObjectName("CardBody")
-        self._status_label.setWordWrap(True)
-        self._result_list = QListWidget()
-        self._result_list.setObjectName("PLibResultList")
-        self._result_list.itemDoubleClicked.connect(lambda _item: self._open_selected())
-
-        detail_button = QPushButton("查看详情")
-        detail_button.setObjectName("SecondaryButton")
-        detail_button.clicked.connect(self._open_selected)
-        close_button = QPushButton("关闭")
-        close_button.setObjectName("InlineToggleButton")
-        close_button.clicked.connect(self.accept)
-        actions = QHBoxLayout()
-        actions.setContentsMargins(0, 0, 0, 0)
-        actions.addWidget(detail_button)
-        actions.addStretch()
-        actions.addWidget(close_button)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
-        layout.addWidget(title)
-        layout.addWidget(subtitle)
-        layout.addLayout(filters)
-        layout.addWidget(self._status_label)
-        layout.addWidget(self._result_list, 1)
-        layout.addLayout(actions)
-        self._search()
-
-    def _search(self) -> None:
-        args: dict[str, object] = {"limit": int(self._limit_combo.currentText())}
-        keyword = self._keyword_input.text().strip()
-        if keyword:
-            args["keyword"] = keyword
-        start = self._start_input.text().strip()
-        if start:
-            args["start_date"] = start
-        end = self._end_input.text().strip()
-        if end:
-            args["end_date"] = end
-        result = self._tool.invoke(args)
-        if not result.success:
-            self._status_label.setText(str(result.error or "筛选失败"))
-            self._status_label.setStyleSheet("color: #b42318;")
-            return
-        data = result.data if isinstance(result.data, list) else []
-        self._lectures = [item for item in data if isinstance(item, dict)]
-        self._render_results()
-
-    def _render_results(self) -> None:
-        self._result_list.clear()
-        self._status_label.setStyleSheet("")
-        self._status_label.setText(f"找到 {len(self._lectures)} 场讲座")
-        if not self._lectures:
-            item = QListWidgetItem("暂无匹配讲座")
-            item.setFlags(Qt.ItemFlag.NoItemFlags)
-            self._result_list.addItem(item)
-            return
-        for lecture in self._lectures:
-            item = QListWidgetItem(
-                "{time} · {location}\n{title}".format(
-                    time=_lecture_time_text(lecture.get("time")),
-                    location=lecture.get("location") or "地点待定",
-                    title=lecture.get("title") or "未命名讲座",
-                )
-            )
-            item.setData(Qt.ItemDataRole.UserRole, lecture)
-            self._result_list.addItem(item)
-        self._result_list.setCurrentRow(0)
-
-    def _open_selected(self) -> None:
-        item = self._result_list.currentItem()
-        if item is None:
-            return
-        data = item.data(Qt.ItemDataRole.UserRole)
-        if isinstance(data, dict):
-            LectureDetailDialog(data, self).exec()
-
-
 class CalendarReminderDialog(QDialog):
     """Selectively push upcoming DDLs into macOS Calendar via CalendarReminderTool.
 
@@ -3659,28 +3341,6 @@ def _announcement_detail_text(announcement: dict[str, object]) -> str:
         parts.append("")
         parts.append(body)
     return "\n".join(parts)
-
-
-def _lecture_time_text(value: object) -> str:
-    raw = str(value or "").strip()
-    if not raw:
-        return "时间待定"
-    try:
-        return datetime.fromisoformat(raw).strftime("%m-%d %H:%M")
-    except ValueError:
-        return raw
-
-
-def _lecture_detail_text(lecture: dict[str, object]) -> str:
-    fields = [
-        ("时间", _lecture_time_text(lecture.get("time"))),
-        ("地点", lecture.get("location") or "地点待定"),
-        ("主讲人", lecture.get("speaker") or "主讲人待定"),
-        ("链接", lecture.get("link") or ""),
-    ]
-    return "\n".join(f"{label}：{value}" for label, value in fields if value)
-
-
 
 
 def _material_id(material: dict[str, object]) -> int | None:

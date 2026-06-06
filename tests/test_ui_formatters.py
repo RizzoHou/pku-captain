@@ -6,7 +6,6 @@ from src.tools.pku3b_coursetable import _parse_course_table
 from src.ui.formatters import (
     split_dean_items,
     upcoming_assignments,
-    upcoming_lectures,
 )
 
 _DEAN_NOW = datetime(2026, 6, 5, 12, 0).astimezone()
@@ -96,32 +95,6 @@ def test_upcoming_assignments_prioritizes_future_deadlines() -> None:
         "future later",
         "no deadline",
     ]
-
-
-def test_upcoming_lectures_keeps_today_and_future_sorted() -> None:
-    today = datetime.now().astimezone()
-    yesterday = (today - timedelta(days=1)).replace(microsecond=0).isoformat()
-    earlier_today = today.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-    soon = (today + timedelta(days=2)).replace(microsecond=0).isoformat()
-    later = (today + timedelta(days=5)).replace(microsecond=0).isoformat()
-
-    result = upcoming_lectures(
-        [
-            {"title": "past", "time": yesterday},
-            {"title": "later", "time": later},
-            {"title": "today", "time": earlier_today},
-            {"title": "no time", "time": ""},
-            {"title": "soon", "time": soon},
-            "not a dict",
-        ]
-    )
-
-    assert [item["title"] for item in result] == ["today", "soon", "later"]
-
-
-def test_upcoming_lectures_handles_non_list() -> None:
-    assert upcoming_lectures(None) == []
-    assert upcoming_lectures("nope") == []
 
 
 def test_parse_course_table_merges_contiguous_slots() -> None:

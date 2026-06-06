@@ -5,7 +5,6 @@ from .dean_resources import DeanResourcesTool
 from .dean_updates import DeanUpdatesTool
 from .doc_base import DocBaseReader, DocBaseReadTool, DocBaseSearchTool
 from .knowledge_search import KnowledgeSearchTool
-from .lecture import LectureTool
 from .memory import MemoryTool
 from .pku3b_announcements import PKU3bAnnouncementsTool
 from .pku3b_assignments import PKU3bAssignmentsTool
@@ -22,7 +21,6 @@ __all__ = [
     "DocBaseReader",
     "DocBaseSearchTool",
     "KnowledgeSearchTool",
-    "LectureTool",
     "MemoryTool",
     "PLibMaterialsTool",
     "PKU3bAnnouncementsTool",

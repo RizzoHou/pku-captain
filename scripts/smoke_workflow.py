@@ -3,7 +3,7 @@
 Builds the real online agent via `build_agent(offline=False)` — so the
 WorkflowTool adapters are registered exactly as the GUI sees them — and
 asks for a morning briefing. Passes iff the model emits a `tool_call` for
-the `morning_briefing` workflow tool (not just the underlying pku3b/lecture
+the `morning_briefing` workflow tool (not just the underlying pku3b
 tools). This is the assertion the offline unit tests cannot make, because
 they verify registration but not the model's live tool choice.
 

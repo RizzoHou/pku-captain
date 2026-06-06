@@ -3,7 +3,7 @@
 A no-network, no-argument tool that returns the current local time. Useful
 as a smoke-test target for the agent loop and as a minimal example of the
 Tool / ToolRegistry pattern. Real tools (PKU3bAssignmentsTool,
-LectureTool, ...) follow the same shape with real backends.
+PKU3bAnnouncementsTool, ...) follow the same shape with real backends.
 """
 
 from __future__ import annotations

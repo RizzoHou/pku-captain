@@ -158,8 +158,6 @@ def _format_tool_result(name: str, body: Any) -> str:
         return _format_treehole_updates(body)
     if name == "treehole" and isinstance(body, dict):
         return _format_treehole(body)
-    if name == "lecture" and isinstance(body, list):
-        return _format_lectures(body)
     return _to_json(body)
 
 
@@ -298,22 +296,6 @@ def _format_course_table(data: dict[str, Any]) -> str:
                     slot=slot,
                     title=item.get("title", "未命名课程"),
                 )
-            )
-    return "\n".join(lines)
-
-
-def _format_lectures(items: list[Any]) -> str:
-    if not items:
-        return "近期暂无讲座。"
-    lines = [f"返回 {len(items)} 场讲座，展示前 5 场："]
-    for item in items[:5]:
-        if isinstance(item, dict):
-            lines.append(
-                "- {time} {title}（{location}）".format(
-                    time=item.get("time", ""),
-                    title=item.get("title", "未命名讲座"),
-                    location=item.get("location", "地点待定"),
-                ).strip()
             )
     return "\n".join(lines)
 

@@ -1,35 +1,31 @@
 """MorningBriefingWorkflow — compose tools into a daily morning briefing.
 
-Aggregates today's assignment deadlines, recent course announcements, and
-upcoming campus lectures into one human-readable briefing. Part of core
-feature #4 (multi-step workflows); extends the single-tool `HelloWorkflow`
-shape into multi-tool orchestration.
+Aggregates today's assignment deadlines and recent course announcements into
+one human-readable briefing. Part of core feature #4 (multi-step workflows);
+extends the single-tool `HelloWorkflow` shape into multi-tool orchestration.
 
 Graceful degradation is a hard requirement: each section is independent.
-A tool that is not registered (e.g. `pku3b_*` / `lecture` in offline mode)
-or whose `invoke()` fails is noted in the briefing and skipped — the
-workflow reports `success=False` only when no data source is reachable at
-all.
+A tool that is not registered (e.g. `pku3b_*` in offline mode) or whose
+`invoke()` fails is noted in the briefing and skipped — the workflow reports
+`success=False` only when no data source is reachable at all.
 """
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Any, ClassVar
 
 from ..tools.base import ToolResult
 from .base import Workflow, WorkflowResult
 
-_LECTURE_WINDOW_DAYS = 7
 _MAX_ANNOUNCEMENTS = 5
-_MAX_LECTURES = 5
 
 
 class MorningBriefingWorkflow(Workflow):
     name: ClassVar[str] = "morning_briefing"
     description: ClassVar[str] = (
-        "Compose a morning briefing: today's assignment deadlines, recent "
-        "course announcements, and upcoming campus lectures."
+        "Compose a morning briefing: today's assignment deadlines and recent "
+        "course announcements."
     )
 
     def run(self, args: dict[str, Any] | None = None) -> WorkflowResult:
@@ -37,12 +33,11 @@ class MorningBriefingWorkflow(Workflow):
 
         details: dict[str, Any] = {}
         sections: list[str] = []
-        # Count the three real data sources (clock is only the date source).
+        # Count the real data sources (clock is only the date source).
         reachable = 0
 
         reachable += self._assignments_section(today, details, sections)
         reachable += self._announcements_section(details, sections)
-        reachable += self._lectures_section(today, details, sections)
 
         summary = f"早安！今天是 {today.isoformat()}。\n\n" + "\n\n".join(sections)
 
@@ -119,41 +114,6 @@ class MorningBriefingWorkflow(Workflow):
             sections.append(f"【课程公告】最近 {len(items)} 条\n{lines}")
         else:
             sections.append("【课程公告】暂无公告")
-        return 1
-
-    def _lectures_section(
-        self, today: date, details: dict[str, Any], sections: list[str]
-    ) -> int:
-        result = self._invoke(
-            "lecture",
-            {
-                "start_date": today.isoformat(),
-                "end_date": (today + timedelta(days=_LECTURE_WINDOW_DAYS)).isoformat(),
-                "limit": _MAX_LECTURES,
-            },
-        )
-        if result is None:
-            sections.append("【近期讲座】当前不可用（offline 模式未注册 lecture 工具）")
-            return 0
-        if not result.success:
-            sections.append(f"【近期讲座】获取失败：{result.error}")
-            return 0
-        details["lecture"] = result.data
-        items = result.data if isinstance(result.data, list) else []
-        if items:
-            lines = "\n".join(
-                "  - {time} {title}（{location}）".format(
-                    time=lec.get("time", ""),
-                    title=lec.get("title", ""),
-                    location=lec.get("location", "地点待定"),
-                )
-                for lec in items
-            )
-            sections.append(
-                f"【近期讲座】未来 {_LECTURE_WINDOW_DAYS} 天共 {len(items)} 场\n{lines}"
-            )
-        else:
-            sections.append(f"【近期讲座】未来 {_LECTURE_WINDOW_DAYS} 天暂无讲座")
         return 1
 
     # -- helpers -------------------------------------------------------

@@ -104,8 +104,8 @@ def test_parallel_tool_calls_share_one_preceding_bubble(app: QApplication) -> No
         [
             AgentEvent(kind="assistant_delta", payload={"text": "Checking."}),
             AgentEvent(kind="llm_response", payload={"text": "Checking."}),
-            _call("lecture"),
-            _ok("lecture", {"items": []}),
+            _call("memory"),
+            _ok("memory", {"items": []}),
             _call("clock"),
             _ok("clock", {"now": "noon"}),
             AgentEvent(kind="assistant_delta", payload={"text": "Done."}),

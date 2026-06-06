@@ -66,7 +66,6 @@ def test_all_dialogs_construct_with_injected_tool(
     dashboard.PLibSearchDialog(tool)
     dashboard.PLibLoginDialog(tool)
     dashboard.AnnouncementDetailDialog(tool, "id-1")
-    dashboard.LectureSearchDialog(tool)
     dashboard.CalendarReminderDialog(tool, [])
     dashboard.MemoryDialog(tool)
     dashboard.DocBaseDialog(tool, None)

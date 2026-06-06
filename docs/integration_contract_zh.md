@@ -139,7 +139,7 @@ self.thread.start()
 
 GUI lane 与后端 lane 的接缝：后端保证 `Tool` / `Source` 的 `invoke` / `fetch` 是线程安全的（不共享可变状态），GUI 可以放心在 worker 里调用。
 
-**仪表盘的弹窗也遵守 §1 的工具获取规则**：树洞 / P-Lib / 公告 / 讲座 / 记忆 / 知识库等模态弹窗**不**自行构造 `Tool` 子类，而是从 `DashboardPanel` 注入的同一个 `ToolRegistry` 里按 `name` 取（`tools.find(name)` / `name in tools`）。在线专属入口以“工具是否注册”为唯一的在线判据：离线（`build_agent(offline=True)`）时这些工具不在 registry 中，对应按钮禁用、弹窗入口直接拒绝，所以 GUI 永远不会在离线模式触达网络 / 子进程工具。**唯一例外**是 `TreeholeAuthService`（登录 / 短信验证，不是 `Tool`），它由 `treehole_updates` 是否注册间接 gate。弹窗里任何阻塞调用（P-Lib 搜索 / 下载、公告详情子进程、知识库嵌入 API、树洞登录）都通过 `src/ui/tool_call_worker.py` 的 `run_async(fn, on_done, on_error)` 丢到 `QThreadPool`，回调在 GUI 线程触发——模态 `exec()` 期间事件循环仍在转，所以异步结果照常送达，窗口不冻结。
+**仪表盘的弹窗也遵守 §1 的工具获取规则**：树洞 / P-Lib / 公告 / 记忆 / 知识库等模态弹窗**不**自行构造 `Tool` 子类，而是从 `DashboardPanel` 注入的同一个 `ToolRegistry` 里按 `name` 取（`tools.find(name)` / `name in tools`）。在线专属入口以“工具是否注册”为唯一的在线判据：离线（`build_agent(offline=True)`）时这些工具不在 registry 中，对应按钮禁用、弹窗入口直接拒绝，所以 GUI 永远不会在离线模式触达网络 / 子进程工具。**唯一例外**是 `TreeholeAuthService`（登录 / 短信验证，不是 `Tool`），它由 `treehole_updates` 是否注册间接 gate。弹窗里任何阻塞调用（P-Lib 搜索 / 下载、公告详情子进程、知识库嵌入 API、树洞登录）都通过 `src/ui/tool_call_worker.py` 的 `run_async(fn, on_done, on_error)` 丢到 `QThreadPool`，回调在 GUI 线程触发——模态 `exec()` 期间事件循环仍在转，所以异步结果照常送达，窗口不冻结。
 
 **窗口布局（2 栏）**：主窗口当前为 `dashboard | chat`（PR #4 起）。工具调用过程不再有独立的右侧面板，而是内联渲染在对话流中（`ChatPanel.add_tool_call` / `update_tool_result` + `InlineToolCall`），复用 `tool_trace_panel.py` 的 `_format_tool_result` / `_to_json` 格式化器。`ToolTracePanel` 类已不再挂载，保留备查。
 

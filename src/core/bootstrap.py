@@ -28,7 +28,6 @@ from ..tools import (
     DocBaseReader,
     DocBaseReadTool,
     DocBaseSearchTool,
-    LectureTool,
     MemoryTool,
     PKU3bAnnouncementsTool,
     PKU3bAssignmentsTool,
@@ -288,7 +287,6 @@ def _build_tools(
         registry.register(CalendarReminderTool())
         registry.register(DeanResourcesTool())
         registry.register(DeanUpdatesTool())
-        registry.register(LectureTool())
     return registry
 
 
