@@ -609,6 +609,11 @@ def apply_app_style(app: QApplication) -> None:
             line-height: 1.35;
         }}
 
+        QWebEngineView#MessageText {{
+            border: none;
+            background: transparent;
+        }}
+
         QFrame#InlineToolCall {{
             border: 1px solid #eadbd5;
             border-left: 4px solid {PKU_RED};

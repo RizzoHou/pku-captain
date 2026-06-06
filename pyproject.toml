@@ -14,6 +14,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Optional: renders LaTeX in chat bubbles via QWebEngine + MathJax. The chat
+# panel degrades to plain rich-text when PyQt6-WebEngine is not installed, so
+# this stays out of the hard dependency set.
+math = [
+    "PyQt6-WebEngine>=6.6",
+]
 dev = [
     "pytest>=8.0",
     "ruff>=0.4",

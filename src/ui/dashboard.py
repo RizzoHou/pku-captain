@@ -12,8 +12,10 @@ from PyQt6.QtCore import Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices, QMouseEvent
 from PyQt6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
     QDialog,
+    QDialogButtonBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -25,6 +27,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QSpinBox,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -57,6 +60,7 @@ if TYPE_CHECKING:
 
 
 TREEHOLE_WEB_URL = "https://treehole.pku.edu.cn/ch/web/"
+PKU3B_WEB_URL = "https://course.pku.edu.cn/"
 
 
 class ClickableFrame(QFrame):
@@ -94,6 +98,7 @@ class DashboardPanel(QWidget):
     morning_briefing_requested = pyqtSignal()
     refresh_requested = pyqtSignal()
     partial_refresh_requested = pyqtSignal(list)
+    auto_refresh_settings_requested = pyqtSignal()
     # Emitted after the treehole dialog closes so the window can reconfigure the
     # auto-sync timer (notification enable/disable/interval may have changed).
     treehole_settings_changed = pyqtSignal()
@@ -144,6 +149,9 @@ class DashboardPanel(QWidget):
         self._refresh_button = QPushButton("刷新")
         self._refresh_button.setObjectName("SecondaryButton")
         self._refresh_button.clicked.connect(self.refresh_requested)
+        self._auto_refresh_button = QPushButton("自动刷新")
+        self._auto_refresh_button.setObjectName("SecondaryButton")
+        self._auto_refresh_button.clicked.connect(self.auto_refresh_settings_requested)
         self._briefing_button = QPushButton("今日简报")
         self._briefing_button.setObjectName("PrimaryButton")
         self._briefing_button.clicked.connect(self.morning_briefing_requested)
@@ -164,10 +172,13 @@ class DashboardPanel(QWidget):
         header.addWidget(self._updated_label, 2, 0)
         header.addWidget(self._otp_input, 0, 1, 2, 1, Qt.AlignmentFlag.AlignRight)
         header.addWidget(self._refresh_button, 0, 2, 2, 1, Qt.AlignmentFlag.AlignRight)
-        header.addWidget(self._briefing_button, 0, 3, 2, 1, Qt.AlignmentFlag.AlignRight)
-        header.addWidget(self._treehole_button, 0, 4, 2, 1, Qt.AlignmentFlag.AlignRight)
-        header.addWidget(self._memory_button, 0, 5, 2, 1, Qt.AlignmentFlag.AlignRight)
-        header.addWidget(self._knowledge_button, 0, 6, 2, 1, Qt.AlignmentFlag.AlignRight)
+        header.addWidget(
+            self._auto_refresh_button, 0, 3, 2, 1, Qt.AlignmentFlag.AlignRight
+        )
+        header.addWidget(self._briefing_button, 0, 4, 2, 1, Qt.AlignmentFlag.AlignRight)
+        header.addWidget(self._treehole_button, 0, 5, 2, 1, Qt.AlignmentFlag.AlignRight)
+        header.addWidget(self._memory_button, 0, 6, 2, 1, Qt.AlignmentFlag.AlignRight)
+        header.addWidget(self._knowledge_button, 0, 7, 2, 1, Qt.AlignmentFlag.AlignRight)
 
         self._cards = {
             "schedule": ScheduleCard(),
@@ -295,6 +306,17 @@ class DashboardPanel(QWidget):
         if isinstance(card, AnnouncementsCard):
             card.set_announcements(data)
 
+    def set_announcement_history(self, items: list[dict[str, object]]) -> None:
+        card = self._cards.get("pku3b_announcements")
+        if isinstance(card, AnnouncementsCard):
+            card.set_history(items)
+
+    def announcement_history(self) -> list[dict[str, object]]:
+        card = self._cards.get("pku3b_announcements")
+        if isinstance(card, AnnouncementsCard):
+            return card.history_items()
+        return []
+
     def set_lectures(self, data: list[object]) -> None:
         card = self._cards.get("lecture")
         if isinstance(card, LecturesCard):
@@ -404,6 +426,9 @@ class DashboardPanel(QWidget):
         self._refresh_button.setEnabled(not busy)
         self._refresh_button.setText("刷新中" if busy else "刷新")
 
+    def set_auto_refresh_text(self, text: str) -> None:
+        self._auto_refresh_button.setText(text)
+
     def set_updated_text(self, text: str) -> None:
         self._updated_label.setText(text)
 
@@ -464,11 +489,11 @@ class DashboardPanel(QWidget):
         dialog.auth_changed.connect(self._partial_refresh_emitter("plib_materials"))
         dialog.exec()
 
-    def _show_announcement_detail(self, announcement_id: str) -> None:
+    def _show_announcement_detail(self, announcement: dict[str, object] | str) -> None:
         tool = self._require_tool("pku3b_announcements", "课程通知详情")
         if tool is None:
             return
-        AnnouncementDetailDialog(tool, announcement_id, self).exec()
+        AnnouncementDetailDialog(tool, announcement, self).exec()
 
     def _show_lecture_detail(self, lecture: dict[str, object]) -> None:
         dialog = LectureDetailDialog(lecture, self)
@@ -542,7 +567,7 @@ class DashboardCard(QFrame):
 class AnnouncementsCard(QFrame):
     """Dashboard card for course announcements."""
 
-    detail_requested = pyqtSignal(str)
+    detail_requested = pyqtSignal(dict)
     refresh_requested = pyqtSignal()
     _COLLAPSED_LIMIT = 4
 
@@ -553,6 +578,7 @@ class AnnouncementsCard(QFrame):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.setMinimumHeight(220)
         self._items: list[dict[str, object]] = []
+        self._history_items: list[dict[str, object]] = []
         self._expanded = False
 
         title_label = QLabel("课程通知")
@@ -572,11 +598,15 @@ class AnnouncementsCard(QFrame):
         self._refresh_button = QPushButton("刷新")
         self._refresh_button.setObjectName("InlineToggleButton")
         self._refresh_button.clicked.connect(self.refresh_requested)
+        self._history_button = QPushButton("历史通知")
+        self._history_button.setObjectName("InlineToggleButton")
+        self._history_button.clicked.connect(self._show_history)
         actions = QHBoxLayout()
         actions.setContentsMargins(0, 0, 0, 0)
         actions.setSpacing(12)
         actions.addWidget(self._toggle_button, 0, Qt.AlignmentFlag.AlignLeft)
         actions.addWidget(self._refresh_button, 0, Qt.AlignmentFlag.AlignLeft)
+        actions.addWidget(self._history_button, 0, Qt.AlignmentFlag.AlignLeft)
         actions.addStretch()
 
         layout = QVBoxLayout(self)
@@ -609,6 +639,7 @@ class AnnouncementsCard(QFrame):
             if isinstance(items, list)
             else []
         )
+        self._merge_history(self._items)
         total = data.get("total_reported")
         if total:
             self._summary_label.setText(f"最近 {len(self._items)} 条 / 总计 {total} 条")
@@ -640,16 +671,32 @@ class AnnouncementsCard(QFrame):
         title = str(item.get("title") or "未命名通知")
         button = QPushButton(f"{course}\n{title}")
         button.setObjectName("ListRowButton")
-        button.setToolTip("点击查看完整公告")
-        announcement_id = str(item.get("id") or "")
+        button.setToolTip("点击查看课程通知详情")
         button.clicked.connect(
-            lambda _checked=False, value=announcement_id: self.detail_requested.emit(value)
+            lambda _checked=False, payload=dict(item): self.detail_requested.emit(payload)
         )
         return button
 
     def _toggle_expanded(self) -> None:
         self._expanded = not self._expanded
         self._render()
+
+    def _show_history(self) -> None:
+        dialog = AnnouncementsHistoryDialog(self._history_items, self)
+        dialog.detail_requested.connect(self.detail_requested.emit)
+        dialog.exec()
+
+    def set_history(self, items: list[dict[str, object]]) -> None:
+        self._history_items = [dict(item) for item in items if isinstance(item, dict)]
+
+    def history_items(self) -> list[dict[str, object]]:
+        return [dict(item) for item in self._history_items]
+
+    def _merge_history(self, items: list[dict[str, object]]) -> None:
+        merged = {_announcement_identity(item): dict(item) for item in self._history_items}
+        for item in items:
+            merged[_announcement_identity(item)] = dict(item)
+        self._history_items = list(merged.values())
 
     def _clear_items(self) -> None:
         while self._list_layout.count():
@@ -658,6 +705,79 @@ class AnnouncementsCard(QFrame):
             if widget is not None:
                 widget.setParent(None)
                 widget.deleteLater()
+
+
+class AnnouncementsHistoryDialog(QDialog):
+    """Historical course notices accumulated from dashboard refreshes."""
+
+    detail_requested = pyqtSignal(dict)
+
+    def __init__(
+        self,
+        items: list[dict[str, object]],
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("历史通知")
+        self.resize(700, 560)
+
+        title = QLabel("历史通知")
+        title.setObjectName("DialogTitle")
+        subtitle = QLabel(f"已记录 {len(items)} 条课程通知")
+        subtitle.setObjectName("DialogSubtitle")
+        subtitle.setWordWrap(True)
+
+        host = QWidget()
+        list_layout = QVBoxLayout(host)
+        list_layout.setContentsMargins(0, 0, 0, 0)
+        list_layout.setSpacing(8)
+        if items:
+            for item in items:
+                list_layout.addWidget(self._announcement_history_row(item))
+        else:
+            empty = QLabel("暂无历史通知")
+            empty.setObjectName("CardBody")
+            empty.setWordWrap(True)
+            list_layout.addWidget(empty)
+        list_layout.addStretch()
+
+        scroll = QScrollArea()
+        scroll.setObjectName("TreeholeMessageScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(host)
+
+        close_button = QPushButton("关闭")
+        close_button.setObjectName("PrimaryButton")
+        close_button.clicked.connect(self.accept)
+        actions = QHBoxLayout()
+        actions.setContentsMargins(0, 0, 0, 0)
+        actions.addStretch()
+        actions.addWidget(close_button, 0, Qt.AlignmentFlag.AlignRight)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+        layout.addWidget(title)
+        layout.addWidget(subtitle)
+        layout.addWidget(scroll, 1)
+        layout.addLayout(actions)
+
+    def _announcement_history_row(self, item: dict[str, object]) -> QPushButton:
+        course = str(item.get("course") or "未知课程")
+        title = str(item.get("title") or "未命名通知")
+        button = QPushButton(f"{course}\n{title}")
+        button.setObjectName("ListRowButton")
+        button.setToolTip("点击查看课程通知详情")
+        button.clicked.connect(
+            lambda _checked=False, payload=dict(item): self.detail_requested.emit(payload)
+        )
+        return button
+
+
+def _announcement_identity(item: dict[str, object]) -> str:
+    raw = "|".join(str(item.get(key) or "") for key in ("id", "course", "title"))
+    return raw.casefold()
 
 
 class TreeholeMessagesCard(QFrame):
@@ -1383,9 +1503,11 @@ class CourseBlockWidget(QFrame):
 
 
 def _todo_row(item: dict[str, object]) -> QFrame:
-    row = QFrame()
+    row = ClickableFrame()
     row.setObjectName("TodoRow")
     row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    row.setToolTip("点击在 Safari 打开作业提交页")
+    row.clicked.connect(lambda: _open_external_url(_pku3b_item_url(item)))
 
     marker = QLabel("")
     marker.setObjectName("TodoMarker")
@@ -1417,6 +1539,15 @@ def _todo_row(item: dict[str, object]) -> QFrame:
     layout.addLayout(text_layout, 1)
     layout.addWidget(deadline, 0)
     return row
+
+
+def _pku3b_item_url(item: dict[str, object], *, prefer_submit: bool = True) -> str:
+    keys = ("submit_url", "url") if prefer_submit else ("url", "submit_url")
+    for key in keys:
+        value = item.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return PKU3B_WEB_URL
 
 
 def _treehole_row(item: dict[str, object]) -> QFrame:
@@ -2288,17 +2419,29 @@ class AnnouncementDetailDialog(QDialog):
     """Fetch and display one course announcement."""
 
     def __init__(
-        self, tool: Tool, announcement_id: str, parent: QWidget | None = None
+        self,
+        tool: Tool,
+        announcement: dict[str, object] | str,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("课程通知详情")
         self.resize(720, 620)
         self._tool = tool
         self._pending: object = None
+        self._item = dict(announcement) if isinstance(announcement, dict) else {}
+        announcement_id = (
+            str(self._item.get("id") or "").strip()
+            if self._item
+            else str(announcement).strip()
+        )
+        self._link = str(self._item.get("url") or "").strip()
 
         title = QLabel("课程通知详情")
         title.setObjectName("DialogTitle")
-        self._subtitle = QLabel(f"公告 ID：{announcement_id}")
+        self._subtitle = QLabel(
+            f"公告 ID：{announcement_id}" if announcement_id else "公告 ID：未知"
+        )
         self._subtitle.setObjectName("DialogSubtitle")
         self._subtitle.setWordWrap(True)
 
@@ -2324,6 +2467,15 @@ class AnnouncementDetailDialog(QDialog):
         close_button = QPushButton("关闭")
         close_button.setObjectName("PrimaryButton")
         close_button.clicked.connect(self.accept)
+        actions = QHBoxLayout()
+        actions.setContentsMargins(0, 0, 0, 0)
+        actions.addStretch()
+        if self._link:
+            open_button = QPushButton("在 Safari 打开教学网")
+            open_button.setObjectName("SecondaryButton")
+            open_button.clicked.connect(self._open_external_page)
+            actions.addWidget(open_button, 0, Qt.AlignmentFlag.AlignRight)
+        actions.addWidget(close_button, 0, Qt.AlignmentFlag.AlignRight)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -2331,8 +2483,28 @@ class AnnouncementDetailDialog(QDialog):
         layout.addWidget(title)
         layout.addWidget(self._subtitle)
         layout.addWidget(scroll, 1)
-        layout.addWidget(close_button, 0, Qt.AlignmentFlag.AlignRight)
-        self._load_detail(announcement_id)
+        layout.addLayout(actions)
+        if announcement_id:
+            self._load_detail(announcement_id)
+        else:
+            self._show_item_fallback()
+
+    def _open_external_page(self) -> None:
+        if self._link:
+            _open_external_url(self._link)
+
+    def _show_item_fallback(self) -> None:
+        """Render the list item's own fields when no announcement id is known."""
+        if not self._item:
+            self._body_label.setText("无法加载公告详情：缺少公告 ID。")
+            return
+        self._subtitle.setText(
+            "{course} · {posted}".format(
+                course=self._item.get("course") or "未知课程",
+                posted=self._item.get("posted_at") or "发布时间未知",
+            )
+        )
+        self._body_label.setText(_announcement_detail_text(self._item))
 
     def _load_detail(self, announcement_id: str) -> None:
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
@@ -2366,6 +2538,106 @@ class AnnouncementDetailDialog(QDialog):
             )
         )
         self._body_label.setText(_announcement_detail_text(announcement))
+
+
+class AutoRefreshSettingsDialog(QDialog):
+    """Configure in-app dashboard auto-refresh and macOS notifications."""
+
+    _INTERVAL_PRESETS = [
+        ("每 1 分钟", 60),
+        ("每 5 分钟", 300),
+        ("每 10 分钟", 600),
+        ("每 30 分钟", 1800),
+        ("每 1 小时", 3600),
+        ("自定义", 0),
+    ]
+
+    def __init__(
+        self,
+        *,
+        enabled: bool,
+        interval_seconds: int,
+        notify_enabled: bool,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("自动刷新")
+        self.resize(520, 320)
+
+        title = QLabel("自动刷新")
+        title.setObjectName("DialogTitle")
+        subtitle = QLabel("后台定时刷新 dashboard，发现新变化后由 Captain 整理并推送通知。")
+        subtitle.setObjectName("DialogSubtitle")
+        subtitle.setWordWrap(True)
+
+        self._enabled_checkbox = QCheckBox("启用自动刷新")
+        self._enabled_checkbox.setChecked(enabled)
+        self._notify_checkbox = QCheckBox("发现变化时发送 macOS 通知")
+        self._notify_checkbox.setChecked(notify_enabled)
+
+        interval_label = QLabel("刷新间隔")
+        interval_label.setObjectName("TreeholeAuthStep")
+        self._interval_combo = QComboBox()
+        for text, value in self._INTERVAL_PRESETS:
+            self._interval_combo.addItem(text, value)
+        self._custom_minutes = QSpinBox()
+        self._custom_minutes.setRange(1, 24 * 60)
+        self._custom_minutes.setSuffix(" 分钟")
+        self._custom_minutes.setValue(max(1, int(interval_seconds / 60)))
+
+        preset_index = self._interval_combo.findData(interval_seconds)
+        if preset_index < 0:
+            preset_index = self._interval_combo.findData(0)
+        self._interval_combo.setCurrentIndex(preset_index)
+        self._interval_combo.currentIndexChanged.connect(self._sync_custom_enabled)
+        self._sync_custom_enabled()
+
+        note = QLabel(
+            "第一次自动刷新只建立对比基线，不会推送历史消息。之后只有真实新增或变化的信息才会通知。"
+        )
+        note.setObjectName("CardBody")
+        note.setWordWrap(True)
+
+        controls = QHBoxLayout()
+        controls.setContentsMargins(0, 0, 0, 0)
+        controls.setSpacing(10)
+        controls.addWidget(interval_label)
+        controls.addWidget(self._interval_combo, 1)
+        controls.addWidget(self._custom_minutes)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+        layout.addWidget(title)
+        layout.addWidget(subtitle)
+        layout.addWidget(self._enabled_checkbox)
+        layout.addWidget(self._notify_checkbox)
+        layout.addLayout(controls)
+        layout.addWidget(note)
+        layout.addStretch()
+        layout.addWidget(buttons)
+
+    def settings(self) -> dict[str, object]:
+        return {
+            "enabled": self._enabled_checkbox.isChecked(),
+            "interval_seconds": self.interval_seconds(),
+            "notify_enabled": self._notify_checkbox.isChecked(),
+        }
+
+    def interval_seconds(self) -> int:
+        value = int(self._interval_combo.currentData())
+        if value > 0:
+            return value
+        return int(self._custom_minutes.value()) * 60
+
+    def _sync_custom_enabled(self) -> None:
+        self._custom_minutes.setEnabled(int(self._interval_combo.currentData()) == 0)
 
 
 class DeanMessagesDialog(QDialog):

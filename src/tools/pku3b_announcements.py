@@ -31,6 +31,7 @@ from .pku3b import (
     Pku3bTimeoutError,
     run_pku3b,
 )
+from .pku3b_links import enrich_announcements
 
 # A list entry begins with a bracketed 1-based index at the start of a line,
 # e.g. "[ 12] ". Announcement titles may themselves contain newlines, so an
@@ -56,6 +57,7 @@ class Announcement:
     course: str
     title: str
     id: str
+    url: str | None = None
 
 
 @dataclass
@@ -167,10 +169,11 @@ class PKU3bAnnouncementsTool(Tool):
             announcements = announcements[: int(limit)]
 
         total = _LIST_HEADER.search(run.stdout)
+        records = enrich_announcements([asdict(a) for a in announcements])
         return ToolResult(
             success=True,
             data={
-                "announcements": [asdict(a) for a in announcements],
+                "announcements": records,
                 "count": len(announcements),
                 "total_reported": int(total.group(1)) if total else None,
             },
