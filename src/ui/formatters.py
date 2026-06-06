@@ -36,6 +36,44 @@ def upcoming_assignments(items: object) -> list[dict[str, Any]]:
 _DEAN_WINDOW_DAYS: dict[str, int] = {"notice": 31}
 _DEAN_DEFAULT_WINDOW_DAYS = 183
 
+# Course-notice 最近 window — same 1-month span as a dean notice.
+_ANNOUNCEMENT_WINDOW_DAYS = 31
+
+
+def recent_announcements(
+    items: object, now: datetime | None = None
+) -> list[dict[str, Any]]:
+    """Return course announcements posted within the last month, newest-first.
+
+    Drives the 课程通知 card's 最近 section. ``announcement list`` carries no
+    dates, so :class:`~src.tools.pku3b_announcements.PKU3bAnnouncementsTool`
+    attaches a ``posted_date`` (ISO ``YYYY-MM-DD``) when invoked with
+    ``resolve_dates``. Items whose date is missing or unparseable — pku3b
+    reports none for roughly half of announcements — are excluded from 最近
+    (they remain in 历史通知, which shows every item). Filtering at render time
+    re-evaluates the window against today's clock on every repaint, matching
+    the dashboard-cache invariant.
+    """
+    if not isinstance(items, list):
+        return []
+    current = now or datetime.now().astimezone()
+    # posted_date is day-granular, so window by date — otherwise an item posted
+    # exactly a month ago would flicker in/out depending on the repaint's
+    # time of day.
+    cutoff = (current - timedelta(days=_ANNOUNCEMENT_WINDOW_DAYS)).date()
+
+    dated: list[tuple[datetime, dict[str, Any]]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        when = parse_datetime(item.get("posted_date"))
+        if when is None or when.date() < cutoff:
+            continue
+        dated.append((when, item))
+
+    dated.sort(key=lambda pair: pair[0], reverse=True)
+    return [item for _, item in dated]
+
 
 def split_dean_items(
     entries: object, now: datetime | None = None

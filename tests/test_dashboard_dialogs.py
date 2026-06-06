@@ -391,6 +391,14 @@ def test_announcement_detail_dialog_opens_external_page(
 
 
 def test_announcements_history_shows_full_returned_list(app: QApplication) -> None:
+    # 历史通知 keeps every announcement; 最近 windows to those posted within the
+    # last month (by posted_date). Give 3 items recent dates and the rest an
+    # old one, so the card shows 3 recent but history still holds all 65.
+    from datetime import date, timedelta
+
+    today = date.today()
+    recent_iso = (today - timedelta(days=3)).isoformat()
+    old_iso = (today - timedelta(days=200)).isoformat()
     card = dashboard.AnnouncementsCard()
     announcements = [
         {
@@ -398,6 +406,7 @@ def test_announcements_history_shows_full_returned_list(app: QApplication) -> No
             "course": "中国近现代史纲要",
             "title": f"通知 {index}",
             "url": f"https://course.pku.edu.cn/notice/a{index}",
+            "posted_date": recent_iso if index < 3 else old_iso,
         }
         for index in range(65)
     ]
@@ -408,7 +417,7 @@ def test_announcements_history_shows_full_returned_list(app: QApplication) -> No
     dialog = dashboard.AnnouncementsHistoryDialog(card.history_items())
     buttons = dialog.findChildren(dashboard.QPushButton, "ListRowButton")
 
-    assert card._summary_label.text() == "最近 65 条 / 总计 65 条"
+    assert card._summary_label.text() == "最近 3 条 / 总计 65 条"
     assert len(card.history_items()) == 65
     assert len(buttons) == 65
 

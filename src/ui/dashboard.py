@@ -50,6 +50,7 @@ from ..tools.treehole_updates import (
 from .formatters import (
     group_dean_by_category,
     parse_datetime,
+    recent_announcements,
     split_dean_items,
     upcoming_assignments,
 )
@@ -619,17 +620,19 @@ class AnnouncementsCard(QFrame):
 
     def set_announcements(self, data: dict[str, object]) -> None:
         items = data.get("announcements")
-        self._items = (
+        all_items = (
             [item for item in items if isinstance(item, dict)]
             if isinstance(items, list)
             else []
         )
-        self._merge_history(self._items)
-        total = data.get("total_reported")
-        if total:
-            self._summary_label.setText(f"最近 {len(self._items)} 条 / 总计 {total} 条")
-        else:
-            self._summary_label.setText(f"最近 {len(self._items)} 条课程通知")
+        # 历史通知 keeps every announcement ever seen; the main card's 最近
+        # section shows only those posted within the last month (by posted_date,
+        # attached when the tool runs with resolve_dates). Merge the full list
+        # into history first, then narrow what 最近 renders.
+        self._merge_history(all_items)
+        self._items = recent_announcements(all_items)
+        total = data.get("total_reported") or len(all_items)
+        self._summary_label.setText(f"最近 {len(self._items)} 条 / 总计 {total} 条")
         self._summary_label.setStyleSheet("")
         self._expanded = False
         self._render()
@@ -637,7 +640,8 @@ class AnnouncementsCard(QFrame):
     def _render(self) -> None:
         self._clear_items()
         if not self._items:
-            empty = QLabel("暂无课程通知")
+            text = "近一个月暂无课程通知" if self._history_items else "暂无课程通知"
+            empty = QLabel(text)
             empty.setObjectName("CardBody")
             empty.setWordWrap(True)
             self._list_layout.addWidget(empty)
