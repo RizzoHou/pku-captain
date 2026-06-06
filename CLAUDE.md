@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Scaffolded but not yet running end-to-end. `src/` is the Python package (importable as `src`; modules use intra-package relative imports so the name `src` rarely shows up in code) and houses the four OOP hierarchies in subpackages — `tools/`, `workflows/`, `llm/`, `rag/`, plus `core/` (agent kernel — `Agent` + `Conversation`) and `ui/` (PyQt6 desktop window). `pyproject.toml` declares the build (hatchling, `packages = ["src"]`) + runtime deps (PyQt6, requests, numpy — embeddings go through a hosted API, so there is no torch/transformers stack) + dev deps (pytest, ruff, mypy). The pytest suite is small but real — `tests/test_ui_formatters.py` covers the assignment-sort and course-table-merge helpers; run with `pytest tests/`. The deeper end-to-end probe is `scripts/smoke_deepseek.py` — it drives a real DeepSeek round-trip with ClockTool through the agent loop and is mandatory after any change to `core/`, `llm/`, or the tool-call wire format. `src/cli.py` (`python -m src.cli`, flags `--offline` / `--show-reasoning`) is the matching interactive REPL on the same loop — it remains the contract-conformance probe for the GUI seam because it goes through `build_agent()`. One reference offline subclass per hierarchy exists (`ClockTool`, `EchoLLMProvider`, `StaticSource`, `HelloWorkflow`) so the loop and tests can run without API keys or live PKU endpoints. The headliner LLM (`DeepSeekProvider`) is already in — captain absorbed it because the model config + thinking-mode wire format have project-wide implications. The Week-1 Tool work shipped together for the same reason: `src/tools/pku3b.py` (shared subprocess wrapper — locates the binary, runs with timeout, ANSI-strips stderr; **not** itself a Tool subclass) and `PKU3bAssignmentsTool` (calls `pku3b assignment list --format json` and `json.loads` the structured output directly — no regex, no rendered-text parsing; surfaces course id, assignment id, raw + ISO-8601 deadlines, completion flag, descriptions, and attachments with their Blackboard URIs).
 
-The RAG retrieval chain (`src/rag/embedder.py` — `Embedder` ABC + `APIEmbedder`, which embeds via Alibaba DashScope `text-embedding-v4` over its OpenAI-compatible endpoint using `requests` (no `openai` SDK, no local model); `src/rag/knowledge_base.py` `KnowledgeBase` — SQLite chunk store + float32 BLOB vectors + numpy cosine search, and `KnowledgeSearchTool`) — note the `Embedder` hierarchy intentionally ships **only** the online `APIEmbedder` (no offline reference subclass, unlike the four main hierarchies) because RAG is online-only and opt-in; tests use an in-file fake embedder; two `Source` subclasses (`DeanSource`, `CalendarSource`) wired through `build_source_registry()`; `MemoryTool` (persistent preference store under `data/`; the `MemoryStore` backend lives in `src/core/memory.py`. Being replaced by a split-PDF **doc base** (`scripts/split_doc_base.py` → `doc_base/`); see `docs/setup_zh.md`.
+The `src/rag` retrieval chain (`Embedder`/`APIEmbedder` over DashScope `text-embedding-v4`; `KnowledgeBase` — SQLite + numpy cosine; `KnowledgeSearchTool`) is **superseded by the doc base and no longer registered**, kept as an OOP artifact. Two `Source` subclasses (`DeanSource`, `CalendarSource`) wired through `build_source_registry()`; `MemoryTool` (persistent preference store under `data/`; the `MemoryStore` backend lives in `src/core/memory.py`.
 
 **Memory is folded into responses, not only tool-reachable**: bootstrap shares **one** `MemoryStore` instance between `MemoryTool(store=...)` and `Agent(memory=...)`, and each `Agent.turn()` iteration merges the current entries — via `render_memory_context()` — into the *leading* system message of a snapshot copy. It is never appended as a second system turn (DeepSeek expects one) and never written into `Conversation`, so the block refreshes after a mid-turn `set` yet rendered history stays clean. Two invariants when touching this: keep the store **shared** — a second `MemoryStore` on the same path silently no-ops because it loads once at construction and never re-reads — and keep the block out of `Conversation`.
 
@@ -16,7 +16,7 @@ The RAG retrieval chain (`src/rag/embedder.py` — `Embedder` ABC + `APIEmbedder
 
 Network tools register **online only** in `bootstrap._build_tools()` because they touch a subprocess or the network.
 
-`KnowledgeSearchTool` (RAG) is further gated behind `build_agent(enable_knowledge=...)` — **opt-in, default off** — because every `encode()` is a DashScope embedding-API call; off means no embedding requests at startup. The CLI and GUI both expose it via a `--rag` flag.
+The **doc base** replaces RAG (`src/tools/doc_base.py`): `doc_search` — lexical ranked search over `doc_base/manifest.json` (title/breadcrumb only, **not** full text; empty query browses all) — registers in **every** mode (no index/network); `doc_read` renders a doc's PDF via `pdftoppm` and has the **Kimi vision model** (`build_vision_llm()`, 32k) read its tables and answer, returning only distilled text (caps 24 pages, `pages` slices longer docs) — so the dense PDF never enters agent context. `doc_read` registers **online only with a kimi key**. No opt-in flag; `build_agent`/`MainWindow` dropped `enable_knowledge`, `--rag` is gone (**BREAKING: integration contract**). GUI: 文档库 button → browseable `DocBaseDialog` (tree, open PDF, 让 Captain 阅读). See `docs/setup_zh.md`.
 
 `MorningBriefingWorkflow` composes `pku3b_assignments` / `pku3b_announcements` / `lecture` / `clock` into a daily briefing, fetching each via a `ToolRegistry` membership check so an unregistered or failed tool is noted and skipped — `success=False` only when no source is reachable.
 
@@ -24,7 +24,7 @@ Network tools register **online only** in `bootstrap._build_tools()` because the
 
 The PyQt6 GUI main window is wired through three `QThread`s (`AgentWorker`, `DashboardWorker`, `WorkflowWorker`) per integration contract §2, PKU-red theme in `src/ui/styles.py`.
 
-Backend streaming extensions: `LLMProvider.stream_chat()` + `ChatStreamEvent` (default falls back to wrapping `chat()`; `DeepSeekProvider` implements real SSE), the `build_agent(enable_knowledge=...)` RAG gate, and `PKU3bCourseTableTool` (calls `pku3b coursetable --raw`, parses HTML-wrapped course names, supports an OTP code).
+Backend streaming extensions: `LLMProvider.stream_chat()` + `ChatStreamEvent` (default falls back to wrapping `chat()`; `DeepSeekProvider` implements real SSE) and `PKU3bCourseTableTool` (calls `pku3b coursetable --raw`, parses HTML-wrapped course names, supports an OTP code).
 
 `src/tools/pku3b.py` now also falls back to `<repo>/.local/cargo/bin/pku3b` when the binary isn't on PATH, so a project-local cargo install works without env tweaks.
 
@@ -74,8 +74,7 @@ Keep the "one offline reference, real ones for teammates" pattern when adding mo
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 python -m src                  # PyQt6 window — defaults to offline (Echo LLM, offline tool subset)
-python -m src --online         # PyQt6 window — DeepSeek + live tools (RAG off); needs secrets/api_keys/deepseek_key.txt
-python -m src --online --rag    # also enable RAG knowledge_search; needs secrets/api_keys/embedding_key.txt
+python -m src --online         # PyQt6 window — DeepSeek + live tools; needs secrets/api_keys/deepseek_key.txt (doc_read also needs kimi_key.txt)
 python -m src.cli --offline    # interactive REPL (no API key; EchoLLMProvider)
 python -m src.cli              # interactive REPL against the real DeepSeek API
 find src -name '*.py' -print0 | xargs -0 python -m py_compile  # syntax check
@@ -113,9 +112,9 @@ The DeepSeek API key lives in `secrets/api_keys/deepseek_key.txt` (the whole `se
 - `docs/design_reference_zh.md` — design **reference**, not a contract. The team is explicitly not bound to its architecture, class hierarchy, or tech-stack choices. The **only** part treated as binding is the **"核心功能" (core features)** section, which lists the 6 features the product must deliver:
   1. Unified dashboard
   2. Conversational sidebar with visible tool calls
-  3. Tool set (pku3b, lectures, KB search, memory, reminder — weather was listed here but cut 2026-06-04; kept in `design_reference_zh.md` 核心功能 as a struck-through, justified deferral)
+  3. Tool set (pku3b, lectures, doc base find/read, memory, reminder — weather was listed here but cut 2026-06-04; kept in `design_reference_zh.md` 核心功能 as a struck-through, justified deferral)
   4. Multi-step workflows (morning briefing, weekly review, course catchup)
-  5. Auto-refreshing RAG knowledge base over PKU authoritative sources
+  5. Auto-refreshing RAG knowledge base over PKU authoritative sources (now the split-PDF **doc base** + vision read, not embeddings)
   6. Persistent personal-preference memory
 - `docs/schedule_zh.md` — the course schedule, which **is** load-bearing:
   - **2026-06-06** — initial version + screen-recording demo (next hard deadline)
