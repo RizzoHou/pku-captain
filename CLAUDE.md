@@ -84,7 +84,7 @@ pytest tests/                  # unit tests
 python scripts/smoke_deepseek.py  # real DeepSeek round-trip — mandatory after core/llm/wire-format changes
 ```
 
-The GUI defaults to offline so first-time clones don't hit the network. Pass `--online` once `secrets/api_keys/deepseek_key.txt` and the `pku3b` fork are in place. RAG `knowledge_search` is **off by default** even online — add `--rag` (and provide `secrets/api_keys/embedding_key.txt`) to register it. With `--rag` off there are no embedding-API calls at all.
+The GUI defaults to offline so first-time clones don't hit the network; with `--rag` off there are **no embedding-API calls at all**. Chat LaTeX needs the **optional** `math` extra (`pip install -e ".[dev,math]"`, PyQt6-WebEngine); without it bubbles stay QLabel (LaTeX shown as source). **Don't make WebEngine a hard dep** (`chat_panel` gates it on `_WEBENGINE_IMPORTED`).
 
 ### Worktrees (`claude --worktree`)
 
