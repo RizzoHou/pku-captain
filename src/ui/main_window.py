@@ -190,9 +190,10 @@ class MainWindow(QMainWindow):
                 "pku3b_coursetable": {},
                 "pku3b_assignments": {},
                 # Fetch the full announcement list so 历史通知 can show every
-                # item reported by pku3b; AnnouncementsCard still collapses
-                # the main card to the newest few rows.
-                "pku3b_announcements": {},
+                # item reported by pku3b; resolve_dates attaches each item's
+                # posted_date so AnnouncementsCard's 最近 section can window to
+                # the last month (the rest stay in 历史通知).
+                "pku3b_announcements": {"resolve_dates": True},
                 "treehole_updates": {"limit": 5},
                 "dean_updates": {"limit": 5},
                 "plib_materials": {"action": "quota"},

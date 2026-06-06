@@ -4,12 +4,54 @@ from datetime import datetime, timedelta
 
 from src.tools.pku3b_coursetable import _parse_course_table
 from src.ui.formatters import (
+    recent_announcements,
     split_dean_items,
     upcoming_assignments,
     upcoming_lectures,
 )
 
 _DEAN_NOW = datetime(2026, 6, 5, 12, 0).astimezone()
+
+_ANN_NOW = datetime(2026, 6, 6, 12, 0).astimezone()
+
+
+def _ann(aid, *, posted_date=None):
+    item = {"id": aid, "course": "课程", "title": aid}
+    if posted_date is not None:
+        item["posted_date"] = posted_date
+    return item
+
+
+def test_recent_announcements_keeps_only_last_month() -> None:
+    fresh = _ann("a", posted_date="2026-06-03")  # 3 days old → recent
+    edge = _ann("b", posted_date="2026-05-06")  # exactly 31 days → recent
+    stale = _ann("c", posted_date="2026-04-11")  # ~2 months old → excluded
+    recent = recent_announcements([fresh, edge, stale], now=_ANN_NOW)
+    assert [i["id"] for i in recent] == ["a", "b"]
+
+
+def test_recent_announcements_excludes_undated() -> None:
+    # pku3b reports no 发布时间 for ~half of announcements; those have no
+    # posted_date (or an unparseable one) and must not appear in 最近.
+    items = [_ann("dated", posted_date="2026-06-01"), _ann("undated")]
+    items.append(_ann("garbage", posted_date="not-a-date"))
+    recent = recent_announcements(items, now=_ANN_NOW)
+    assert [i["id"] for i in recent] == ["dated"]
+
+
+def test_recent_announcements_sorted_newest_first() -> None:
+    items = [
+        _ann("older", posted_date="2026-05-20"),
+        _ann("newest", posted_date="2026-06-05"),
+        _ann("middle", posted_date="2026-05-28"),
+    ]
+    recent = recent_announcements(items, now=_ANN_NOW)
+    assert [i["id"] for i in recent] == ["newest", "middle", "older"]
+
+
+def test_recent_announcements_handles_non_list() -> None:
+    assert recent_announcements(None) == []
+    assert recent_announcements({"announcements": []}) == []
 
 
 def _dean(key, *, source="notice", date="", first_seen=""):
