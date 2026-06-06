@@ -139,3 +139,17 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 ```
 
 工具暴露的是**只读**检索动作（`sidebar` / `guide` / `rules_list` / `rules_show` / `notice_list` / `notice_show` / `download_list` / `openinfo_list`）；CLI 的文件下载动作（`download get` / `openinfo get`，会把二进制写到磁盘）v1 暂未接入。`--all`（抓全部分页）也未暴露——它会逐页串行抓取、容易撑爆超时和对话上下文，调用方用 `page` 翻页即可（返回里带 `last_page`）。
+
+## 文档库 doc_base（拆分重建——仅在源 PDF 更新时需要）
+
+`doc_base/` 用「拆分后的小 PDF + 视觉读取」取代了原先的向量知识库（培养方案 PDF 里大量图表，嵌入模型读不动）。`doc_base/original/` 放教务部原始大 PDF（培养方案文/理科卷、辅修双专业、选课手册），`scripts/split_doc_base.py` 把它们按大纲 / 印刷目录拆成 `学部/院系/专业.pdf` 这样的层级小文件，并生成 `doc_base/manifest.json` 索引。拆分结果**已提交进仓库**，正常使用无需重跑；只有当 `original/` 换了新一年的 PDF 时才需要重建。
+
+重建依赖三个系统 CLI（不进 venv，`brew install` 即可）：
+
+```bash
+brew install qpdf poppler ghostscript   # qpdf 拆页 / poppler 取文字+大纲 / ghostscript 重做字体子集
+.venv/bin/python scripts/split_doc_base.py        # 重建全部卷，覆写各卷目录（original/ 不动）
+.venv/bin/python scripts/split_doc_base.py --dry-run   # 只算边界与逐页核对，不写文件
+```
+
+每卷的拆分策略见脚本顶部 `SOURCES`：培养方案两卷走 PDF 大纲（`outline`），选课手册与辅修双专业卷大纲不可靠 / 没有书签，改用脚本里人工核对过的章节表（`EXPLICIT_SECTIONS`）。脚本对每卷做逐页核对（拆出页数 + 丢弃页数 == 原始页数），并用 ghostscript 把每个小 PDF 的字体重新子集化（体积约降到 1/4，文字与图表无可见变化；`gs` 缺失或加 `--no-shrink` 时跳过，结果仍正确只是更大）。源 PDF 换版后需重新核对 `EXPLICIT_SECTIONS` 的页码（辅修双专业卷的页码 = 印刷目录页码 + 12，偏移量逐项验证过）。
