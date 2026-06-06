@@ -62,6 +62,7 @@ _DEAN_DETAIL_SOURCES = {"notice", "rules_school", "rules_national"}
 
 if TYPE_CHECKING:
     from ..core import MemoryLearnService
+    from ..tools import DocBaseReader
 
 
 TREEHOLE_WEB_URL = "https://treehole.pku.edu.cn/ch/web/"
@@ -114,6 +115,7 @@ class DashboardPanel(QWidget):
         mode_label: str,
         tools: ToolRegistry | None = None,
         memory_learner: MemoryLearnService | None = None,
+        doc_reader: DocBaseReader | None = None,
         treehole_inbox: TreeholeInboxStore | None = None,
         treehole_history: TreeholeHistoryStore | None = None,
         dean_inbox: DeanInboxStore | None = None,
@@ -122,6 +124,10 @@ class DashboardPanel(QWidget):
         self.setObjectName("DashboardPanel")
         self._tools = tools
         self._memory_learner = memory_learner
+        # Encapsulated vision reader for the 文档库 dialog's 让 Captain 阅读 button
+        # (standalone text answer, decoupled from the chat brain). None offline /
+        # without a Kimi key → the dialog is browse / open-PDF only.
+        self._doc_reader = doc_reader
         # Accumulates unread treehole updates so a poll's result sticks on the
         # card instead of vanishing on the next empty poll. In-memory by default
         # (tests / no-disk); MainWindow injects a persisted store.
@@ -529,10 +535,10 @@ class DashboardPanel(QWidget):
         if search_tool is None:
             QMessageBox.information(self, "文档库", "文档库不可用。")
             return
-        # doc_read is online + Kimi-key gated; pass it when present so the
-        # dialog can offer "让 Captain 阅读", else it is browse / open-PDF only.
-        read_tool = self._online_tool("doc_read")
-        DocBaseDialog(search_tool, read_tool, self).exec()
+        # The standalone reader (encapsulated Kimi vision Q&A) powers
+        # "让 Captain 阅读"; without a Kimi key it is None and the dialog is
+        # browse / open-PDF only.
+        DocBaseDialog(search_tool, self._doc_reader, self).exec()
 
 
 class DashboardCard(QFrame):
@@ -3411,21 +3417,21 @@ class DocBaseDialog(QDialog):
     Replaces the embedding `KnowledgeSearchDialog`. The tree is built from the
     `doc_search` tool's browse payload (volume → 学部/院系 breadcrumb → 文档);
     the filter box re-runs `doc_search`. Double-click or 打开 PDF opens the real
-    PDF in the OS viewer; 让 Captain 阅读 runs `doc_read` (vision LLM) when it is
-    available and shows the distilled answer.
+    PDF in the OS viewer; 让 Captain 阅读 runs the encapsulated `DocBaseReader`
+    (Kimi vision Q&A) when available and shows the distilled answer.
     """
 
     def __init__(
         self,
         search_tool: Tool,
-        read_tool: Tool | None,
+        reader: DocBaseReader | None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("文档库")
         self.resize(900, 720)
         self._search_tool = search_tool
-        self._read_tool = read_tool
+        self._reader = reader
         self._docs: list[dict[str, object]] = []
         self._pending: object = None
 
@@ -3545,8 +3551,8 @@ class DocBaseDialog(QDialog):
     def _sync_buttons(self) -> None:
         doc = self._selected_doc()
         self._open_button.setEnabled(doc is not None)
-        self._read_button.setEnabled(doc is not None and self._read_tool is not None)
-        if self._read_tool is None:
+        self._read_button.setEnabled(doc is not None and self._reader is not None)
+        if self._reader is None:
             self._read_button.setToolTip("需要在线模式 + Kimi 视觉模型")
 
     def _open_pdf(self) -> None:
@@ -3561,7 +3567,7 @@ class DocBaseDialog(QDialog):
 
     def _read_doc(self) -> None:
         doc = self._selected_doc()
-        if doc is None or self._read_tool is None:
+        if doc is None or self._reader is None:
             return
         question, ok = QInputDialog.getText(
             self,
@@ -3570,15 +3576,14 @@ class DocBaseDialog(QDialog):
         )
         if not ok:
             return
-        read_tool = self._read_tool
-        args: dict[str, object] = {"path": doc.get("path")}
-        if question.strip():
-            args["question"] = question.strip()
+        reader = self._reader
+        path = str(doc.get("path") or "")
+        focus = question.strip() or None
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         self._status_label.setStyleSheet("")
         self._status_label.setText("Captain 正在阅读文档...")
         self._pending = run_async(
-            lambda: read_tool.invoke(args),
+            lambda: reader.read(path, question=focus),
             on_done=self._on_read_done,
             on_error=self._on_read_error,
         )

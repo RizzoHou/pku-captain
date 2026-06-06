@@ -11,13 +11,15 @@ an embedding model mangles, so retrieval here is two-stage instead of semantic:
    query against its title / breadcrumb / volume — a pure read of the committed
    manifest, so it works offline with no index to build.
 2. `DocBaseReadTool` (`doc_read`) renders the chosen document's pages to images
-   and has a vision LLM (Kimi) read them and answer a question. Only the model's
-   distilled answer — not the whole document — enters the agent's context, which
-   is what keeps the context cost acceptable.
+   and returns them (via `ToolResult.images`) for the agent to inject into the
+   conversation, so a vision-capable chat brain (Kimi K2.6) reads the pages
+   *itself* — no text middleman. It registers only while the active brain is
+   Kimi (a text brain can't read the injected images).
 
-`doc_search` registers in every mode; `doc_read` is online-only (it shells to
-`pdftoppm` and calls a vision API), and is registered only when a vision
-provider is available.
+`doc_search` registers in every mode. `DocBaseReader` is the encapsulated
+counterpart used by the dashboard's one-off "让 Captain 阅读" dialog: it renders,
+asks the vision model directly, and returns a self-contained text answer — the
+right shape when there is no chat to inject images into.
 """
 
 from __future__ import annotations
@@ -31,8 +33,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
-from ..llm.base import ChatMessage, LLMProvider
-from ..llm.kimi import image_part, text_part
+from ..llm.base import ChatMessage, LLMProvider, image_part, text_part
 from .base import Tool, ToolResult
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -42,10 +43,10 @@ _MANIFEST_NAME = "manifest.json"
 DEFAULT_TOP_K = 10
 MAX_TOP_K = 50
 
-# A vision page costs Kimi a roughly fixed ~1k tokens regardless of DPI, so the
-# render DPI is chosen for legibility, and the page cap is what keeps a read
-# inside the model's window. 24 pages fits the 32k vision model with headroom;
-# longer documents are read in slices via the `pages` argument.
+# A 150-DPI page costs Kimi roughly ~2.5k prompt tokens (verified live), so the
+# page cap is what keeps a read inside the model's window. 24 pages ≈ 60k tokens,
+# comfortable in Kimi K2.6's 256k window; longer documents are read in slices via
+# the `pages` argument.
 READ_DPI = 150
 MAX_READ_PAGES = 24
 
@@ -236,14 +237,65 @@ def _parse_pages(spec: str, total: int) -> list[int]:
     return list(range(lo, hi + 1))
 
 
+class DocReadError(ValueError):
+    """A user-actionable failure while resolving/rendering a doc-base document."""
+
+
+def _render_doc(
+    by_path: dict[str, DocEntry],
+    doc_base_dir: Path,
+    args: dict[str, Any],
+    dpi: int,
+    max_pages: int,
+) -> tuple[DocEntry, list[int], int, bool, list[str]]:
+    """Resolve `args['path']`/`args['pages']` and render the pages to data URIs.
+
+    Shared by `DocBaseReadTool` (agent image injection) and `DocBaseReader`
+    (dashboard standalone Q&A). Raises `DocReadError` with a Chinese message on
+    any user-actionable failure (bad path, missing file, bad page spec, no
+    pdftoppm). Returns `(entry, page_nums, total_pages, truncated, images)`.
+    """
+    rel_path = str(args.get("path") or "").strip()
+    if not rel_path:
+        raise DocReadError("path 不能为空")
+    entry = by_path.get(rel_path)
+    if entry is None:
+        raise DocReadError(f"文档不在文档库中：{rel_path}")
+    pdf_path = entry.abs_path(doc_base_dir)
+    if not pdf_path.exists():
+        raise DocReadError(f"文档文件缺失：{rel_path}")
+
+    total = entry.pages or _pdf_page_count(pdf_path)
+    try:
+        requested = _parse_pages(str(args.get("pages") or ""), total)
+    except ValueError as exc:
+        raise DocReadError(str(exc)) from exc
+    truncated = len(requested) > max_pages
+    page_nums = requested[:max_pages]
+    if not page_nums:
+        raise DocReadError("没有可读取的页面")
+
+    try:
+        images = _render_pages(pdf_path, page_nums, dpi)
+    except FileNotFoundError as exc:
+        raise DocReadError(
+            "未找到 pdftoppm；请安装 poppler（brew install poppler）。"
+        ) from exc
+    except (subprocess.CalledProcessError, OSError) as exc:
+        raise DocReadError(f"渲染 PDF 失败：{exc}") from exc
+    return entry, page_nums, total, truncated, images
+
+
 class DocBaseReadTool(Tool):
     name: ClassVar[str] = "doc_read"
     description: ClassVar[str] = (
-        "Read a document from the doc base and answer a question about it, using "
-        "a vision model that can parse its course tables and flowcharts (which "
-        "plain text extraction garbles). Pass the `path` returned by doc_search. "
-        "Give a `question` to focus the read, and `pages` (e.g. '1-6') to read a "
-        "slice of a long document. Returns the model's answer text."
+        "Read a PKU curriculum document yourself. Renders the document's pages "
+        "to images and adds them to the conversation for you to read directly — "
+        "you are a vision-capable model, so read the course tables and "
+        "flowcharts from the images and answer from them, never guessing credit "
+        "numbers or course lists. Pass the `path` returned by doc_search, and "
+        "`pages` (e.g. '1-6') to read a slice of a long document. After calling "
+        "this, the page images appear as the next message; answer from them."
     )
     parameters_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
@@ -251,13 +303,6 @@ class DocBaseReadTool(Tool):
             "path": {
                 "type": "string",
                 "description": "Document `path` from doc_search (relative to doc_base/).",
-            },
-            "question": {
-                "type": "string",
-                "description": (
-                    "What to read for, e.g. '毕业总学分要求是多少？'. Omit to get a "
-                    "structured summary of the document."
-                ),
             },
             "pages": {
                 "type": "string",
@@ -274,6 +319,53 @@ class DocBaseReadTool(Tool):
 
     def __init__(
         self,
+        doc_base_dir: Path = _DOC_BASE_DIR,
+        dpi: int = READ_DPI,
+        max_pages: int = MAX_READ_PAGES,
+    ) -> None:
+        self._doc_base_dir = doc_base_dir
+        self._dpi = dpi
+        self._max_pages = max_pages
+        self._by_path = {e.rel_path: e for e in load_manifest(doc_base_dir)}
+
+    def invoke(self, args: dict[str, Any]) -> ToolResult:
+        try:
+            entry, page_nums, total, truncated, images = _render_doc(
+                self._by_path, self._doc_base_dir, args, self._dpi, self._max_pages
+            )
+        except DocReadError as exc:
+            return ToolResult(success=False, error=str(exc))
+
+        note = f"《{entry.title}》（{entry.volume}）第 {page_nums[0]}–{page_nums[-1]} 页"
+        if truncated:
+            note += f"（仅渲染前 {len(page_nums)} 页 / 共 {total} 页，用 pages 读取其余）"
+        return ToolResult(
+            success=True,
+            data={
+                "path": entry.rel_path,
+                "title": entry.title,
+                "volume": entry.volume,
+                "pages_read": page_nums,
+                "total_pages": total,
+                "truncated": truncated,
+                "note": note,
+            },
+            images=tuple(images),
+        )
+
+
+class DocBaseReader:
+    """Encapsulated vision Q&A over one doc-base document (returns text).
+
+    The standalone counterpart to the agent's image-injecting `doc_read` tool,
+    used by the dashboard's 让 Captain 阅读 dialog: it renders the pages, asks the
+    vision model (Kimi) directly, and returns a self-contained answer — the
+    right shape for a one-off read with no chat to feed images into. It is a
+    plain service, not a `Tool`, so it never enters the agent registry.
+    """
+
+    def __init__(
+        self,
         vision_llm: LLMProvider,
         doc_base_dir: Path = _DOC_BASE_DIR,
         dpi: int = READ_DPI,
@@ -285,39 +377,21 @@ class DocBaseReadTool(Tool):
         self._max_pages = max_pages
         self._by_path = {e.rel_path: e for e in load_manifest(doc_base_dir)}
 
-    def invoke(self, args: dict[str, Any]) -> ToolResult:
-        rel_path = str(args.get("path") or "").strip()
-        if not rel_path:
-            return ToolResult(success=False, error="path 不能为空")
-        entry = self._by_path.get(rel_path)
-        if entry is None:
-            return ToolResult(success=False, error=f"文档不在文档库中：{rel_path}")
-        pdf_path = entry.abs_path(self._doc_base_dir)
-        if not pdf_path.exists():
-            return ToolResult(success=False, error=f"文档文件缺失：{rel_path}")
-
-        total = entry.pages or _pdf_page_count(pdf_path)
+    def read(
+        self,
+        path: str,
+        question: str | None = None,
+        pages: str | None = None,
+    ) -> ToolResult:
+        args = {"path": path, "pages": pages or ""}
         try:
-            requested = _parse_pages(str(args.get("pages") or ""), total)
-        except ValueError as exc:
-            return ToolResult(success=False, error=str(exc))
-        truncated = len(requested) > self._max_pages
-        page_nums = requested[: self._max_pages]
-        if not page_nums:
-            return ToolResult(success=False, error="没有可读取的页面")
-
-        try:
-            images = _render_pages(pdf_path, page_nums, self._dpi)
-        except FileNotFoundError:
-            return ToolResult(
-                success=False,
-                error="未找到 pdftoppm；请安装 poppler（brew install poppler）。",
+            entry, page_nums, total, truncated, images = _render_doc(
+                self._by_path, self._doc_base_dir, args, self._dpi, self._max_pages
             )
-        except (subprocess.CalledProcessError, OSError) as exc:
-            return ToolResult(success=False, error=f"渲染 PDF 失败：{exc}")
+        except DocReadError as exc:
+            return ToolResult(success=False, error=str(exc))
 
-        question = str(args.get("question") or "").strip()
-        instruction = question or (
+        instruction = (question or "").strip() or (
             "请阅读这份北京大学培养方案文档，提取并用简洁中文结构化其关键信息"
             "（专业、毕业总学分、各类课程学分要求、核心课程等）。"
         )
@@ -332,7 +406,7 @@ class DocBaseReadTool(Tool):
 
         try:
             response = self._vision.chat([message])
-        except Exception as exc:  # surface vision-API failures to the agent
+        except Exception as exc:  # surface vision-API failures to the dialog
             return ToolResult(success=False, error=f"视觉模型读取失败：{exc}")
 
         note = ""
@@ -344,7 +418,7 @@ class DocBaseReadTool(Tool):
         return ToolResult(
             success=True,
             data={
-                "path": rel_path,
+                "path": entry.rel_path,
                 "title": entry.title,
                 "volume": entry.volume,
                 "pages_read": page_nums,

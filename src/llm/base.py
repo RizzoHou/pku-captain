@@ -46,6 +46,20 @@ class ChatMessage:
     reasoning_content: str | None = None
 
 
+def text_part(text: str) -> dict[str, Any]:
+    """A text content part for a multimodal (vision) message."""
+    return {"type": "text", "text": text}
+
+
+def image_part(url: str) -> dict[str, Any]:
+    """An image content part for a multimodal (vision) message.
+
+    `url` is either a remote URL or a `data:image/...;base64,...` URI. This is
+    the OpenAI vision format Kimi (and other multimodal providers) accept.
+    """
+    return {"type": "image_url", "image_url": {"url": url}}
+
+
 @dataclass(frozen=True)
 class TokenUsage:
     """Token accounting for one LLM call, as reported by the provider.
@@ -126,7 +140,7 @@ def estimate_tokens(messages: Iterable[ChatMessage]) -> int:
     """
     total = 0.0
     for m in messages:
-        total += _text_tokens(m.content or "")
+        total += _content_tokens(m.content)
         if m.reasoning_content:
             total += _text_tokens(m.reasoning_content)
         for call in m.tool_calls:
@@ -134,6 +148,26 @@ def estimate_tokens(messages: Iterable[ChatMessage]) -> int:
             total += _text_tokens(json.dumps(call.arguments, ensure_ascii=False))
         total += 4  # role / formatting overhead per message
     return round(total)
+
+
+def _content_tokens(content: Any) -> float:
+    """Token estimate for a message's `content` — a string or a multimodal
+    list of `{type: text|image_url, ...}` parts (doc_read page images). Each
+    image is charged a flat ~1600 tokens (observed ~2.5k for a 150-DPI page,
+    kept conservative so the meter never wildly over-reports)."""
+    if isinstance(content, str):
+        return _text_tokens(content)
+    if isinstance(content, list):
+        total = 0.0
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") == "text":
+                total += _text_tokens(part.get("text") or "")
+            elif part.get("type") == "image_url":
+                total += 1600
+        return total
+    return 0.0
 
 
 def _text_tokens(text: str) -> float:

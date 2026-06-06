@@ -150,8 +150,16 @@ class DeepSeekProvider(LLMProvider):
             reasoning_parts: list[str] = []
             tool_calls: dict[int, dict[str, Any]] = {}
             usage_raw: dict[str, Any] | None = None
-            for raw_line in resp.iter_lines(decode_unicode=True):
-                if not raw_line or not raw_line.startswith("data:"):
+            # Iterate raw BYTES, not `decode_unicode=True`: that decodes each
+            # network chunk independently and corrupts a multi-byte UTF-8 char
+            # split across a chunk boundary (a latent bug that bites once Chinese
+            # reasoning_content streams). A line break never splits a UTF-8
+            # sequence, so decoding each whole line is safe.
+            for raw_bytes in resp.iter_lines():
+                if not raw_bytes:
+                    continue
+                raw_line = raw_bytes.decode("utf-8", errors="replace")
+                if not raw_line.startswith("data:"):
                     continue
                 payload = raw_line.removeprefix("data:").strip()
                 if payload == "[DONE]":

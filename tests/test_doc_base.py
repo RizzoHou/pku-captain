@@ -15,6 +15,7 @@ import pytest
 from src.llm.base import ChatResponse, LLMProvider
 from src.tools import doc_base
 from src.tools.doc_base import (
+    DocBaseReader,
     DocBaseReadTool,
     DocBaseSearchTool,
     _parse_pages,
@@ -149,10 +150,60 @@ def test_parse_pages_invalid() -> None:
         _parse_pages("5-2", 6)
 
 
-# --- read ----------------------------------------------------------------
+# --- read tool (image injection) -----------------------------------------
 
 
-def test_read_builds_multimodal_message(
+def test_read_tool_returns_images_without_a_vision_call(
+    doc_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The tool renders pages and hands them back via ToolResult.images for the
+    # agent to inject; it never calls a vision model itself.
+    monkeypatch.setattr(
+        doc_base,
+        "_render_pages",
+        lambda pdf, pages, dpi: [f"data:image/png;base64,page{p}" for p in pages],
+    )
+    tool = DocBaseReadTool(doc_base_dir=doc_dir)
+    result = tool.invoke({"path": _DOCS[0]["path"], "pages": "1-2"})
+    assert result.success
+    assert result.images == (
+        "data:image/png;base64,page1",
+        "data:image/png;base64,page2",
+    )
+    assert result.data["pages_read"] == [1, 2]
+    assert result.data["truncated"] is False
+    assert "数学" in result.data["note"]
+
+
+def test_read_tool_unknown_path_errors(doc_dir: Path) -> None:
+    tool = DocBaseReadTool(doc_base_dir=doc_dir)
+    result = tool.invoke({"path": "本科培养方案2025-理科卷/不存在.pdf"})
+    assert not result.success
+    assert not result.images
+    assert "文档库" in (result.error or "")
+
+
+def test_read_tool_truncates_long_request(
+    doc_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        doc_base,
+        "_render_pages",
+        lambda pdf, pages, dpi: ["data:image/png;base64,x" for _ in pages],
+    )
+    tool = DocBaseReadTool(doc_base_dir=doc_dir, max_pages=1)
+    result = tool.invoke({"path": _DOCS[0]["path"], "pages": "1-6"})
+    assert result.success
+    assert result.data["truncated"] is True
+    assert len(result.images) == 1
+    assert len(result.data["pages_read"]) == 1
+    assert "仅渲染前" in result.data["note"]
+
+
+# --- reader service (encapsulated Q&A, dashboard) ------------------------
+
+
+def test_reader_builds_multimodal_message_and_answers(
     doc_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
@@ -161,38 +212,19 @@ def test_read_builds_multimodal_message(
         lambda pdf, pages, dpi: [f"data:image/png;base64,page{p}" for p in pages],
     )
     vision = _FakeVision()
-    tool = DocBaseReadTool(vision_llm=vision, doc_base_dir=doc_dir)
-    result = tool.invoke(
-        {"path": _DOCS[0]["path"], "question": "毕业总学分？", "pages": "1-2"}
-    )
+    reader = DocBaseReader(vision, doc_base_dir=doc_dir)
+    result = reader.read(_DOCS[0]["path"], question="毕业总学分？", pages="1-2")
     assert result.success
     assert result.data["answer"] == "毕业总学分：138"
     assert result.data["pages_read"] == [1, 2]
-    assert result.data["truncated"] is False
     # the vision provider got one multimodal user message: 2 images + 1 text
     content = vision.last_messages[0].content
     assert [part["type"] for part in content] == ["image_url", "image_url", "text"]
     assert "毕业总学分？" in content[-1]["text"]
 
 
-def test_read_unknown_path_errors(doc_dir: Path) -> None:
-    tool = DocBaseReadTool(vision_llm=_FakeVision(), doc_base_dir=doc_dir)
-    result = tool.invoke({"path": "本科培养方案2025-理科卷/不存在.pdf"})
+def test_reader_unknown_path_errors(doc_dir: Path) -> None:
+    reader = DocBaseReader(_FakeVision(), doc_base_dir=doc_dir)
+    result = reader.read("本科培养方案2025-理科卷/不存在.pdf")
     assert not result.success
     assert "文档库" in (result.error or "")
-
-
-def test_read_truncates_long_request(
-    doc_dir: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(
-        doc_base,
-        "_render_pages",
-        lambda pdf, pages, dpi: ["data:image/png;base64,x" for _ in pages],
-    )
-    tool = DocBaseReadTool(vision_llm=_FakeVision(), doc_base_dir=doc_dir, max_pages=1)
-    result = tool.invoke({"path": _DOCS[0]["path"], "pages": "1-6"})
-    assert result.success
-    assert result.data["truncated"] is True
-    assert len(result.data["pages_read"]) == 1
-    assert "仅读取了前" in result.data["note"]

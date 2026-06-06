@@ -38,8 +38,38 @@ def _now_iso() -> str:
 
 
 def serialize_messages(messages: Iterable[ChatMessage]) -> list[dict[str, Any]]:
-    """Dump messages to JSON-safe dicts (same shape as the CLI `/save`)."""
-    return [asdict(m) for m in messages]
+    """Dump messages to JSON-safe dicts (same shape as the CLI `/save`).
+
+    A multimodal user message (doc_read page images, `content` is a list of
+    parts) is collapsed to its text label so the saved file stays small — base64
+    page images would bloat it by megabytes. The trade-off: a reopened session
+    shows the label, not the raw pages, so an image-grounded follow-up after a
+    reload sees text rather than the pages (v1 limitation).
+    """
+    out: list[dict[str, Any]] = []
+    for m in messages:
+        d = asdict(m)
+        d["content"] = _content_for_storage(d.get("content"))
+        out.append(d)
+    return out
+
+
+def _content_for_storage(content: Any) -> Any:
+    """Collapse a multimodal `content` list to its text label for persistence."""
+    if not isinstance(content, list):
+        return content
+    texts = [
+        part.get("text", "")
+        for part in content
+        if isinstance(part, dict) and part.get("type") == "text"
+    ]
+    label = " ".join(t for t in texts if t).strip()
+    images = sum(
+        1
+        for part in content
+        if isinstance(part, dict) and part.get("type") == "image_url"
+    )
+    return label or (f"[文档页面图片 ×{images}]" if images else "")
 
 
 def drop_incomplete_tool_calls(messages: list[ChatMessage]) -> list[ChatMessage]:

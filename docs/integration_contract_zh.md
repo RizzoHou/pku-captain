@@ -29,9 +29,13 @@ agent = build_agent(offline=True)  # 离线：EchoLLMProvider + 仅 ClockTool
 
 `offline=True` 时挂 `EchoLLMProvider` + 离线工具子集（当前为 `ClockTool`），便于 GUI 在没有 API Key 时也能跑通。GUI 只调 `build_agent()`，不应感知 `DeepSeekProvider`、`PKU3bAssignmentsTool` 等具体子类的存在 —— 这些会在演示窗口内频繁增删。系统提示由 `bootstrap` 注入，GUI 不需要也不应该自行追加。
 
-**文档库（doc base）取代了原 RAG 知识库**：检索分两步，都通过工厂注册，无需任何开关。`doc_search` 在**任意模式**（含离线）都注册 —— 它只读已提交的 `doc_base/manifest.json`，没有索引要建、不发网络请求；`doc_read`（用 Kimi 视觉模型阅读 PDF 页面并回答）**仅在线且有视觉模型时**注册，由 `build_vision_llm()` 读 `secrets/api_keys/kimi_key.txt` 决定（缺 key 则省略 `doc_read`）。GUI 仍只调 `build_agent()`，文档库面板通过注册表成员判断（`"doc_search" in tools` / `"doc_read" in tools`）。
+**对话模型可切换（DeepSeek V4 Pro ⇄ Kimi K2.6）**：`src.core` 懒加载暴露 `DEFAULT_CHAT_MODEL`、`available_chat_models(*, offline)`、`build_chat_llm(model_key, *, offline)`、`apply_chat_model(agent, model_key, *, offline)`。GUI 在对话表头放一个 `QComboBox`（≥2 个可用 brain 时才显示），用户切换时调 `apply_chat_model` 原地替换 `agent.llm`，然后**重置为新对话**（reset-on-switch）。`apply_chat_model` 同时按 brain 的视觉能力增删 `doc_read`。上下文进度条的上限（`window`）来自 `agent.llm.context_window`，自动随 brain 变化（DeepSeek=1M，Kimi=256k），GUI 无需特判。
 
-> **BREAKING: integration contract** —— `build_agent` / `MainWindow` 去掉了 `enable_knowledge` 形参，`--rag` 启动标志同步移除；嵌入式 `KnowledgeSearchTool` 不再注册（类与 `src/rag` 基础设施保留，作为 OOP 展示）。GUI 侧 `build_agent(offline=offline, enable_knowledge=...)` 改为 `build_agent(offline=offline)`；本仓库内已同步更新。
+**文档库（doc base）取代了原 RAG 知识库**：`doc_search`（按 title/breadcrumb 检索 `doc_base/manifest.json`）在**任意模式**（含离线）都注册，无索引、无网络。`doc_read` 改为**把渲染好的 PDF 页面图片经 `ToolResult.images` 交还给 agent**，由 `Agent.turn()` 在所有工具结果之后注入一条多模态 `user` 消息，让**视觉 brain（Kimi）自己看图作答**——不再有「PDF→文本」中间步。因为只有视觉 brain 能读注入的图片，`doc_read` **仅在 active brain 为 Kimi 时注册**（由 `apply_chat_model` 切换）。仪表盘「文档库」弹窗的「让 Captain 阅读」用一个独立的封装式服务 `DocBaseReader`（渲染→直接问 Kimi→返回文本，与对话 brain 解耦），由 `build_doc_reader()` 构造、像 `memory_learner` 一样注入 `DashboardPanel(doc_reader=...)`。在 DeepSeek 上提问培养方案/文档类问题时，`VisionRouter`（`src.core`，关键词启发式）会触发自动切到 Kimi 新对话。
+
+> **BREAKING: integration contract** —— 1) `DocBaseReadTool.__init__` 不再接收 `vision_llm`，`invoke` 返回 `ToolResult(images=...)` 而非 `answer` 文本；新增 `ToolResult.images: tuple[str, ...]` 字段与 `Conversation.add_user_parts(parts)`。2) `build_vision_llm()` 改用 `kimi-k2.6`，且不再喂给 `doc_read`（agent 工具）——它现在只服务 `build_doc_reader()`。3) `_build_tools` 去掉 `vision` 形参；`doc_read` 注册改由 `apply_chat_model` 按 brain gate。4) 新增 `src.core` 符号：`DEFAULT_CHAT_MODEL` / `available_chat_models` / `build_chat_llm` / `apply_chat_model` / `build_doc_reader` / `VisionRouter`。本仓库内 GUI 已同步更新。
+
+> **BREAKING: integration contract**（前序）—— `build_agent` / `MainWindow` 去掉了 `enable_knowledge` 形参，`--rag` 启动标志同步移除；嵌入式 `KnowledgeSearchTool` 不再注册（类与 `src/rag` 基础设施保留，作为 OOP 展示）。
 
 `Conversation` 对 GUI 是只读的：渲染历史时通过 `for msg in agent.conversation` 或 `agent.conversation.snapshot()` 拿 `ChatMessage` 列表，不要直接调 `add_user / add_assistant / add_tool_result`。所有写入由 `Agent.turn()` 完成（多会话的重置 / 恢复写入也走 `src.core` 的工厂，见下）。
 
@@ -103,7 +107,7 @@ self.thread.start()
 | `llm_response` | `text: str` | 每次 LLM 回复完成后立即触发，包括携带 tool_calls 的中间回复 | 累计或暂存；最终展示由 `final` 决定 |
 | `tool_call` | `id: str`, `name: str`, `arguments: dict` | LLM 请求调用某个工具时 | 在工具调用面板新增一行（"调用中"） |
 | `tool_result` | `id: str`, `name: str`, `result: ToolResult` | 工具执行完毕（成功或失败均会触发） | 用 `id` 匹配上面的行，渲染 `result.data` 或 `result.error` |
-| `context_usage` | `used: int`, `window: int`, `estimated: bool` | 每次 LLM 回复完成、assistant 消息入历史后触发（每个 turn 至少一次，多工具轮次每轮一次） | 刷新对话表头的上下文占用进度条；`used` 是当前会话占用的 token 数（`window` 为模型上下文上限，DeepSeek V4 = 1,000,000），`estimated=True` 表示无 API 用量时的本地估算（标注「约」） |
+| `context_usage` | `used: int`, `window: int`, `estimated: bool` | 每次 LLM 回复完成、assistant 消息入历史后触发（每个 turn 至少一次，多工具轮次每轮一次） | 刷新对话表头的上下文占用进度条；`used` 是当前会话占用的 token 数（`window` 为当前 brain 的上下文上限，DeepSeek V4 = 1,000,000，Kimi K2.6 = 256,000，随模型切换变化），`estimated=True` 表示无 API 用量时的本地估算（标注「约」） |
 | `final` | `text: str` | 整个 turn 结束，`text` 是最终对用户可见的回答 | 在对话面板渲染最终消息（若已用 `assistant_delta` 流式渲染，`final` 用于定型） |
 
 注意点：
@@ -111,8 +115,8 @@ self.thread.start()
 - 一个 turn 至少 yield 一次 `final`（即便是上限超限也会 yield 一个 `kind="final"` 的兜底事件）。GUI 可以把 `final` 作为"展示最终回答"的唯一信号。
 - `llm_response.text` 在中间步骤通常为空（模型只返回 tool_calls）。**不要**把每个 `llm_response` 都贴到对话面板，否则会出现空气泡。建议：仅当 `final` 触发时，用其 `text` 渲染最终回答。
 - `tool_result.result` 是 `ToolResult` 数据类。`result.data` 类型由具体工具决定（`PKU3bAssignmentsTool` 返回结构化记录，`WeatherTool` 返回 dict，`ClockTool` 返回字符串）。GUI 可以先用 `repr()` 或 `json.dumps(default=str)` 打底渲染，需要美化时按 `name` 分发到专用渲染器。
-- token 级流式由 `LLMProvider.stream_chat()` 提供，默认实现是把 `chat()` 的全文一次性包成一个 `ChatStreamEvent`。`DeepSeekProvider.stream_chat()` 走真正的 SSE。`Agent.turn()` 会优先调用 `stream_chat()`，把每段增量以 `assistant_delta` 事件 yield 给 GUI；若 provider 未返回最终 `response`，会回退到 `chat()`。GUI 在收到 `final` 之前应只用 `assistant_delta` 渲染气泡，避免与 `final` 重复。
-- `context_usage` 的 `used` 优先取 API 返回的 `ChatResponse.usage.total_tokens`（DeepSeek 通过流式 `stream_options.include_usage` 与非流式响应都回传 `usage`）；provider 未报告用量时回退到 `src.llm.base.estimate_tokens` 的本地估算（`estimated=True`）。turn 之外刷新进度条（新对话、恢复历史会话、离线启动）用 `Agent.estimate_context_usage()` 取同一份估算。模型上下文上限来自 `LLMProvider.context_window`（DeepSeek=1M，Echo=1M）。GUI 不直接读取 provider 内部，仍只经 `Agent` 取数。
+- token 级流式由 `LLMProvider.stream_chat()` 提供，默认实现是把 `chat()` 的全文一次性包成一个 `ChatStreamEvent`。`DeepSeekProvider` 与 `KimiProvider` 都实现真正的 SSE（都按**原始字节**逐行解析后再 UTF-8 解码——`iter_lines(decode_unicode=True)` 会在 chunk 边界切断多字节中文 reasoning_content，导致 JSON 解析失败，切勿改回）。`Agent.turn()` 会优先调用 `stream_chat()`，把每段增量以 `assistant_delta` 事件 yield 给 GUI；若 provider 未返回最终 `response`，会回退到 `chat()`。GUI 在收到 `final` 之前应只用 `assistant_delta` 渲染气泡，避免与 `final` 重复。
+- `context_usage` 的 `used` 优先取 API 返回的 `ChatResponse.usage.total_tokens`（DeepSeek 通过流式 `stream_options.include_usage` 与非流式响应都回传 `usage`）；provider 未报告用量时回退到 `src.llm.base.estimate_tokens` 的本地估算（`estimated=True`）。turn 之外刷新进度条（新对话、恢复历史会话、离线启动）用 `Agent.estimate_context_usage()` 取同一份估算。模型上下文上限来自 `LLMProvider.context_window`（DeepSeek=1M，Kimi K2.6=256k，Echo=1M），切换 brain 后下一次 `context_usage` 自动反映新上限。GUI 不直接读取 provider 内部，仍只经 `Agent` 取数。多模态 `user` 消息（doc_read 注入的页面图片）的本地估算按每张图约 1600 token 计。
 
 ## 4. 错误契约
 

@@ -21,11 +21,17 @@ from typing import TYPE_CHECKING, Any
 from .agent import Agent, AgentEvent
 from .conversation import Conversation
 from .memory_learn import MemoryLearnResult, MemoryLearnService
+from .vision_router import VisionRouter
 
 if TYPE_CHECKING:
     from .bootstrap import (
+        DEFAULT_CHAT_MODEL,
+        apply_chat_model,
+        available_chat_models,
         build_agent,
+        build_chat_llm,
         build_dashboard_cache,
+        build_doc_reader,
         build_session_store,
         build_session_titler,
         build_source_registry,
@@ -34,13 +40,19 @@ if TYPE_CHECKING:
     )
 
 __all__ = [
+    "DEFAULT_CHAT_MODEL",
     "Agent",
     "AgentEvent",
     "Conversation",
     "MemoryLearnResult",
     "MemoryLearnService",
+    "VisionRouter",
+    "apply_chat_model",
+    "available_chat_models",
     "build_agent",
+    "build_chat_llm",
     "build_dashboard_cache",
+    "build_doc_reader",
     "build_session_store",
     "build_session_titler",
     "build_source_registry",
@@ -50,8 +62,13 @@ __all__ = [
 
 _LAZY = frozenset(
     {
+        "DEFAULT_CHAT_MODEL",
+        "apply_chat_model",
+        "available_chat_models",
         "build_agent",
+        "build_chat_llm",
         "build_dashboard_cache",
+        "build_doc_reader",
         "build_session_store",
         "build_session_titler",
         "build_source_registry",

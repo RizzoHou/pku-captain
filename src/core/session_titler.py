@@ -72,7 +72,9 @@ class SessionTitler:
 
 def _first_content(messages: list[ChatMessage], role: str) -> str:
     for msg in messages:
-        if msg.role == role and msg.content.strip():
+        # Skip multimodal messages (doc_read page images, content is a list):
+        # the title comes from the user's typed text, which is a plain string.
+        if msg.role == role and isinstance(msg.content, str) and msg.content.strip():
             return msg.content.strip()
     return ""
 

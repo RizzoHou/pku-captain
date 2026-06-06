@@ -104,16 +104,27 @@ def test_docbase_read_path_reaches_result_dialog(
         "abs_path": "/tmp/x.pdf",
     }
     search = FakeTool([doc])  # invoke({}) → browse payload (one leaf)
-    read = FakeTool(
-        {
-            "title": "基础数学",
-            "volume": "本科培养方案2025-理科卷",
-            "pages_read": [1, 2],
-            "total_pages": 6,
-            "answer": "毕业总学分：138",
-            "note": "",
-        }
-    )
+
+    class FakeReader:
+        def read(
+            self,
+            path: str,
+            question: str | None = None,
+            pages: str | None = None,
+        ) -> ToolResult:
+            return ToolResult(
+                success=True,
+                data={
+                    "title": "基础数学",
+                    "volume": "本科培养方案2025-理科卷",
+                    "pages_read": [1, 2],
+                    "total_pages": 6,
+                    "answer": "毕业总学分：138",
+                    "note": "",
+                },
+            )
+
+    read = FakeReader()
     monkeypatch.setattr(
         dashboard.QInputDialog, "getText", lambda *a, **k: ("毕业总学分？", True)
     )

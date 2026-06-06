@@ -19,6 +19,11 @@ class ToolResult:
     success: bool
     data: Any = None
     error: str | None = None
+    # Optional image data URIs a tool produced for a vision-capable chat brain
+    # to read directly (doc_read renders PDF pages here). The agent injects
+    # these as a follow-up multimodal user message after the tool result; they
+    # never ride the stringified tool-result `data`. Empty for ordinary tools.
+    images: tuple[str, ...] = ()
 
 
 class Tool(ABC):
@@ -47,6 +52,15 @@ class ToolRegistry:
         if tool.name in self._tools:
             raise ValueError(f"tool already registered: {tool.name}")
         self._tools[tool.name] = tool
+
+    def unregister(self, name: str) -> None:
+        """Remove a tool by name if present (idempotent).
+
+        Used to gate `doc_read` on the active chat brain: it registers only
+        while a vision-capable brain (Kimi) is selected and is removed on a
+        switch back to a text brain.
+        """
+        self._tools.pop(name, None)
 
     def get(self, name: str) -> Tool:
         return self._tools[name]

@@ -16,10 +16,15 @@ from PyQt6.QtWidgets import (
 )
 
 from ..core import (
+    DEFAULT_CHAT_MODEL,
     AgentEvent,
     MemoryLearnService,
+    VisionRouter,
+    apply_chat_model,
+    available_chat_models,
     build_agent,
     build_dashboard_cache,
+    build_doc_reader,
     build_session_store,
     build_session_titler,
     reset_conversation,
@@ -113,10 +118,14 @@ class MainWindow(QMainWindow):
             if agent.memory is not None
             else None
         )
+        # Encapsulated doc reader (Kimi vision Q&A) for the 文档库 dialog's
+        # standalone 让 Captain 阅读 — None offline so it never hits the network.
+        doc_reader = None if effective_offline else build_doc_reader()
         self._dashboard = DashboardPanel(
             mode_label=mode_label,
             tools=agent.tools,
             memory_learner=memory_learner,
+            doc_reader=doc_reader,
             treehole_inbox=TreeholeInboxStore(_REPO_ROOT / "data" / "treehole_inbox.json"),
             treehole_history=TreeholeHistoryStore(
                 _REPO_ROOT / "data" / "treehole_history.json"
@@ -220,6 +229,21 @@ class MainWindow(QMainWindow):
         self._chat_panel.stop_requested.connect(self._cancel_turn)
         self._chat_panel.new_chat_requested.connect(self._on_new_chat)
         self._chat_panel.history_requested.connect(self._on_open_history)
+        self._chat_panel.model_change_requested.connect(self._on_model_change)
+
+        # Chat-model switcher (DeepSeek ⇄ Kimi K2.6). The active brain drives
+        # the context-meter window (256k for Kimi vs 1M for DeepSeek); switching
+        # opens a fresh chat (reset-on-switch). Offline shows no switcher.
+        self._model_labels = dict(available_chat_models(offline=effective_offline))
+        self._model_key: str | None = (
+            None if effective_offline else DEFAULT_CHAT_MODEL
+        )
+        self._chat_panel.set_models(
+            list(self._model_labels.items()), self._model_key
+        )
+        # Auto-switch to Kimi for doc/培养方案 questions asked while on DeepSeek
+        # (it reads the page images DeepSeek can't). Heuristic, network-free.
+        self._vision_router = VisionRouter()
         self._dashboard.morning_briefing_requested.connect(self._run_morning_briefing)
         self._dashboard.refresh_requested.connect(self._refresh_dashboard)
         self._dashboard.partial_refresh_requested.connect(self._refresh_dashboard_subset)
@@ -251,7 +275,32 @@ class MainWindow(QMainWindow):
         self._configure_auto_refresh()
         self.statusBar().showMessage(f"{mode_label} · 就绪")
 
+    def _maybe_auto_switch_for_vision(self, text: str) -> None:
+        """Route a doc/培养方案 question into a fresh Kimi chat before the turn.
+
+        Only fires while on DeepSeek (text-only) with a Kimi brain available.
+        Like a manual switch it resets the chat (reset-on-switch); the typed
+        message then runs in the fresh Kimi chat where doc_read can feed it
+        page images. No-op on Kimi/offline or for non-doc questions.
+        """
+        if self._model_key != "deepseek" or "kimi" not in self._model_labels:
+            return
+        if not self._vision_router.needs_doc_base(text):
+            return
+        try:
+            apply_chat_model(self._agent, "kimi", offline=self._effective_offline)
+        except Exception as exc:  # noqa: BLE001 - stay on DeepSeek on failure
+            self._chat_panel.add_system_message(f"自动切换 Kimi 失败：{exc}")
+            return
+        self._model_key = "kimi"
+        self._chat_panel.set_active_model("kimi")
+        self._begin_new_session()
+        self._chat_panel.add_system_message(
+            "检测到培养方案 / 文档相关问题，已自动切换到 Kimi K2.6 视觉模型并开启新对话。"
+        )
+
     def _send_message(self, text: str) -> None:
+        self._maybe_auto_switch_for_vision(text)
         self._busy = True
         self._chat_panel.add_user_message(text)
         self._chat_panel.set_busy(True)
@@ -390,9 +439,13 @@ class MainWindow(QMainWindow):
         # Titling is best-effort; the provisional title already on disk stays.
         pass
 
-    def _on_new_chat(self) -> None:
-        if self._busy:
-            return
+    def _begin_new_session(self) -> None:
+        """Persist the current chat and reset to a fresh, system-seeded one.
+
+        Shared by the ＋新对话 button and the model switcher (reset-on-switch).
+        Refreshes the context meter so a model swap immediately reflects the new
+        brain's window (e.g. 256k for Kimi).
+        """
         self._persist_current_session()
         reset_conversation(self._agent)
         self._chat_panel.clear()
@@ -402,7 +455,42 @@ class MainWindow(QMainWindow):
         self._session_created_at = _now_iso()
         self._titled = False
         self.setWindowTitle("PKU Captain")
+
+    def _on_new_chat(self) -> None:
+        if self._busy:
+            return
+        self._begin_new_session()
         self.statusBar().showMessage("已开始新对话")
+
+    def _on_model_change(self, model_key: str) -> None:
+        """Switch the chat brain (DeepSeek ⇄ Kimi K2.6); reset-on-switch.
+
+        No-ops while a turn is in flight (the conversation must not swap under
+        the worker thread). On success swaps `agent.llm`, opens a fresh chat,
+        and the context meter re-reads the new brain's window. The dashboard's
+        own LLM helpers (digest / memory-learn) keep their original provider —
+        they are independent of the chat brain.
+        """
+        if self._busy:
+            # Can't switch mid-turn; snap the combo back to the active brain.
+            if self._model_key is not None:
+                self._chat_panel.set_active_model(self._model_key)
+            self.statusBar().showMessage("正在回答，请稍后再切换模型")
+            return
+        if model_key == self._model_key:
+            return
+        try:
+            apply_chat_model(self._agent, model_key, offline=self._effective_offline)
+        except Exception as exc:  # noqa: BLE001 - surface and revert the combo
+            self._chat_panel.add_system_message(f"切换模型失败：{exc}")
+            if self._model_key is not None:
+                self._chat_panel.set_active_model(self._model_key)
+            return
+        self._model_key = model_key
+        label = self._model_labels.get(model_key, model_key)
+        self._begin_new_session()
+        self._chat_panel.add_system_message(f"已切换到 {label}，并开启新对话。")
+        self.statusBar().showMessage(f"已切换到 {label}")
 
     def _on_open_history(self) -> None:
         if self._busy:
