@@ -98,16 +98,6 @@ def detect_dashboard_changes(
                 item.get("source_label") or item.get("date") or ""
             ),
         )
-    if key == "lecture":
-        return _list_added_changes(
-            source="讲座推荐",
-            kind="新增",
-            previous_items=previous if isinstance(previous, list) else [],
-            current_items=current if isinstance(current, list) else [],
-            id_fields=("url", "title", "time"),
-            title_fn=lambda item: str(item.get("title") or "未命名讲座"),
-            detail_fn=lambda item: str(item.get("time") or item.get("location") or ""),
-        )
     if key == "treehole_updates":
         return _treehole_changes(previous, current)
     return []

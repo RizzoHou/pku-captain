@@ -27,7 +27,6 @@ from ..tools import (
     DeanResourcesTool,
     DeanUpdatesTool,
     KnowledgeSearchTool,
-    LectureTool,
     MemoryTool,
     PKU3bAnnouncementsTool,
     PKU3bAssignmentsTool,
@@ -206,7 +205,6 @@ def _build_tools(
         registry.register(DeanUpdatesTool())
         if enable_knowledge:
             registry.register(KnowledgeSearchTool(_build_knowledge_base()))
-        registry.register(LectureTool())
     return registry
 
 

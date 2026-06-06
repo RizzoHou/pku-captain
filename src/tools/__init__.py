@@ -4,7 +4,6 @@ from .clock import ClockTool
 from .dean_resources import DeanResourcesTool
 from .dean_updates import DeanUpdatesTool
 from .knowledge_search import KnowledgeSearchTool
-from .lecture import LectureTool
 from .memory import MemoryTool
 from .pku3b_announcements import PKU3bAnnouncementsTool
 from .pku3b_assignments import PKU3bAssignmentsTool
@@ -18,7 +17,6 @@ __all__ = [
     "DeanResourcesTool",
     "DeanUpdatesTool",
     "KnowledgeSearchTool",
-    "LectureTool",
     "MemoryTool",
     "PLibMaterialsTool",
     "PKU3bAnnouncementsTool",

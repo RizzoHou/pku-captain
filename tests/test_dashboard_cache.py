@@ -28,7 +28,7 @@ def test_save_get_round_trip(tmp_path: Path) -> None:
 
 
 def test_get_missing_key_returns_none(tmp_path: Path) -> None:
-    assert DashboardCache(tmp_path).get("lecture") is None
+    assert DashboardCache(tmp_path).get("pku3b_announcements") is None
 
 
 def test_save_tolerates_non_json_native_value(tmp_path: Path) -> None:
@@ -44,20 +44,20 @@ def test_save_tolerates_non_json_native_value(tmp_path: Path) -> None:
 
 def test_load_all_collects_every_card(tmp_path: Path) -> None:
     cache = DashboardCache(tmp_path)
-    cache.save("lecture", [{"title": "talk"}])
+    cache.save("pku3b_announcements", [{"title": "talk"}])
     cache.save("treehole_updates", {"unread_count": 2})
     assert cache.load_all() == {
-        "lecture": [{"title": "talk"}],
+        "pku3b_announcements": [{"title": "talk"}],
         "treehole_updates": {"unread_count": 2},
     }
 
 
 def test_load_all_skips_corrupt_files(tmp_path: Path) -> None:
     cache = DashboardCache(tmp_path)
-    cache.save("lecture", [{"title": "talk"}])
+    cache.save("pku3b_announcements", [{"title": "talk"}])
     (tmp_path / "broken.json").write_text("{not json", encoding="utf-8")
     # The corrupt file is ignored; the good entry still loads.
-    assert cache.load_all() == {"lecture": [{"title": "talk"}]}
+    assert cache.load_all() == {"pku3b_announcements": [{"title": "talk"}]}
 
 
 def test_load_all_empty_dir(tmp_path: Path) -> None:
@@ -70,7 +70,7 @@ def test_newest_timestamp_none_when_empty(tmp_path: Path) -> None:
 
 def test_newest_timestamp_present_after_save(tmp_path: Path) -> None:
     cache = DashboardCache(tmp_path)
-    cache.save("lecture", [])
+    cache.save("pku3b_announcements", [])
     assert cache.newest_timestamp() is not None
 
 

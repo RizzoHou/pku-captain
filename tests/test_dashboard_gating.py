@@ -50,9 +50,8 @@ def test_offline_dashboard_refuses_network_dialogs(
     panel._show_plib_dialog()
     panel._show_plib_login_dialog()
     panel._show_announcement_detail("anything")
-    panel._show_lecture_search_dialog()
     panel._show_knowledge_dialog()
-    assert len(shown) == 6
+    assert len(shown) == 5
 
 
 def test_require_tool_returns_registered_tool(

@@ -139,7 +139,7 @@ def _aborted_tool_turn() -> list[ChatMessage]:
             content="",
             tool_calls=(
                 ToolCall(id="c1", name="clock", arguments={}),
-                ToolCall(id="c2", name="lecture", arguments={}),
+                ToolCall(id="c2", name="memory", arguments={}),
             ),
         ),
         ChatMessage(role="tool", name="clock", tool_call_id="c1", content="noon"),

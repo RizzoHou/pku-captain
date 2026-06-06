@@ -196,10 +196,6 @@ class MainWindow(QMainWindow):
                 "treehole_updates": {"limit": 5},
                 "dean_updates": {"limit": 5},
                 "plib_materials": {"action": "quota"},
-                # Fetch a generous superset: the tool truncates earliest-first,
-                # and LecturesCard then filters to today-or-future, so a small
-                # limit would starve the upcoming set before the card sees it.
-                "lecture": {"limit": 50},
             },
         )
         self._dashboard_worker.moveToThread(self._dashboard_thread)
@@ -437,7 +433,6 @@ class MainWindow(QMainWindow):
         "treehole_updates",
         "dean_updates",
         "plib_materials",
-        "lecture",
     )
 
     def _seed_dashboard_from_cache(self) -> None:
@@ -552,9 +547,6 @@ class MainWindow(QMainWindow):
             return
         if key == "plib_materials" and isinstance(data, dict):
             self._dashboard.set_plib_materials(data)
-            return
-        if key == "lecture" and isinstance(data, list):
-            self._dashboard.set_lectures(data)
             return
         self._dashboard.set_data(card_key, _format_dashboard_data(key, data))
 
@@ -787,19 +779,6 @@ def _format_dashboard_data(key: str, data: object) -> str:
     if key == "plib_materials" and isinstance(data, dict):
         remaining = data.get("download_remaining")
         return "今日剩余下载次数：未知" if remaining is None else f"今日剩余下载次数：{remaining}"
-    if key == "lecture" and isinstance(data, list):
-        if not data:
-            return "近期暂无讲座"
-        lines = []
-        for item in data[:5]:
-            if isinstance(item, dict):
-                lines.append(
-                    "{time} {title}".format(
-                        time=item.get("time", ""),
-                        title=item.get("title", "未命名讲座"),
-                    ).strip()
-                )
-        return "\n".join(lines) if lines else "暂无可显示讲座"
     return str(data)
 
 

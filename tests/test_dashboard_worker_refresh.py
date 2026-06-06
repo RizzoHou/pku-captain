@@ -46,7 +46,7 @@ def app() -> QApplication:
 
 
 def _make_worker() -> tuple[DashboardWorker, dict[str, _RecordingTool]]:
-    names = ("treehole_updates", "plib_materials", "pku3b_announcements", "lecture")
+    names = ("treehole_updates", "plib_materials", "pku3b_announcements", "dean_updates")
     tools = {name: _RecordingTool(name) for name in names}
     registry = ToolRegistry()
     for tool in tools.values():
@@ -103,7 +103,7 @@ class _BarrierTool(Tool):
 
 
 def test_refresh_runs_tools_in_parallel(app: QApplication) -> None:
-    names = ("treehole_updates", "plib_materials", "pku3b_announcements", "lecture")
+    names = ("treehole_updates", "plib_materials", "pku3b_announcements", "dean_updates")
     barrier = threading.Barrier(len(names))
     registry = ToolRegistry()
     for name in names:
