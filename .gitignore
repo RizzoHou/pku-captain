@@ -22,8 +22,10 @@ secrets/
 # CLI conversation dumps (/save)
 debug/
 
-# Claude Code worktrees / local state
-.claude/
+# Claude Code worktrees / local state — but track the project-level audit skills
+# (devchangelog / architecture / verification) so teammates + worktrees inherit them.
+.claude/*
+!.claude/skills/
 .worktreeinclude
 
 # Local app data (memory store, reminders, etc.)
