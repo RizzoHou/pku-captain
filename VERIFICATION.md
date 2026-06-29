@@ -37,9 +37,9 @@ Human-executable verification steps. Maintained by the `verification` skill. The
 - Plaintext creds under `secrets/plib/`, `secrets/treehole/` are **by design** (gitignored local creds, per `docs/setup_zh.md`), not a leak. No action.
 - The DashScope embedder (`src/rag/embedder.py`) is **retired/unregistered** (doc base replaced RAG); it's not in any live path. No action.
 
-*Genuine must-fix (verified by hand):*
-- **Subprocess stderr can carry credentials into LLM context + disk.** `run_plib` folds `proc.stderr` into the error string (`plib_materials.py:260-261, 268`) → `ToolResult.error` → `agent.py:176` writes `ERROR: {error}` into the conversation → next iteration `_messages_for_llm()` (`agent.py:88`) ships it to DeepSeek/Kimi, and `session_store` persists it to `data/sessions/*.json`. If `plib-cli` (or `pku3b`, or the treehole lib) ever echoes a credential on an auth failure, it leaks. Same pattern: `pku3b_{coursetable,assignments,announcements}.py` stderr, `treehole_updates.py` AuthError messages.
-  - **Recommended fix (NOT yet applied — gated on your go):** sanitize subprocess stderr/exception text before it becomes a `ToolResult.error` — strip the known credential values (the env-injected `PLIB_EMAIL`/`PLIB_PASSWORD`, treehole id/password) from any error string. One shared `redact(text, secrets)` helper at the subprocess-wrapper boundary covers all three tools.
+*Genuine must-fix (was: subprocess stderr → LLM context + disk; FIXED 2026-06-29):*
+- **The leak path.** `run_plib` folded `proc.stderr` into the error string (`plib_materials.py`) → `ToolResult.error` → `agent.py:176` writes `ERROR: {error}` into the conversation → next iteration ships it to DeepSeek/Kimi, and `session_store` persists it to `data/sessions/*.json`. If `plib-cli` or the treehole lib echoed a credential on an auth failure, it leaked.
+  - **Fix applied:** new `src/tools/redact.py` `redact(text, secrets)`; `run_plib` strips the injected `PLIB_EMAIL`/`PLIB_PASSWORD` and `TreeholeAuthService` strips the stored/in-scope IAAA id/password from every error string before it becomes a `ToolResult.error`. Covered by `tests/test_redact.py` (helper + plib + treehole boundary). **pku3b is not covered** — its portal password lives in pku3b's own `cfg.toml` and never enters our process, so we hold no value to strip; treat pku3b stderr as out of our control.
 
 **Steps (your by-hand verification):**
 1. **Leak probe (catches a leak that already happened).** After running `python -m src --online` for a session that exercised P-Lib / treehole (including any failed call), grep on-disk state for the literal secret:
@@ -47,9 +47,9 @@ Human-executable verification steps. Maintained by the `verification` skill. The
    - `grep -rIF "$(cat secrets/treehole/password)" data/ debug/ 2>/dev/null` → expect **no matches**.
    - (If either matches, a credential is on disk in a conversation/cache file — confirms the leak path above.)
 2. **LLM-context probe.** Trigger a deliberate P-Lib failure (e.g. temporarily wrong password), ask a follow-up question in the same chat, and confirm the model's reply does not surface the credential. Then `grep -rIF "$(cat secrets/plib/password)" data/sessions/` → expect no matches.
-3. Decide on the recommended fix above. If applied, re-run steps 1–2 and add an automated test asserting `redact()` strips a known secret from a synthetic stderr string.
+3. Regression confirm the fix end-to-end: after exercising a *failed* P-Lib / treehole call online, re-run steps 1–2 — expect no credential in `data/sessions/` and `***REDACTED***` where the error would have shown it.
 
-**Automated**: none yet — the redaction fix (if taken) should ship with a unit test on the `redact()` boundary.
+**Automated**: `pytest tests/test_redact.py` (8 cases — the `redact()` helper + `run_plib` and `TreeholeAuthService` boundaries strip a known secret from a synthetic error).
 
 ---
 

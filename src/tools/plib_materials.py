@@ -16,6 +16,11 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from .base import Tool, ToolResult
+from .redact import redact
+
+# Env keys whose values are P-Lib credentials; redacted from any error string
+# before it can reach a ToolResult (and thus the LLM context / session store).
+_CREDENTIAL_ENV_KEYS = ("PLIB_EMAIL", "PLIB_PASSWORD")
 
 DEFAULT_EXECUTABLE = "plib"
 DEFAULT_TIMEOUT = 60.0
@@ -239,6 +244,9 @@ def run_plib(
     process_env = os.environ.copy()
     if env:
         process_env.update(env)
+    # The credential values we inject — strip them from any error we surface, in
+    # case plib echoes them on an auth failure.
+    secret_values = [env[key] for key in _CREDENTIAL_ENV_KEYS if env and env.get(key)]
     try:
         proc = subprocess.run(
             argv,
@@ -258,7 +266,8 @@ def run_plib(
         payload = json.loads(proc.stdout or "{}")
     except json.JSONDecodeError:
         err = proc.stderr.strip() or proc.stdout.strip() or "invalid JSON output"
-        return {"ok": False, "error": f"plib exited {proc.returncode}: {err}"}
+        message = f"plib exited {proc.returncode}: {err}"
+        return {"ok": False, "error": redact(message, secret_values)}
 
     if proc.returncode != 0 or not payload.get("ok", False):
         error = payload.get("error") if isinstance(payload, dict) else None
@@ -266,5 +275,5 @@ def run_plib(
             message = error.get("message") or error.get("code") or str(error)
         else:
             message = str(error or proc.stderr.strip() or "plib command failed")
-        return {"ok": False, "error": message}
+        return {"ok": False, "error": redact(message, secret_values)}
     return {"ok": True, "data": payload.get("data")}

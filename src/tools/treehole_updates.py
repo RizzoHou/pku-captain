@@ -20,6 +20,7 @@ from typing import Any, ClassVar
 import requests
 
 from .base import Tool, ToolResult
+from .redact import redact
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _WORKSPACE_ROOT = _REPO_ROOT.parent
@@ -61,6 +62,26 @@ class TreeholeAuthService:
         self.secrets_dir = Path(secrets_dir) if secrets_dir is not None else base
         self.session_path = self.secrets_dir / "session.json"
 
+    def _secret_values(self) -> list[str]:
+        """Stored IAAA credentials, to strip from any error before it surfaces."""
+        values: list[str] = []
+        for name in ("id", "password"):
+            path = self.secrets_dir / name
+            if path.exists():
+                value = path.read_text(encoding="utf-8").strip()
+                if value:
+                    values.append(value)
+        return values
+
+    def _redact(self, message: str, *extra: str) -> str:
+        """Redact stored (and any in-scope) credentials from a message.
+
+        Treehole library exceptions are interpolated into user-facing messages
+        that flow into tool results / the conversation; a credential echoed in
+        an AuthError would otherwise reach the LLM context and disk.
+        """
+        return redact(message, [*self._secret_values(), *extra])
+
     def status(self) -> dict[str, object]:
         if build_client is None:
             return {"ok": False, "message": "树洞库不可用"}
@@ -71,9 +92,9 @@ class TreeholeAuthService:
         except NeedSMSVerification:
             return {"ok": False, "message": "需要短信验证"}
         except AuthError as exc:
-            return {"ok": False, "message": f"登录状态不可用：{exc}"}
+            return {"ok": False, "message": self._redact(f"登录状态不可用：{exc}")}
         except TreeholeError as exc:
-            return {"ok": False, "message": f"树洞接口错误：{exc}"}
+            return {"ok": False, "message": self._redact(f"树洞接口错误：{exc}")}
         except requests.exceptions.RequestException:
             return {"ok": False, "message": "网络不可用，无法检查登录状态"}
         return {
@@ -104,13 +125,16 @@ class TreeholeAuthService:
             )
             store.save(identity)
         except AuthError as exc:
-            return {"ok": False, "message": f"登录失败：{exc}"}
+            return {"ok": False, "message": self._redact(f"登录失败：{exc}", uid, password)}
         except TreeholeError as exc:
-            return {"ok": False, "message": f"登录失败：{exc}"}
+            return {"ok": False, "message": self._redact(f"登录失败：{exc}", uid, password)}
         except requests.exceptions.RequestException as exc:
-            return {"ok": False, "message": f"网络错误：{exc}"}
+            return {"ok": False, "message": self._redact(f"网络错误：{exc}", uid, password)}
         except OSError as exc:
-            return {"ok": False, "message": f"保存登录状态失败：{exc}"}
+            return {
+                "ok": False,
+                "message": self._redact(f"保存登录状态失败：{exc}", uid, password),
+            }
         return {"ok": True, "message": "登录成功，请发送短信验证码并完成验证"}
 
     def send_sms(self) -> dict[str, object]:
@@ -119,11 +143,11 @@ class TreeholeAuthService:
         try:
             build_client(self.secrets_dir, allow_relogin=False).send_sms()
         except AuthError as exc:
-            return {"ok": False, "message": f"无法发送验证码：{exc}"}
+            return {"ok": False, "message": self._redact(f"无法发送验证码：{exc}")}
         except TreeholeError as exc:
-            return {"ok": False, "message": f"无法发送验证码：{exc}"}
+            return {"ok": False, "message": self._redact(f"无法发送验证码：{exc}")}
         except requests.exceptions.RequestException as exc:
-            return {"ok": False, "message": f"网络错误：{exc}"}
+            return {"ok": False, "message": self._redact(f"网络错误：{exc}")}
         return {"ok": True, "message": "验证码已发送，请查看绑定手机号"}
 
     def verify_sms(self, code: str) -> dict[str, object]:
@@ -135,11 +159,11 @@ class TreeholeAuthService:
         try:
             build_client(self.secrets_dir, allow_relogin=False).verify_sms(code)
         except AuthError as exc:
-            return {"ok": False, "message": f"验证失败：{exc}"}
+            return {"ok": False, "message": self._redact(f"验证失败：{exc}")}
         except TreeholeError as exc:
-            return {"ok": False, "message": f"验证失败：{exc}"}
+            return {"ok": False, "message": self._redact(f"验证失败：{exc}")}
         except requests.exceptions.RequestException as exc:
-            return {"ok": False, "message": f"网络错误：{exc}"}
+            return {"ok": False, "message": self._redact(f"网络错误：{exc}")}
         return {"ok": True, "message": "短信验证完成，现在可以读取树洞消息"}
 
 

@@ -76,7 +76,7 @@ user msg → Conversation.add_user → loop (≤8 iters):
    → context_usage → (no tool_calls) → final
 → MainWindow._on_agent_event dispatches each event to ChatPanel
 ```
-Memory is folded per-iteration into a *snapshot copy* only — never written into `Conversation`. One bubble per assistant segment (finalized on each `tool_call`).
+Memory is folded per-iteration into a *snapshot copy* only — never written into `Conversation`. One bubble per assistant segment (finalized on each `tool_call`). Tool error strings are credential-redacted at the tool boundary (`src/tools/redact.py`) before entering the conversation, so injected/held secrets (P-Lib env, treehole IAAA) never reach the LLM request or `data/sessions/*.json`.
 
 **Dashboard refresh** — `DashboardPanel` → `DashboardWorker` (QThread) → `ThreadPoolExecutor` fan-out over selected tool keys → `as_completed` emits `item_result`/`item_error` per card (error-isolated). `DashboardCache` (`data/dashboard_cache/<key>.json`, raw payloads) seeds paint at startup; a silent refresh repaints only cards whose `_signature` changed. Scoped refresh: per-card buttons emit `partial_refresh_requested([key])`, header 刷新 reloads all.
 

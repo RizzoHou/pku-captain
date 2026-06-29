@@ -6,6 +6,15 @@ The **development decision log** — why changes were made, not what shipped. Ma
 
 ---
 
+## 2026-06-29 — Credential redaction at the tool boundary + CLAUDE.md prune
+
+- **What**: added `src/tools/redact.py` (`redact(text, secrets)`); `run_plib` and `TreeholeAuthService` now strip injected/held credentials from any error string before it becomes a `ToolResult.error`. Compressed three verbose CLAUDE.md paragraphs to bring the file back under the 39k budget (38,561, below the 38,879 baseline).
+- **Decision**: redact at the **tool/subprocess boundary**, not centrally in `Agent.turn()` — keeps `core` free of secret-path knowledge and strips exactly what each tool injects/holds. pku3b is **not** covered: its portal password lives in pku3b's own `cfg.toml` and never enters our process, so there is no value to strip (documented in `redact.py`, not faked).
+- **Decision**: fail safe — `redact` over-redacts a short secret rather than risk under-redacting, and skips empty/whitespace secrets (an empty `str.replace` would shred the text).
+- **Decision**: the CLAUDE.md prune **compresses in place**, it does not relocate the macOS gotchas to ARCHITECTURE.md — gotchas are *rules* and must keep firing in CLAUDE.md; relocating them would break the structure-vs-rules boundary. Only step-by-step elaboration was cut; every load-bearing rule kept.
+- **Files**: `src/tools/{redact,plib_materials,treehole_updates}.py`, `tests/test_redact.py`, `CLAUDE.md`.
+- **Verify**: VERIFICATION.md → "Credential pre-release audit" (fix applied; `pytest tests/test_redact.py`).
+
 ## 2026-06-29 — Agentic auditing machinery (DEVCHANGELOG / ARCHITECTURE / VERIFICATION + skills)
 
 - **What**: added three repo-root audit artifacts and three project-level skills to maintain them; wired a plan-gate convention into CLAUDE.md.
