@@ -7,10 +7,12 @@ LLM request, and data/sessions/*.json.
 
 from __future__ import annotations
 
-import subprocess
+from pathlib import Path
+
+from plib_cli.errors import AuthError
 
 import src.tools.treehole_updates as th
-from src.tools.plib_materials import run_plib
+from src.tools.plib_materials import PLibMaterialsTool
 from src.tools.redact import REDACTED, redact
 
 # --- the pure helper -------------------------------------------------------
@@ -38,52 +40,52 @@ def test_redact_custom_placeholder() -> None:
     assert redact("x secret y", ["secret"], placeholder="#") == "x # y"
 
 
-# --- plib wrapper integration ---------------------------------------------
-
-def _patch_plib(monkeypatch, returncode: int, stdout: str, stderr: str) -> None:
-    monkeypatch.setattr(
-        "src.tools.plib_materials.resolve_executable", lambda _exe: "/bin/plib"
-    )
-
-    def fake_run(argv, **kwargs):  # noqa: ANN001, ANN003
-        return subprocess.CompletedProcess(argv, returncode, stdout=stdout, stderr=stderr)
-
-    monkeypatch.setattr("src.tools.plib_materials.subprocess.run", fake_run)
+# --- plib tool integration -------------------------------------------------
+#
+# The tool holds credentials (stored secrets, or passed for `login`) and calls
+# the vendored library in-process; a PlibError message that echoes a credential
+# must be redacted before it reaches the ToolResult.
 
 
-def test_run_plib_redacts_injected_credentials_from_stderr(monkeypatch) -> None:
+def _write_plib_secrets(dir_: Path, email: str, password: str) -> None:
+    dir_.mkdir(parents=True, exist_ok=True)
+    (dir_ / "email").write_text(email, encoding="utf-8")
+    (dir_ / "password").write_text(password, encoding="utf-8")
+
+
+def test_plib_redacts_stored_credentials_from_error(tmp_path) -> None:
     password = "Sup3rSecret!"
     email = "alice@pku.edu.cn"
-    _patch_plib(
-        monkeypatch,
-        returncode=1,
-        stdout="",
-        stderr=f"login failed for {email} with password {password}",
-    )
+    secrets = tmp_path / "plib"
+    _write_plib_secrets(secrets, email, password)
 
-    result = run_plib(
-        ["login"], env={"PLIB_EMAIL": email, "PLIB_PASSWORD": password}
-    )
+    def factory(timeout, credentials):  # noqa: ANN001
+        raise AuthError(f"login failed for {email} with password {password}")
 
-    assert result["ok"] is False
-    assert password not in result["error"]
-    assert email not in result["error"]
-    assert REDACTED in result["error"]
+    tool = PLibMaterialsTool(client_factory=factory, secrets_dir=secrets)
+    result = tool.invoke({"action": "quota"})
+
+    assert result.success is False
+    assert password not in str(result.error)
+    assert email not in str(result.error)
+    assert REDACTED in str(result.error)
 
 
-def test_run_plib_redacts_on_invalid_json(monkeypatch) -> None:
-    password = "Sup3rSecret!"
-    _patch_plib(
-        monkeypatch,
-        returncode=1,
-        stdout=f"panic: bad config, password={password}",
-        stderr="",
-    )
+def test_plib_redacts_login_credentials_from_error(tmp_path) -> None:
+    password = "Hunter2!"
+    email = "bob@pku.edu.cn"
 
-    result = run_plib(["quota"], env={"PLIB_PASSWORD": password})
+    def factory(timeout, credentials):  # noqa: ANN001
+        raise AuthError(f"rejected {email} / {password}")
 
-    assert result["ok"] is False
-    assert password not in result["error"]
+    # No stored secrets — the redacted values come from the login args.
+    tool = PLibMaterialsTool(client_factory=factory, secrets_dir=tmp_path / "plib")
+    result = tool.invoke({"action": "login", "email": email, "password": password})
+
+    assert result.success is False
+    assert password not in str(result.error)
+    assert email not in str(result.error)
+    assert REDACTED in str(result.error)
 
 
 # --- treehole auth-service integration ------------------------------------

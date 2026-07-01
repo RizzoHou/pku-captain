@@ -14,14 +14,10 @@ from pathlib import Path
 from typing import Any, ClassVar
 from zoneinfo import ZoneInfo
 
+from dean import resources
+
 from .base import Tool, ToolResult
-from .dean_resources import (
-    DEFAULT_EXECUTABLE,
-    DEFAULT_TIMEOUT,
-    DeanNotFoundError,
-    DeanTimeoutError,
-    run_dean,
-)
+from .dean_resources import DEFAULT_TIMEOUT, ClientFactory, fetch_dean
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _TZ = ZoneInfo("Asia/Shanghai")
@@ -41,12 +37,15 @@ class DeanUpdateItem:
     item_id: str = ""
 
 
-_SOURCES: tuple[tuple[str, str, list[str]], ...] = (
-    ("rules_school", "校级规章", ["rules", "list", "--scope", "school"]),
-    ("rules_national", "上级文件", ["rules", "list", "--scope", "national"]),
-    ("notice", "通知公告", ["notice", "list"]),
-    ("download", "资料下载", ["download", "list"]),
-    ("openinfo", "信息公开", ["openinfo", "list"]),
+# Each source is a first-page list fetch against the vendored ``dean`` library.
+# ``fetch_dean`` runs the call in-process and returns the same ``{ok, data}``
+# envelope the old subprocess wrapper produced, so item extraction is unchanged.
+_SOURCES: tuple[tuple[str, str, Any], ...] = (
+    ("rules_school", "校级规章", lambda c: resources.list_rules(c, "school")),
+    ("rules_national", "上级文件", lambda c: resources.list_rules(c, "national")),
+    ("notice", "通知公告", lambda c: resources.list_notices(c)),
+    ("download", "资料下载", lambda c: resources.list_files(c, "download")),
+    ("openinfo", "信息公开", lambda c: resources.list_files(c, "openinfo")),
 )
 
 
@@ -77,21 +76,18 @@ class DeanUpdatesTool(Tool):
     def __init__(
         self,
         *,
-        executable: str = DEFAULT_EXECUTABLE,
         timeout: float = DEFAULT_TIMEOUT,
         state_path: str | Path = DEFAULT_STATE_PATH,
+        client_factory: ClientFactory | None = None,
     ) -> None:
-        self.executable = executable
         self.timeout = timeout
         self.state_path = Path(state_path)
+        self._client_factory = client_factory
 
     def invoke(self, args: dict[str, Any]) -> ToolResult:
         limit = max(1, int(args.get("limit") or 5))
         reset = bool(args.get("reset_baseline", False))
-        try:
-            current, errors = self._fetch_current()
-        except (DeanNotFoundError, DeanTimeoutError) as exc:
-            return ToolResult(success=False, error=str(exc))
+        current, errors = self._fetch_current()
 
         if not current and errors:
             return ToolResult(success=False, error="；".join(errors))
@@ -136,8 +132,10 @@ class DeanUpdatesTool(Tool):
     def _fetch_current(self) -> tuple[list[DeanUpdateItem], list[str]]:
         items: list[DeanUpdateItem] = []
         errors: list[str] = []
-        for source, label, cli_args in _SOURCES:
-            run = run_dean(cli_args, executable=self.executable, timeout=self.timeout)
+        for source, label, fetch_call in _SOURCES:
+            run = fetch_dean(
+                fetch_call, timeout=self.timeout, client_factory=self._client_factory
+            )
             if not run["ok"]:
                 errors.append(f"{label}：{run['error']}")
                 continue

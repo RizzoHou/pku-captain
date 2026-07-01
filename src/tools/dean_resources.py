@@ -1,64 +1,77 @@
-"""Public dean.pku.edu.cn resources via the external ``dean`` CLI.
+"""Public dean.pku.edu.cn resources via the vendored ``dean`` library.
 
-``pku-dean-cli`` lives at https://github.com/RizzoHou/pku-dean-cli. It fetches
-**public** resources from PKU's Office of Educational Administration site
-(no login required) and exposes the same stable JSON envelope pku-captain
-already consumes for ``plib`` / ``pku3b``: ``--format json`` before the
-subcommand, ``{"ok": true, "data": ...}`` / ``{"ok": false, "error": {...}}``
-always on stdout.
+``pku-dean-cli`` is vendored under ``vendor/pku-dean-cli`` (git subtree) and
+imported **in-process** as ``dean`` — no subprocess, no sibling ``.venv``. It
+fetches **public** resources from PKU's Office of Educational Administration
+site (no login required). The Tool shapes ``dean.resources.*`` calls into the
+same ``ToolResult`` / ``{"ok": ..., "data": ...}`` envelope the agent and
+dashboard already consume.
 
-Install the sibling repo next to pku-captain (``~/projects/pku-dean-cli``):
-
-    git clone https://github.com/RizzoHou/pku-dean-cli
-    cd pku-dean-cli && python3 -m venv .venv && .venv/bin/pip install -e .
-
-This tool exposes the **read** surface (sidebar, guide, rules, file
-listings) plus the two file-download actions ``download_get`` /
-``openinfo_get`` — they fetch a file by id (or several) into a local
-directory (default ``downloads/dean/<kind>``, which is gitignored) and
-return the saved paths. ``--all`` (fetch every page) stays omitted: it
-walks every page over HTTP and would risk the subprocess timeout and flood
-the conversation; callers page with ``page``.
+This tool exposes the **read** surface (sidebar, guide, rules, file listings)
+plus the two file-download actions ``download_get`` / ``openinfo_get`` — they
+fetch a file by id (or several) into a local directory (default
+``downloads/dean/<kind>``, which is gitignored) and return the saved paths.
+``--all`` (fetch every page) stays omitted: it walks every page over HTTP and
+would flood the conversation; callers page with ``page``.
 """
 
 from __future__ import annotations
 
-import json
-import os
-import shutil
-import subprocess
-from collections.abc import Sequence
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, ClassVar
 
+from dean import resources
+from dean.client import DeanClient
+from dean.errors import DeanError
+from dean.output import jsonable
+
 from .base import Tool, ToolResult
 
-DEFAULT_EXECUTABLE = "dean"
 DEFAULT_TIMEOUT = 60.0
 # Downloads stream a binary over HTTP, so they get a longer ceiling than the
 # read endpoints (mirrors plib's download timeout).
 DOWNLOAD_TIMEOUT = 180.0
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_WORKSPACE_ROOT = _REPO_ROOT.parent
-_LOCAL_EXECUTABLES = (
-    _WORKSPACE_ROOT / "pku-dean-cli" / ".venv" / "bin" / "dean",
-    _REPO_ROOT / ".local" / "bin" / "dean",
-)
+
+# A client factory lets tests inject a fake DeanClient (or one wrapping a stub
+# HTTP session) without touching the network; production builds a real client
+# per call with the appropriate timeout.
+ClientFactory = Callable[[float], DeanClient]
 
 
-class DeanNotFoundError(RuntimeError):
-    """Raised when the dean CLI cannot be located."""
+def _default_client_factory(timeout: float) -> DeanClient:
+    return DeanClient(timeout=timeout)
 
 
-class DeanTimeoutError(RuntimeError):
-    """Raised when a dean subprocess exceeds its timeout."""
+def fetch_dean(
+    call: Callable[[DeanClient], Any],
+    *,
+    timeout: float = DEFAULT_TIMEOUT,
+    client_factory: ClientFactory | None = None,
+) -> dict[str, Any]:
+    """Run one ``resources.*`` call in-process and return the stable envelope.
+
+    Returns ``{"ok": True, "data": jsonable(result)}`` on success or
+    ``{"ok": False, "error": <message>}`` when the library raises
+    :class:`~dean.errors.DeanError` (network/parse/not-found). Shared by
+    :class:`DeanResourcesTool` and ``DeanUpdatesTool`` so both go through one
+    error-isolated path with identical ``data`` shapes.
+    """
+    factory = client_factory or _default_client_factory
+    client = factory(timeout)
+    try:
+        result = call(client)
+    except DeanError as exc:
+        return {"ok": False, "error": exc.message}
+    return {"ok": True, "data": jsonable(result)}
 
 
 class DeanResourcesTool(Tool):
     name: ClassVar[str] = "dean_resources"
     description: ClassVar[str] = (
         "Fetch public resources from PKU's Office of Educational Administration "
-        "(教务部, dean.pku.edu.cn) via the local `dean` CLI — no login needed. "
+        "(教务部, dean.pku.edu.cn) — no login needed. "
         "Actions: `sidebar` (student-service links by category), `guide` by id "
         "(content behind a sidebar link), `rules_list` (校级/国家 regulations, "
         "scope school|national), `rules_show` by id (full rule text), "
@@ -142,145 +155,86 @@ class DeanResourcesTool(Tool):
     def __init__(
         self,
         *,
-        executable: str = DEFAULT_EXECUTABLE,
         timeout: float = DEFAULT_TIMEOUT,
+        client_factory: ClientFactory | None = None,
     ) -> None:
-        self.executable = executable
         self.timeout = timeout
+        self._client_factory = client_factory
 
     def invoke(self, args: dict[str, Any]) -> ToolResult:
         action = str(args.get("action") or "").strip()
         if action == "sidebar":
-            return self._run_json(["sidebar"])
+            return self._call(resources.get_sidebar)
         if action == "guide":
-            return self._show("guide", args)
+            return self._show(resources.show_guide, args, "guide")
         if action == "rules_show":
-            return self._show("rules", args, subcommand="show")
+            return self._show(resources.show_rule, args, "rules show")
         if action == "rules_list":
             scope = str(args.get("scope") or "school").strip()
-            cli_args = ["rules", "list", "--scope", scope, *self._page(args)]
-            return self._run_json(cli_args)
+            page = self._page(args)
+            return self._call(lambda c: resources.list_rules(c, scope, page=page))
         if action == "notice_show":
-            return self._show("notice", args, subcommand="show")
+            return self._show(resources.show_notice, args, "notice show")
         if action == "notice_list":
-            return self._run_json(["notice", "list", *self._page(args)])
+            page = self._page(args)
+            return self._call(lambda c: resources.list_notices(c, page=page))
         if action == "download_list":
-            return self._run_json(["download", "list", *self._page(args)])
+            page = self._page(args)
+            return self._call(lambda c: resources.list_files(c, "download", page=page))
         if action == "download_get":
             return self._download("download", args)
         if action == "openinfo_list":
-            return self._run_json(["openinfo", "list", *self._page(args)])
+            page = self._page(args)
+            return self._call(lambda c: resources.list_files(c, "openinfo", page=page))
         if action == "openinfo_get":
             return self._download("openinfo", args)
         return ToolResult(success=False, error=f"unknown action: {action!r}")
 
-    def _show(
-        self, command: str, args: dict[str, Any], *, subcommand: str | None = None
+    def _call(
+        self, call: Callable[[DeanClient], Any], *, timeout: float | None = None
     ) -> ToolResult:
-        resource_id = args.get("id")
-        if not isinstance(resource_id, int):
-            label = f"{command} {subcommand}" if subcommand else command
-            return ToolResult(success=False, error=f"`{label}` requires integer `id`")
-        cli_args = [command]
-        if subcommand:
-            cli_args.append(subcommand)
-        cli_args.append(str(resource_id))
-        return self._run_json(cli_args)
-
-    def _download(self, kind: str, args: dict[str, Any]) -> ToolResult:
-        ids = [str(item) for item in args.get("ids") or [] if isinstance(item, int)]
-        if isinstance(args.get("id"), int):
-            ids.insert(0, str(args["id"]))
-        if not ids:
-            return ToolResult(
-                success=False, error=f"`{kind}_get` requires `id` or `ids`"
-            )
-        output_dir = str(
-            args.get("output_dir") or (_REPO_ROOT / "downloads" / "dean" / kind)
+        run = fetch_dean(
+            call,
+            timeout=timeout if timeout is not None else self.timeout,
+            client_factory=self._client_factory,
         )
-        return self._run_json(
-            [kind, "get", *ids, "-o", output_dir], timeout=DOWNLOAD_TIMEOUT
-        )
-
-    @staticmethod
-    def _page(args: dict[str, Any]) -> list[str]:
-        page = args.get("page")
-        if isinstance(page, int) and page > 1:
-            return ["--page", str(page)]
-        return []
-
-    def _run_json(
-        self, cli_args: Sequence[str], *, timeout: float | None = None
-    ) -> ToolResult:
-        try:
-            run = run_dean(
-                cli_args,
-                executable=self.executable,
-                timeout=timeout if timeout is not None else self.timeout,
-            )
-        except (DeanNotFoundError, DeanTimeoutError) as exc:
-            return ToolResult(success=False, error=str(exc))
         if not run["ok"]:
             return ToolResult(success=False, error=run["error"])
         return ToolResult(success=True, data=run["data"])
 
+    def _show(
+        self,
+        call: Callable[[DeanClient, int], Any],
+        args: dict[str, Any],
+        label: str,
+    ) -> ToolResult:
+        resource_id = args.get("id")
+        if not isinstance(resource_id, int):
+            return ToolResult(success=False, error=f"`{label}` requires integer `id`")
+        return self._call(lambda c: call(c, resource_id))
 
-def resolve_executable(executable: str = DEFAULT_EXECUTABLE) -> str:
-    found = shutil.which(executable)
-    if found:
-        return found
-    if executable == DEFAULT_EXECUTABLE:
-        for path in _LOCAL_EXECUTABLES:
-            if path.exists():
-                return str(path)
-    locations = ", ".join(str(path) for path in _LOCAL_EXECUTABLES)
-    raise DeanNotFoundError(
-        f"could not find {executable!r} on PATH or at {locations}. "
-        "Install with: git clone https://github.com/RizzoHou/pku-dean-cli && "
-        "cd pku-dean-cli && python3 -m venv .venv && .venv/bin/pip install -e ."
-    )
-
-
-def run_dean(
-    args: Sequence[str],
-    *,
-    executable: str = DEFAULT_EXECUTABLE,
-    timeout: float = DEFAULT_TIMEOUT,
-) -> dict[str, Any]:
-    """Run ``dean --format json <args>`` and parse the stable envelope.
-
-    Returns ``{"ok": True, "data": ...}`` or ``{"ok": False, "error": str}``.
-    The envelope is parsed from stdout regardless of exit code, mirroring the
-    plib wrapper — the CLI writes ``{"ok": false, ...}`` on failure too.
-    """
-    binary = resolve_executable(executable)
-    argv = [binary, "--format", "json", *args]
-    try:
-        proc = subprocess.run(
-            argv,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout,
-            check=False,
-            cwd=_REPO_ROOT,
-            env=os.environ.copy(),
+    def _download(self, kind: str, args: dict[str, Any]) -> ToolResult:
+        ids = [item for item in args.get("ids") or [] if isinstance(item, int)]
+        if isinstance(args.get("id"), int):
+            ids.insert(0, args["id"])
+        if not ids:
+            return ToolResult(success=False, error=f"`{kind}_get` requires `id` or `ids`")
+        output_dir = str(
+            args.get("output_dir") or (_REPO_ROOT / "downloads" / "dean" / kind)
         )
-    except subprocess.TimeoutExpired as exc:
-        raise DeanTimeoutError(f"dean {' '.join(args)} timed out after {timeout}s") from exc
+        factory = self._client_factory or _default_client_factory
+        client = factory(DOWNLOAD_TIMEOUT)
+        try:
+            saved = [
+                str(resources.download_file(client, kind, fid, output_dir)) for fid in ids
+            ]
+        except DeanError as exc:
+            return ToolResult(success=False, error=exc.message)
+        return ToolResult(success=True, data={"saved": saved, "count": len(saved)})
 
-    try:
-        payload = json.loads(proc.stdout or "{}")
-    except json.JSONDecodeError:
-        err = proc.stderr.strip() or proc.stdout.strip() or "invalid JSON output"
-        return {"ok": False, "error": f"dean exited {proc.returncode}: {err}"}
-
-    if proc.returncode != 0 or not payload.get("ok", False):
-        error = payload.get("error") if isinstance(payload, dict) else None
-        if isinstance(error, dict):
-            message = error.get("message") or error.get("code") or str(error)
-        else:
-            message = str(error or proc.stderr.strip() or "dean command failed")
-        return {"ok": False, "error": message}
-    return {"ok": True, "data": payload.get("data")}
+    @staticmethod
+    def _page(args: dict[str, Any]) -> int:
+        page = args.get("page")
+        if isinstance(page, int) and page > 0:
+            return page
+        return 1

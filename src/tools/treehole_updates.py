@@ -23,11 +23,11 @@ from .base import Tool, ToolResult
 from .redact import redact
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_WORKSPACE_ROOT = _REPO_ROOT.parent
-_TREEHOLE_SRC = _WORKSPACE_ROOT / "pku-treehole-cli" / "src"
-if _TREEHOLE_SRC.exists() and str(_TREEHOLE_SRC) not in sys.path:
-    sys.path.insert(0, str(_TREEHOLE_SRC))
 
+# ``pku-treehole-cli`` is vendored under vendor/pku-treehole-cli (git subtree)
+# and installed as the top-level ``treehole`` package, so it imports directly —
+# no sibling-checkout sys.path shim. The try/except keeps a graceful runtime
+# error if the package is somehow unavailable (e.g. an install skipped).
 try:  # pragma: no cover - exercised through normal imports when available.
     from treehole.app import build_client, build_monitor
     from treehole.auth import Credentials, login
@@ -170,10 +170,11 @@ class TreeholeAuthService:
 DEFAULT_NOTIFY_INTERVAL = 60
 MIN_NOTIFY_INTERVAL = 30
 
-# The standalone daemon and notifier live in pku-treehole-cli; we drive them via
-# its venv entrypoint. pku-captain's own venv does not install the `treehole`
-# package (TreeholeUpdatesTool imports it via a sys.path shim, in-process).
-_TREEHOLE_VENV_BIN = _WORKSPACE_ROOT / "pku-treehole-cli" / ".venv" / "bin" / "treehole"
+# The macOS notifier daemon runs the vendored treehole CLI under launchd. Since
+# the package is now vendored, pku-captain's own venv exposes a `treehole`
+# console script (see pyproject [project.scripts]); point launchd at that
+# absolute path, falling back to whatever `treehole` is on PATH.
+_TREEHOLE_VENV_BIN = _REPO_ROOT / ".venv" / "bin" / "treehole"
 
 Runner = Callable[[list[str]], "subprocess.CompletedProcess[str]"]
 

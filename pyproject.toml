@@ -11,6 +11,10 @@ dependencies = [
     "PyQt6>=6.6",
     "requests>=2.31",
     "numpy>=1.26",
+    # Vendored under vendor/ (git subtree). plib/dean scrape HTML with these;
+    # treehole needs only requests. See vendor/*/pyproject.toml for provenance.
+    "beautifulsoup4>=4.12",
+    "lxml>=5.0",
 ]
 
 [project.optional-dependencies]
@@ -28,9 +32,20 @@ dev = [
 
 [project.scripts]
 pku-captain = "src.__main__:main"
+# Vendored treehole CLI entry point. The macOS notifier LaunchAgent shells out
+# to a `treehole` binary; exposing it from our own venv keeps that self-contained.
+treehole = "treehole.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src"]
+# `src` is our own package; the vendor/* entries expose the git-subtree'd
+# libraries (plib_cli, dean, treehole) as top-level imports, so no sys.path
+# shims or sibling-venv subprocesses are needed.
+packages = [
+    "src",
+    "vendor/plib-cli/src/plib_cli",
+    "vendor/pku-dean-cli/src/dean",
+    "vendor/pku-treehole-cli/src/treehole",
+]
 
 [tool.ruff]
 line-length = 100

@@ -1,213 +1,192 @@
 from __future__ import annotations
 
-import json
-import subprocess
+from dean.errors import DeanError
 
-from src.tools.dean_resources import DeanResourcesTool, run_dean
+from src.tools import dean_resources
+from src.tools.dean_resources import DeanResourcesTool
 
-
-def _fake_envelope(stdout: str, returncode: int = 0):
-    def fake_run(argv, **kwargs):  # noqa: ANN001, ANN003
-        fake_run.calls.append(argv)
-        fake_run.kwargs.append(kwargs)
-        return subprocess.CompletedProcess(argv, returncode, stdout=stdout, stderr="")
-
-    fake_run.calls = []
-    fake_run.kwargs = []
-    return fake_run
+# The tool now calls the vendored ``dean`` library in-process (no subprocess),
+# so tests fake ``dean.resources.*`` and assert on the resulting ToolResult and
+# the arguments the wrapper forwarded — not on a subprocess argv.
 
 
-def _patch(monkeypatch, fake_run) -> None:
-    monkeypatch.setattr("src.tools.dean_resources.resolve_executable", lambda _exe: "/bin/dean")
-    monkeypatch.setattr("src.tools.dean_resources.subprocess.run", fake_run)
+def _dummy_factory(_timeout):
+    # Resources are faked below, so the client is never used for HTTP.
+    return None
+
+
+def _patch_resource(monkeypatch, name, *, ret=None, exc=None):
+    calls = []
+
+    def fake(client, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003
+        calls.append({"args": args, "kwargs": kwargs})
+        if exc is not None:
+            raise exc
+        return ret
+
+    monkeypatch.setattr(dean_resources.resources, name, fake)
+    return calls
+
+
+def _tool(client_factory=_dummy_factory) -> DeanResourcesTool:
+    return DeanResourcesTool(client_factory=client_factory)
 
 
 def test_sidebar_passes_through_list_data(monkeypatch) -> None:
-    fake_run = _fake_envelope(
-        json.dumps(
-            {
-                "ok": True,
-                "data": [{"category": "课程和培养", "title": "选课", "url": "https://x/15"}],
-            }
-        )
+    calls = _patch_resource(
+        monkeypatch,
+        "get_sidebar",
+        ret=[{"category": "课程和培养", "title": "选课", "url": "https://x/15"}],
     )
-    _patch(monkeypatch, fake_run)
 
-    result = DeanResourcesTool().invoke({"action": "sidebar"})
+    result = _tool().invoke({"action": "sidebar"})
 
     assert result.success is True
     assert result.data[0]["title"] == "选课"
-    assert fake_run.calls == [["/bin/dean", "--format", "json", "sidebar"]]
+    assert len(calls) == 1
 
 
-def test_rules_list_scope_and_paging_argv(monkeypatch) -> None:
-    fake_run = _fake_envelope(json.dumps({"ok": True, "data": {"page": 2, "items": []}}))
-    _patch(monkeypatch, fake_run)
+def test_rules_list_scope_and_paging(monkeypatch) -> None:
+    calls = _patch_resource(monkeypatch, "list_rules", ret={"page": 2, "items": []})
 
-    result = DeanResourcesTool().invoke(
-        {"action": "rules_list", "scope": "national", "page": 2}
-    )
+    result = _tool().invoke({"action": "rules_list", "scope": "national", "page": 2})
 
     assert result.success is True
-    assert fake_run.calls == [
-        ["/bin/dean", "--format", "json", "rules", "list", "--scope", "national", "--page", "2"]
-    ]
+    assert calls[0]["args"] == ("national",)
+    assert calls[0]["kwargs"] == {"page": 2}
 
 
-def test_rules_list_default_scope_no_page_flag(monkeypatch) -> None:
-    fake_run = _fake_envelope(json.dumps({"ok": True, "data": {"page": 1, "items": []}}))
-    _patch(monkeypatch, fake_run)
+def test_rules_list_default_scope_and_page(monkeypatch) -> None:
+    calls = _patch_resource(monkeypatch, "list_rules", ret={"page": 1, "items": []})
 
-    DeanResourcesTool().invoke({"action": "rules_list"})
+    _tool().invoke({"action": "rules_list"})
 
-    # page 1 is the CLI default → no --page flag; scope defaults to school.
-    assert fake_run.calls == [
-        ["/bin/dean", "--format", "json", "rules", "list", "--scope", "school"]
-    ]
+    # scope defaults to school; page defaults to 1.
+    assert calls[0]["args"] == ("school",)
+    assert calls[0]["kwargs"] == {"page": 1}
 
 
 def test_guide_requires_int_id() -> None:
-    result = DeanResourcesTool().invoke({"action": "guide"})
+    result = _tool().invoke({"action": "guide"})
 
     assert result.success is False
     assert result.error == "`guide` requires integer `id`"
 
 
-def test_rules_show_builds_subcommand_argv(monkeypatch) -> None:
-    fake_run = _fake_envelope(json.dumps({"ok": True, "data": {"id": 20, "title": "学籍管理办法"}}))
-    _patch(monkeypatch, fake_run)
+def test_rules_show_forwards_id(monkeypatch) -> None:
+    calls = _patch_resource(
+        monkeypatch, "show_rule", ret={"id": 20, "title": "学籍管理办法"}
+    )
 
-    result = DeanResourcesTool().invoke({"action": "rules_show", "id": 20})
+    result = _tool().invoke({"action": "rules_show", "id": 20})
 
     assert result.success is True
     assert result.data["id"] == 20
-    assert fake_run.calls == [["/bin/dean", "--format", "json", "rules", "show", "20"]]
+    assert calls[0]["args"] == (20,)
 
 
-def test_notice_list_default_no_page_flag(monkeypatch) -> None:
-    fake_run = _fake_envelope(json.dumps({"ok": True, "data": {"page": 1, "items": []}}))
-    _patch(monkeypatch, fake_run)
+def test_notice_list_default_and_paging(monkeypatch) -> None:
+    calls = _patch_resource(monkeypatch, "list_notices", ret={"page": 3, "items": []})
 
-    DeanResourcesTool().invoke({"action": "notice_list"})
+    _tool().invoke({"action": "notice_list"})
+    _tool().invoke({"action": "notice_list", "page": 3})
 
-    assert fake_run.calls == [["/bin/dean", "--format", "json", "notice", "list"]]
-
-
-def test_notice_list_paging_argv(monkeypatch) -> None:
-    fake_run = _fake_envelope(json.dumps({"ok": True, "data": {"page": 3, "items": []}}))
-    _patch(monkeypatch, fake_run)
-
-    result = DeanResourcesTool().invoke({"action": "notice_list", "page": 3})
-
-    assert result.success is True
-    assert fake_run.calls == [
-        ["/bin/dean", "--format", "json", "notice", "list", "--page", "3"]
-    ]
+    assert calls[0]["kwargs"] == {"page": 1}
+    assert calls[1]["kwargs"] == {"page": 3}
 
 
-def test_notice_show_builds_subcommand_argv(monkeypatch) -> None:
-    fake_run = _fake_envelope(
-        json.dumps({"ok": True, "data": {"id": 743, "title": "期末考试安排通知"}})
+def test_notice_show_forwards_id(monkeypatch) -> None:
+    calls = _patch_resource(
+        monkeypatch, "show_notice", ret={"id": 743, "title": "期末考试安排通知"}
     )
-    _patch(monkeypatch, fake_run)
 
-    result = DeanResourcesTool().invoke({"action": "notice_show", "id": 743})
+    result = _tool().invoke({"action": "notice_show", "id": 743})
 
     assert result.success is True
     assert result.data["id"] == 743
-    assert fake_run.calls == [["/bin/dean", "--format", "json", "notice", "show", "743"]]
+    assert calls[0]["args"] == (743,)
 
 
 def test_notice_show_requires_int_id() -> None:
-    result = DeanResourcesTool().invoke({"action": "notice_show"})
+    result = _tool().invoke({"action": "notice_show"})
 
     assert result.success is False
     assert result.error == "`notice show` requires integer `id`"
 
 
-def test_error_envelope_surfaces_message(monkeypatch) -> None:
-    fake_run = _fake_envelope(
-        json.dumps({"ok": False, "error": {"code": "not_found", "message": "no rule found"}}),
-        returncode=1,
+def test_error_surfaces_message(monkeypatch) -> None:
+    _patch_resource(
+        monkeypatch, "show_rule", exc=DeanError("no rule found", code="not_found")
     )
-    _patch(monkeypatch, fake_run)
 
-    result = DeanResourcesTool().invoke({"action": "rules_show", "id": 99999999})
+    result = _tool().invoke({"action": "rules_show", "id": 99999999})
 
     assert result.success is False
     assert result.error == "no rule found"
 
 
-def test_download_get_single_id_argv(monkeypatch, tmp_path) -> None:
-    fake_run = _fake_envelope(
-        json.dumps({"ok": True, "data": {"saved": ["/tmp/out/手册.pdf"], "count": 1}})
-    )
-    _patch(monkeypatch, fake_run)
+def test_download_get_single_id_uses_download_timeout(monkeypatch) -> None:
+    calls = _patch_resource(monkeypatch, "download_file", ret="/tmp/out/手册.pdf")
+    timeouts: list[float] = []
 
-    out = str(tmp_path / "dl")
-    result = DeanResourcesTool().invoke(
-        {"action": "download_get", "id": 224, "output_dir": out}
+    def factory(timeout):
+        timeouts.append(timeout)
+        return None
+
+    result = _tool(factory).invoke(
+        {"action": "download_get", "id": 224, "output_dir": "/tmp/dl"}
     )
 
     assert result.success is True
-    assert result.data["count"] == 1
-    assert fake_run.calls == [
-        ["/bin/dean", "--format", "json", "download", "get", "224", "-o", out]
-    ]
+    assert result.data == {"saved": ["/tmp/out/手册.pdf"], "count": 1}
+    # resources.download_file(client, kind, fid, output_dir)
+    assert calls[0]["args"] == ("download", 224, "/tmp/dl")
     # downloads stream a binary → the longer ceiling is used, not the read timeout.
-    assert fake_run.kwargs[0]["timeout"] == 180.0
+    assert timeouts == [dean_resources.DOWNLOAD_TIMEOUT]
 
 
-def test_download_get_multi_id_argv(monkeypatch, tmp_path) -> None:
-    fake_run = _fake_envelope(json.dumps({"ok": True, "data": {"saved": [], "count": 2}}))
-    _patch(monkeypatch, fake_run)
+def test_download_get_multi_id_order(monkeypatch) -> None:
+    calls = _patch_resource(monkeypatch, "download_file", ret="/tmp/x")
 
-    out = str(tmp_path / "dl")
     # `id` is prepended to `ids`, preserving the explicit-then-list order.
-    DeanResourcesTool().invoke(
-        {"action": "download_get", "id": 224, "ids": [225], "output_dir": out}
+    _tool().invoke(
+        {"action": "download_get", "id": 224, "ids": [225], "output_dir": "/tmp/dl"}
     )
 
-    assert fake_run.calls == [
-        ["/bin/dean", "--format", "json", "download", "get", "224", "225", "-o", out]
-    ]
+    fids = [c["args"][1] for c in calls]
+    assert fids == [224, 225]
 
 
 def test_openinfo_get_default_output_dir(monkeypatch) -> None:
-    fake_run = _fake_envelope(json.dumps({"ok": True, "data": {"saved": [], "count": 1}}))
-    _patch(monkeypatch, fake_run)
+    calls = _patch_resource(monkeypatch, "download_file", ret="/tmp/x")
 
-    DeanResourcesTool().invoke({"action": "openinfo_get", "ids": [17]})
+    _tool().invoke({"action": "openinfo_get", "ids": [17]})
 
-    argv = fake_run.calls[0]
-    assert argv[:6] == ["/bin/dean", "--format", "json", "openinfo", "get", "17"]
-    assert argv[6] == "-o"
+    kind, fid, out_dir = calls[0]["args"]
+    assert (kind, fid) == ("openinfo", 17)
     # falls back to the gitignored downloads/dean/<kind> directory.
-    assert argv[7].endswith("/downloads/dean/openinfo")
+    assert out_dir.endswith("/downloads/dean/openinfo")
 
 
 def test_download_get_requires_id() -> None:
-    result = DeanResourcesTool().invoke({"action": "download_get"})
+    result = _tool().invoke({"action": "download_get"})
 
     assert result.success is False
     assert result.error == "`download_get` requires `id` or `ids`"
 
 
 def test_unknown_action() -> None:
-    result = DeanResourcesTool().invoke({"action": "nope"})
+    result = _tool().invoke({"action": "nope"})
 
     assert result.success is False
     assert "unknown action" in str(result.error)
 
 
-def test_run_dean_invalid_json(monkeypatch) -> None:
-    def fake_run2(argv, **kwargs):  # noqa: ANN001, ANN003
-        return subprocess.CompletedProcess(argv, 1, stdout="not json", stderr="boom")
+def test_fetch_dean_surfaces_error() -> None:
+    def boom(_client):
+        raise DeanError("boom", code="network_error")
 
-    monkeypatch.setattr("src.tools.dean_resources.resolve_executable", lambda _exe: "/bin/dean")
-    monkeypatch.setattr("src.tools.dean_resources.subprocess.run", fake_run2)
-
-    result = run_dean(["sidebar"])
+    result = dean_resources.fetch_dean(boom, client_factory=_dummy_factory)
 
     assert result["ok"] is False
-    assert "boom" in result["error"]
+    assert result["error"] == "boom"
