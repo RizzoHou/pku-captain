@@ -1,0 +1,22 @@
+# Credentials — never commit
+secrets/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Local state / caches
+state.json
+*.notify.json
+logs/
+*.tmp
+*.egg-info/
+build/
+dist/
+
+# Claude Code — local dev guidance / settings, not shared
+CLAUDE.md
+.claude/
