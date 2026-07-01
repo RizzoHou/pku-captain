@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta name="Author" content="微普科技http://www.wiipu.com" />
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>关于2025－2026学年第二学期期末考试工作安排的通知 - 通知公告 - 北京大学教务部</title>
+    <link rel="stylesheet" type="text/css" href="css/basic.css" />
+    <link rel="stylesheet" type="text/css" href="css/style.css" />
+    <link rel="stylesheet" type="text/css" href="css/query.css" />
+    <script type="text/javascript" src="js/jquery.min.js"></script>
+    <script type="text/javascript" src="js/sHover.min.js"></script>
+    <script type="text/javascript" src="js/iscroll.js"></script>
+    <script type="text/javascript" src="js/common.js"></script>
+    <!--[if IE 6]>
+    <script type="text/javascript" src="js/dd_belatedpng.min.js"></script>
+    <script type="text/javascript">
+        DD_belatedPNG.fix('img,div,span,p');
+    </script>
+    <![endif]-->
+</head>
+
+<body>
+<div id="wrap">
+    <!--右侧菜单-->
+    <!--右侧菜单-->
+<script type="text/javascript" src="js/layer/layer.js"></script>
+<script type="text/javascript">
+    $(function(){
+        /**按Enter登录**/
+        $('.form').keyup(function(event){
+            if(event.keyCode ==13){
+                $("#sear_right_btn").trigger("click");
+            }
+        });
+        $('#sear_right_btn').click(function(){
+            var text = $('#sear_right_txt').val();
+            if (text.length == 0) {
+                return false;
+            }
+            $.ajax({
+                type        : 'POST',
+                data        : {
+                    text    : text
+                },
+                dataType    : 'json',
+                url         : 'right_do.php?act=search',
+                success     : function(data){
+                    var status = data.status;
+                    var msg = data.msg;
+                    if(status){
+                        $('#result').empty();
+                        $('#result').append(msg);
+                    }else {
+                        $('#result').empty();
+                    }
+                }
+            });
+        });
+    });
+</script>
+<div id="right_nav">
+    <div class="btn_closemark"></div>
+    <div class="right_tab right_sub_tab">
+        <div class="right_item">
+            <div class="right_pos">
+                <img src="images/icon_right_menu.png" alt="" />
+            </div>
+            <div class="toright">菜单</div>
+        </div>
+        <div class="right_item right_link">
+            <div class="right_pos">
+                <img src="images/icon_right5.png" alt="" />
+            </div>
+            <div class="toright">链接</div>
+        </div>
+        <div class="right_item right_link">
+            <div class="right_pos">
+                <img src="images/icon_right6.png" alt="" />
+            </div>
+            <div class="toright">搜索</div>
+        </div>
+    </div>
+    <div class="right_con">
+        <div class="subcon block">
+            <div class="student_nav">
+                <ul>
+                    <li>
+                        <p class="bdt tosubnav"><img src="images/public/public1.png" alt=""/><a>学生</a></p>
+                        <div class="sub_stunav">
+                            <span><a href="#" >学生服务中心</a></span><span><a href="student_info.php?type=1&id=8" >课程和培养</a></span><span><a href="student_info.php?type=2&id=15" >选课和退课</a></span><span><a href="student_info.php?type=3&id=18" >考试和成绩</a></span><span><a href="student_info.php?type=4&id=27" >课程评估</a></span><span><a href="student_info.php?type=5&id=28" >双专业/辅修</a></span><span><a href="student_info.php?type=6&id=22" >本科生科研</a></span><span><a href="student_info.php?type=7&id=21" >推免研究生</a></span><span><a href="student_info.php?type=8&id=40" >学籍异动</a></span><span><a href="student_info.php?type=9&id=29" >学籍信息</a></span><span><a href="student_info.php?type=10&id=46" >证件和证明</a></span><span><a href="student_info.php?type=11&id=23" >出境和转学分</a></span><span><a href="student_info.php?type=12&id=51" class="bdn">教室查询预约</a></span>                        </div>
+                    </li>
+                    <li>
+                        <p class="tosubnav"><img src="images/public/public2.png" alt="" /><a>教师</a></p>
+                        <div class="sub_stunav">
+                            <span><a href="teacher_info.php?type=1&id=1" >教师手册</a></span><span><a href="teacher_info.php?type=6&id=28" >教学日历</a></span><span><a href="teacher_info.php?type=2&id=19" >日常教学工作</a></span><span><a href="teacher_info.php?type=3&id=22" >课程和教学改革</a></span><span><a href="teacher_info.php?type=4&id=2" class="bdn">教学质量</a></span><span><a href="teacher_info.php?type=5&id=8" >教材</a></span>                        </div>
+                    </li>
+                    <li>
+                        <p class="tosubnav"><img src="images/public/public3.png" alt="" /><a>校友</a></p>
+                        <div class="sub_stunav">
+                            <span><a href="alumnus_info.php?id=1" >补办毕业/学位证明书（遗失证书者）</a></span><span><a href="alumnus_info.php?id=2" >本科成绩单、学历学位证明</a></span><span><a href="https://dean.pku.edu.cn/service/web/certificateVerification.php" >本科学历学位验证</a></span><span><a href="alumnus_info.php?id=4" class="bdn">学信网相关事项</a></span>                        </div>
+                    </li>
+                    <li>
+                        <p class="tosubnav"><img src="images/public/public4.png" alt="" /><a>公众</a></p>
+                        <div class="sub_stunav">
+                            <span><a href="public_info.php?id=1" >交换生</a></span><span><a href="public_info.php?id=2" >旁听</a></span><span><a href="bkzs.pku.edu.cn" >本科招生</a></span><span><a href="http://summer.pku.edu.cn/" >暑期学校</a></span><span><a href="https://dean.pku.edu.cn/service/web/certificateVerification.php" >学历学位验证</a></span><span><a href="public_info.php?id=8" >2025年教学成果奖材料</a></span><span><a href="public_info.php?id=11" class="bdn">北京大学成绩单验真方法</a></span>                        </div>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        <div class="subcon">
+            <div class="link_nav student_nav">
+                <div class="link_item">
+                    <div class="link_wrap">
+                        <a href="http://elective.pku.edu.cn" target="_blank">选课系统</a><a href="http://portal.pku.edu.cn" target="_blank">校内门户</a><a href="http://bdkj.pku.edu.cn/" target="_blank">教室预约</a><a href="https://dean.pku.edu.cn/service/web/courseSearch.php" target="_blank">课表查询</a><a href="http://kcpg.pku.edu.cn/" target="_blank">课程评估</a><a href="http://162.105.209.64/benyan" target="_blank">本科生科研</a><a href="https://dean.pku.edu.cn/service/web/login.php" target="_blank">申办成绩单</a><a href="http://dean.pku.edu.cn/web/student_info.php?type=12&amp;id=47" target="_blank">空闲教室查询</a>                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="subcon">
+            <div class="search_nav student_nav">
+                <div class="form">
+                    <input type="text" name="sear_right_txt" id="sear_right_txt" placeholder="搜索"/>
+                    <input type="button" name="sear_right_btn" id="sear_right_btn"/>
+                </div>
+                <div id="result">
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<!--点击右侧出现的遮罩层-->
+<div id="right_mark"></div>    <!--二级banner-->
+    <div id="sub_banner">
+        <img class="bg_sunbanner" src="images/banner/banner_news.jpg" alt="" />
+        <div class="w1200">
+            <div class="sub_log">
+                <a href="http://www.pku.edu.cn/" target="_blank">
+                    <img src="images/subtop_logo1.png" alt="北京大学" />
+                </a>
+                <a href="../index.php">
+                    <img src="images/subtop_logo2.png" alt="北京大学教务部" />
+                </a>
+            </div>
+            <div class="sub_title">
+                <div class="banner_text">
+                    <h2>通知公告</h2>
+                    <span>NOTICE</span>
+                    <div class="sub_title_l"></div>
+                    <div class="sub_title_r"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!--二级内容部分-->
+    <div id="sub_content" class="news_info">
+        <div class="w1200">
+            <!--当前位置-->
+            <div class="top_page">
+                <a href="../index.php">首页</a>
+                <span>&gt;</span>
+                <a href="notice.php">通知公告</a>
+                <span>&gt;</span>
+                <a class="active">关于2025－2026学年第二学期期末考试工作安排的通知</a>
+            </div>
+            <div class="news_con">
+                <div class="newsinfo_box">
+                    <h1>关于2025－2026学年第二学期期末考试工作安排的通知</h1>
+                    <span>2026-05-20</span>
+                    <p>根据我校教学进程和校历安排，2026年6月15日起至6月28日为本学期期末考试时间，现将期末考试的有关事项通知如下：&nbsp;</p>
+
+<p>&nbsp;</p>
+
+<p><strong>一、日程安排</strong></p>
+
+<p>1、公选课、通选课考试时间为2026年6月8日－14日，6月19日（端午节假期，周五）原则上不安排考试。公选课、通选课以外的各类课程考试一律安排在考试周内进行，原则上不能提前考试。请院系在系统里核对考试计划并提醒任课老师。</p>
+
+<p>2、考试周内的考试时间安排是：<strong>上午</strong><strong>8</strong><strong>：</strong><strong>30</strong><strong>－</strong><strong>10</strong><strong>：</strong><strong>30</strong><strong>，下午</strong><strong>2</strong><strong>：</strong><strong>00</strong><strong>－</strong><strong>4</strong><strong>：</strong><strong>00</strong><strong>，晚上</strong><strong>6</strong><strong>：</strong><strong>30</strong><strong>－</strong><strong>8</strong><strong>：</strong><strong>30</strong></p>
+
+<p>3、公共必修课程考试时间安排：</p>
+
+<p><strong>大学英语：</strong>2026年6月16日（周二）晚上</p>
+
+<p>所有大英课程都在此时间考试，考场安排将于考试前一周在教务部网站、北大BBS课程版面和大学英语教研室版面公布。</p>
+
+<p><strong>军事理论</strong>：2026年6月17日（周三）晚上&nbsp;&nbsp;&nbsp;</p>
+
+<p><strong>政治理论：</strong></p>
+
+<p>6月18日（周四）晚上：思想道德与法治&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</p>
+
+<p>6月21日（周日）下午：中国近现代史纲要&nbsp;&nbsp;&nbsp;&nbsp;</p>
+
+<p>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; 马克思主义基本原理&nbsp; &nbsp;</p>
+
+<p>6月21日（周日）晚上：</p>
+
+<p>毛泽东思想和中国特色社会主义理论体系概论&nbsp;&nbsp;&nbsp;</p>
+
+<p>习近平新时代中国特色社会主义思想概论&nbsp;&nbsp;&nbsp;</p>
+
+<p><strong>计算概论</strong><strong>（</strong><strong>C</strong><strong>）</strong><strong>:</strong>&nbsp;6月16日（周二）下午&nbsp;</p>
+
+<p><strong>数据结构与算法（B）：</strong>&nbsp;6月23日（周二）下午 &nbsp;&nbsp;</p>
+
+<p>&nbsp;&nbsp;&nbsp;&nbsp;以上四类公共必修课的考试方式和考场安排分别由大学英语教研室、武装部、马克思主义学院、信息学院另行通知。其他多个院系学生修读的课程，如高等数学、普通物理等的考试，由开课单位负责安排。</p>
+
+<p>&nbsp;</p>
+
+<p><strong>二、纪律要求</strong></p>
+
+<p>北京大学一贯提倡&ldquo;勤奋、严谨、求实、创新&rdquo;的学风，考风考纪的宣传教育十分重要。各院（系、所、中心）主管领导要认真抓好考试工作的各个环节。期末考试统一组织，考前加强考试纪律和学术诚信教育。</p>
+
+<p>1、院（系、所、中心）通过领导办公会等形式，结合本单位情况研究落实考试工作的措施、要求和安排。</p>
+
+<p>2、明确任课教师、助教、班级主任和监考人员的工作职责，落实工作任务和要求，包括组织复习、辅导答疑、命题、监考、试卷评阅和成绩的评定等。</p>
+
+<p>本着以人为本防范在先的原则，要重视加强对主考教师和监考人员的考场职责培训，按规定组织考试，维持考场秩序，提示考生清理座位物品。对考试过程中有违纪苗头的学生及时警告纠正，对确有违纪作弊行为的学生，及时认定并注意保留证据，证据和认定记录务必要有违纪作弊者签字及全体监考人员签字。</p>
+
+<p>3、加强学生考试纪律和学术诚信教育，要申明考试的目的、要求和纪律，强调学术诚信，通过考试纪律、学术规范的学习和典型事例的警示，教育学生以端正、诚实的态度对待考试，培养学生诚实、守信、遵纪、守法的品德和作风。</p>
+
+<p>4、学生应自觉遵守考场纪律，积极配合监考工作。对于考核现场发现或者事后有证据举报的违纪、作弊情况，将按照学校相关规定严肃处理。</p>
+
+<p>北京大学学生须严格遵守考场纪律。除非主考教师另有规定，学生只能携带必要的文具参加考试，其它所有物品（包括空白纸张、手机和智能手表等电子设备）不得带入座位；<strong>已经带入考场的手机和</strong><strong>智能手表</strong><strong>等电子设备必须关机，与其他物品一起集中放在监考人员指定位置，不得随身携带或带入座位及旁边。</strong><strong>对于本科生违反考试与学习纪律的情况，将依据《北京大学本科考试工作与学习纪律管理规定》的相关条款严肃处理</strong>。</p>
+
+<p>各院系应提前确定各项考试工作的时间安排以及巡考计划，经主管教学的院长（系主任）签字同意后，报教务部备案。本学期期末考试的巡考工作仍将由教务长办公室组织教务部、研究生院、学生工作部、团委等部门共同进行。</p>
+
+<p>&nbsp;</p>
+
+<p style="text-align:right">&nbsp;&nbsp;教务部</p>
+
+<p style="text-align:right">2026年5月20日</p>
+                    <div class="share_ds">
+                        <div class="share_txt">分享到：</div>
+                        <div class="bdsharebuttonbox" data-tag="share_1">
+                            <a class="bds_weixin" data-cmd="weixin" title="分享到微信"></a>
+                            <a class="bds_qzone" data-cmd="qzone" title="分享到qq空间"></a>
+                            <a class="bds_tsina" data-cmd="tsina" title="分享到新浪微博"></a>
+                        </div>
+                        <div class="clear"></div>
+                    </div>
+                </div>
+                                <div class="red_bar">
+                    <div class="red_con">
+                                                <div class="float_l">
+                            <p><a href="notice_details.php?id=744">关于南京大学2026年C9暑期学校报名的通知</a></p>
+                            <a class="cur" href="notice_details.php?id=744">上一条</a>
+                        </div>
+                                                <div class="float_r">
+                            <p><a href="notice_details.php?id=742">关于2026年上半年全国大学英语四、六级口语考试的考前通知</a></p>
+                            <a class="cur" href="notice_details.php?id=742">下一条</a>
+                        </div>
+                                            </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!--二级公共底部-->
+    <!-- 二级公共底部 -->
+<div id="sub_footer">
+    <div class="w1200">
+        <div class="footer_l">
+            <a href="http://www.pku.edu.cn/" target="_blank">
+                <img src="images/sub_logo_footer.png" alt="logo"/>
+            </a>
+            <a href="../index.php">
+                <img src="images/sub_logo_footer2.png" alt="logo"/>
+            </a>
+        </div>
+        <div class="footer_r">
+            <div class="footer_rlink">
+                <a href="about.php">了解我们</a>
+                <a href="download.php">信息下载</a>
+                <a>友情链接</a>
+                <a>常用服务</a>
+            </div>
+            <p>Copyright©1998-2018  北京大学教务部  All Rights Reserved. 技术支持：<a href="http://www.wiipu.com" target="_blank">微普科技</a></p>
+        </div>
+    </div>
+    <div id="footer">
+        <div class="footer_con">
+            <div class="footer_logo">
+                <a href="http://www.pku.edu.cn/" target="_blank">
+                    <img src="images/logo1.png" alt="北京大学Logo"/>
+                </a>
+                <a href="../index.php">
+                    <img src="images/logo2.png" alt="北大教务处Logo"/>
+                </a>
+            </div>
+            <ul class="footer_nav">
+                <li>
+                    <a class="a_top">了解我们</a>
+                    <a href="about.php">本科教育概览</a>
+                    <a href="about_inst.php">机构设置</a>
+                    <a href="http://dean.pku.edu.cn/">旧版网站</a>
+                </li>
+                <li>
+                    <a class="a_top">信息下载</a>
+                    <a href="openinfo.php">信息公开</a>
+                    <a href="http://xxgk.pku.edu.cn/" target="_blank">信息公开网</a>
+                    <a href="download.php" target="_blank">下载</a>
+                </li>
+                <li>
+                    <a class="a_top">友情链接</a>
+                    <a href="https://www.pku.edu.cn/campus.html#p3a" target="_blank">校历</a><a href="http://www.lib.pku.edu.cn" target="_blank">图书馆</a><a href="http://www.chsi.com.cn/" target="_blank">学信网</a><a href="http://xgb.pku.edu.cn/jxj/jxjxm/index.htm" target="_blank">奖励奖学金</a><a href="http://www.oir.pku.edu.cn/" target="_blank">国际交流</a><a href="http://hmt.pku.edu.cn/" target="_blank">港澳台交流</a><a href="https://scc.pku.edu.cn/" target="_blank">就业服务</a><a href="http://bdst.pku.edu.cn" target="_blank">北大社团</a><a href="http://bdjcjd.pku.edu.cn/index.php" target="_blank">北京大学教材基地</a>                </li>
+                <li class="last">
+                    <a class="a_top">常用服务</a>
+                    <a href="http://www.pku.edu.cn/academics/index.htm" target="_blank">本科院系</a><a href="http://elective.pku.edu.cn" target="_blank">选课系统</a><a href="http://portal.pku.edu.cn" target="_blank">校内门户</a><a href="https://dean.pku.edu.cn/service/web/courseSearch.php" target="_blank">课表查询</a><a href="http://bdkj.pku.edu.cn/" target="_blank">教室预约</a><a href="https://portal.pku.edu.cn/portal2017/#/pub/freeClassroom" target="_blank">空闲教室查询</a><a href="http://dean.pku.edu.cn/student/" target="_blank">申办成绩单</a><a href="http://kcpg.pku.edu.cn/" target="_blank">课程评估</a><a href="http://162.105.209.64/benyan" target="_blank">本科生科研</a>                </li>
+            </ul>
+            <div class="clear"></div>
+        </div>
+        <div class="footer_copy">Copyright©  北京大学教务部  All Rights Reserved. 技术支持：<a href="http://www.wiipu.com" target="_blank">微普科技</a></div>
+    </div>
+</div>    <div id="return">
+        <img src="images/return_arr.png" alt=""/>
+    </div>
+</div>
+</body>
+<script>
+    $(function () {
+        var title = $("title").text();
+        var title_H = $("#sub_content .newsinfo_box h2").text();
+        var content = $("#sub_content .newsinfo_box p").first().text();
+        var url = window.location.href;
+        var imgUrl = $("#sub_content .newsinfo_box img").first().attr("src");
+        console.log(content +"...."+ url +"...."+ imgUrl);
+        window._bd_share_config = {
+            common : {
+                bdText : title_H +" - "+ title,
+                bdDesc : content,
+                bdUrl : url,
+                bdPic : imgUrl
+            },
+            share : [{
+                "bdSize" : 16
+            }]
+        };
+        with(document)0[(getElementsByTagName('head')[0]||body).appendChild(createElement('script')).src='http://bdimg.share.baidu.com/static/api/js/share.js?cdnversion='+~(-new Date()/36e5)];
+    })
+</script>
+</html>

@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="Author" content="微普科技http://www.wiipu.com"/>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>北京大学教务部</title>
+    <link rel="stylesheet" type="text/css" href="web/css/basic.css"/>
+    <link rel="stylesheet" type="text/css" href="web/css/style.css"/>
+    <link rel="stylesheet" type="text/css" href="web/css/query.css"/>
+    <script type="text/javascript" src="web/js/jquery.min.js"></script>
+    <script type="text/javascript" src="web/js/sHover.min.js"></script>
+    <script type="text/javascript" src="web/js/iscroll.js"></script>
+    <script type="text/javascript" src="web/js/count.js"></script>
+    <script type="text/javascript" src="web/js/index.js"></script>
+    <!--[if IE 6]>
+    <script type="text/javascript" src="web/js/dd_belatedpng.min.js"></script>
+    <script type="text/javascript">
+        DD_belatedPNG.fix('img,div,span,p');
+    </script>
+    <![endif]-->
+</head>
+<body>
+<!--index-->
+<div id="wrap">
+    <!--顶部-->
+        <div id="wrap_banner" style="background-image: url(https://dean.pku.edu.cn/userfiles/upload/banner/202005161019098774.jpg);">
+        <!--顶部logo-->
+        <div id="wrap_logo">
+            <a href="http://www.pku.edu.cn/" target="_blank">
+                <img src="web/images/logo1.png" alt="北京大学Logo" />
+            </a>
+            <a href="index.php">
+                <img src="web/images/logo2.png" alt="北京大学教务部Logo" />
+            </a>
+        </div>
+        <div id="wrap_arr">
+            <a href="#container"></a>
+        </div>
+        <div class="menu_tab">
+            <div class="tab">
+                <img src="web/images/tab1.png"/>
+                <span>学生</span>
+            </div>
+            <div class="tab">
+                <img src="web/images/tab2.png"/>
+                <span>教师</span>
+            </div>
+            <div class="tab">
+                <img src="web/images/tab3.png"/>
+                <span>校友</span>
+            </div>
+            <div class="tab">
+                <img src="web/images/tab4.png"/>
+                <span>公众</span>
+            </div>
+        </div>
+
+        <!--顶部右侧内容-->
+        <!--顶部右侧内容-->
+<script type="text/javascript" src="web/js/layer/layer.js"></script>
+<script type="text/javascript">
+    $(function(){
+        /**按Enter登录**/
+        $('.form').keyup(function(event){
+            if(event.keyCode ==13){
+                $("#sear_right_btn").trigger("click");
+            }
+        });
+        $('#sear_right_btn').click(function(){
+            var text = $('#sear_right_txt').val();
+            if (text.length == 0) {
+                return false;
+            }
+            $.ajax({
+                type        : 'POST',
+                data        : {
+                    text    : text
+                },
+                dataType    : 'json',
+                url         : 'web/right_do.php?act=search',
+                success     : function(data){
+                    var status = data.status;
+                    var msg = data.msg;
+                    if(status){
+                        $('#result').empty();
+                        $('#result').append(msg);
+                    }else {
+                        $('#result').empty();
+                    }
+                }
+            });
+        });
+    });
+</script>
+<div id="right_nav" class="index_nav">
+    <div class="btn_closemark"></div>
+    <div class="right_tab">
+        <div class="right_item">
+            <div class="right_pos">
+                <img src="web/images/icon_right1.png" alt=""/>
+            </div>
+            <div class="toright">学生</div>
+        </div>
+        <div class="right_item">
+            <div class="right_pos">
+                <img src="web/images/icon_right2.png" alt=""/>
+            </div>
+            <div class="toright">教师</div>
+        </div>
+        <div class="right_item">
+            <div class="right_pos">
+                <img src="web/images/icon_right3.png" alt=""/>
+            </div>
+            <div class="toright">校友</div>
+        </div>
+        <div class="right_item">
+            <div class="right_pos">
+                <img src="web/images/icon_right4.png" alt=""/>
+            </div>
+            <div class="toright">公众</div>
+        </div>
+        <div class="right_item right_link">
+            <div class="right_pos">
+                <img src="web/images/icon_right5.png" alt=""/>
+            </div>
+            <div class="toright">链接</div>
+        </div>
+        <div class="right_item right_link">
+            <div class="right_pos">
+                <img src="web/images/icon_right6.png" alt=""/>
+            </div>
+            <div class="toright">搜索</div>
+        </div>
+    </div>
+    <div class="right_con">
+        <div class="subcon block">
+            <div class="student_nav">
+                <ul>
+                    <li>
+                        	<a href="https://dean.pku.edu.cn/service/" target="_blank"><p class="bdt tosubnav"><img src="web/images/icon/icon8.png" alt=""/>学生服务中心</p></a></li><li>
+                       				<p class="bdt tosubnav"><img src="web/images/icon/icon1.png" alt=""/>课程和培养</p><div class="sub_stunav"><span ><a href="web/student_info.php?type=1&id=8" >专业设置</a></span><span ><a href="web/student_info.php?type=1&id=2" >培养方案</a></span><span ><a href="web/student_info.php?type=1&id=1" >核心课程</a></span><span ><a href="web/student_info.php?type=1&id=4" >通识教育课程</a></span><span ><a href="web/student_info.php?type=1&id=6" >小班课教学</a></span><span ><a href="web/student_info.php?type=1&id=7" >英文授课课程</a></span><span ><a href="https://dean.pku.edu.cn/service/web/courseSearch.php" target="_blank">全校课表查询</a></span><span ><a href="web/student_info.php?type=1&id=54" >思政选择性必修课</a></span><span  class="bdn"><a href="web/student_info.php?type=1&id=53" >劳动教育课程</a></span></div></li><li>
+                       				<p class="bdt tosubnav"><img src="web/images/icon/icon2.png" alt=""/>选课和退课</p><div class="sub_stunav"><span ><a href="web/student_info.php?type=2&id=15" >选课</a></span><span ><a href="web/student_info.php?type=2&id=9" >超学分选课</a></span><span ><a href="web/student_info.php?type=2&id=10" >冲突选课</a></span><span ><a href="web/student_info.php?type=2&id=11" >跨院系选课</a></span><span ><a href="web/student_info.php?type=2&id=12" >手工选课</a></span><span ><a href="web/student_info.php?type=2&id=16" >重修</a></span><span ><a href="web/student_info.php?type=2&id=17" >自修和免修</a></span><span ><a href="web/student_info.php?type=2&id=48" >结业生选课</a></span><span ><a href="web/student_info.php?type=2&id=14" >退课</a></span><span  class="bdn"><a href="web/student_info.php?type=2&id=13" >暑期学校选课</a></span></div></li><li>
+                       				<p class="bdt tosubnav"><img src="web/images/icon/icon3.png" alt=""/>考试和成绩</p><div class="sub_stunav"><span ><a href="web/student_info.php?type=3&id=18" >成绩和查卷</a></span><span ><a href="web/student_info.php?type=3&id=19" >成绩单</a></span><span ><a href="web/student_info.php?type=3&id=20" >缓考</a></span><span  class="bdn"><a href="web/student_info.php?type=3&id=49" >考试纪律</a></span></div></li><li>
+                       				<p class="bdt tosubnav"><img src="web/images/icon/icon4.png" alt=""/>课程评估</p><div class="sub_stunav"><span  class="bdn"><a href="web/student_info.php?type=4&id=27" >课程评估</a></span></div></li><li>
+                       				<p class="bdt tosubnav"><img src="web/images/icon/icon5.png" alt=""/>双专业/辅修</p><div class="sub_stunav"><span  class="bdn"><a href="web/student_info.php?type=5&id=28" >双专业辅修</a></span></div></li><li>
+                       				<p class="bdt tosubnav"><img src="web/images/icon/icon6.png" alt=""/>本科生科研</p><div class="sub_stunav"><span  class="bdn"><a href="web/student_info.php?type=6&id=22" >本科生科研</a></span></div></li><li>
+                       				<p class="bdt tosubnav"><img src="web/images/icon/icon7.png" alt=""/>推免研究生</p><div class="sub_stunav"><span  class="bdn"><a href="web/student_info.php?type=7&id=21" >推免资格申请指南</a></span></div></li><li>
+                       				<p class="bdt tosubnav"><img src="web/images/icon/icon8.png" alt=""/>学籍异动</p><div class="sub_stunav"><span ><a href="web/student_info.php?type=8&id=40" >转系转专业</a></span><span ><a href="web/student_info.php?type=8&id=39" >休学</a></span><span ><a href="web/student_info.php?type=8&id=38" >延期毕业</a></span><span ><a href="web/student_info.php?type=8&id=33" >提前毕业</a></span><span ><a href="web/student_info.php?type=8&id=36" >保留入学资格</a></span><span ><a href="web/student_info.php?type=8&id=37" >转学</a></span><span  class="bdn"><a href="web/student_info.php?type=8&id=32" >退学</a></span></div></li><li>
+                       				<p class="bdt tosubnav"><img src="web/images/icon/icon9.png" alt=""/>学籍信息</p><div class="sub_stunav"><span ><a href="web/student_info.php?type=9&id=29" >新生学籍表</a></span><span ><a href="web/student_info.php?type=9&id=31" >预毕业生核对个人信息</a></span><span  class="bdn"><a href="web/student_info.php?type=9&id=30" >修改姓名</a></span></div></li><li>
+                       				<p class="bdt tosubnav"><img src="web/images/icon/icon10.png" alt=""/>证件和证明</p><div class="sub_stunav"><span ><a href="web/student_info.php?type=10&id=46" >学生证补办</a></span><span ><a href="web/student_info.php?type=10&id=44" >在学/预毕业学籍证明</a></span><span ><a href="web/student_info.php?type=10&id=43" >非京籍在学证明</a></span><span ><a href="web/student_info.php?type=10&id=45" >学籍异动证明</a></span><span ><a href="web/student_info.php?type=10&id=41" >火车票优惠卡</a></span><span  class="bdn"><a href="web/student_info.php?type=10&id=42" >公证介绍信</a></span></div></li><li>
+                       				<p class="bdt tosubnav"><img src="web/images/icon/icon12.png" alt=""/>出境和转学分</p><div class="sub_stunav"><span ><a href="web/student_info.php?type=11&id=23" >转学分</a></span><span ><a href="web/student_info.php?type=11&id=24" >交流交换项目</a></span><span  class="bdn"><a href="web/student_info.php?type=11&id=25" >出国（境）手续</a></span></div></li><li>
+                       				<p class="bdt tosubnav"><img src="web/images/icon/icon11.png" alt=""/>教室查询预约</p><div class="sub_stunav"><span ><a href="web/student_info.php?type=12&id=51" >学生活动借用教室</a></span><span ><a href="web/student_info.php?type=12&id=26" >小教室预约系统</a></span><span  class="bdn"><a href="web/student_info.php?type=12&id=47" >空闲教室查询</a></span></div></li>                </ul>
+            </div>
+        </div>
+        <div class="subcon">
+            <div class="public_nav student_nav">
+                <div>
+                    <ul>
+                    <li>
+                        <p class="bdt tosubnav"><img src="web/images/icon/icon13.png" alt=""/>教师手册</p><div class="sub_stunav"><span class="bdn"><a href="web/teacher_info.php?type=1&id=1" >教师手册</a></span></div></li><li>
+                        <p class="bdt tosubnav"><img src="web/images/icon/icon18.png" alt=""/>教学日历</p><div class="sub_stunav"><span class="bdn"><a href="web/teacher_info.php?type=6&id=28" >本科教学年度日历</a></span></div></li><li>
+                        <p class="bdt tosubnav"><img src="web/images/icon/icon14.png" alt=""/>日常教学工作</p><div class="sub_stunav"><span ><a href="web/teacher_info.php?type=2&id=19" >新开课</a></span><span ><a href="web/teacher_info.php?type=2&id=16" >课程异动</a></span><span ><a href="web/teacher_info.php?type=2&id=20" >修改课程大纲</a></span><span ><a href="web/teacher_info.php?type=2&id=17" >录入成绩</a></span><span ><a href="web/teacher_info.php?type=2&id=23" >成绩变更</a></span><span ><a href="web/teacher_info.php?type=2&id=15" >监考职责</a></span><span ><a href="web/teacher_info.php?type=2&id=18" >试卷论文管理</a></span><span ><a href="web/teacher_info.php?type=2&id=25" >教室使用</a></span><span class="bdn"><a href="web/teacher_info.php?type=2&id=26" >本科生科研</a></span></div></li><li>
+                        <p class="bdt tosubnav"><img src="web/images/icon/icon15.png" alt=""/>课程和教学改革</p><div class="sub_stunav"><span ><a href="web/teacher_info.php?type=3&id=22" >专业设置</a></span><span ><a href="web/teacher_info.php?type=3&id=7" >核心课程</a></span><span ><a href="web/teacher_info.php?type=3&id=11" >通识教育课程</a></span><span ><a href="web/teacher_info.php?type=3&id=10" >慕课</a></span><span ><a href="web/teacher_info.php?type=3&id=13" >小班课教学</a></span><span ><a href="http://dean.pku.edu.cn/englishcourses/" target="_blank">英文授课课程</a></span><span ><a href="web/teacher_info.php?type=3&id=9" >教学改革项目</a></span><span ><a href="web/teacher_info.php?type=3&id=6" >拔尖人才培养计划</a></span><span class="bdn"><a href="web/teacher_info.php?type=3&id=14" >中学生英才计划</a></span></div></li><li>
+                        <p class="bdt tosubnav"><img src="web/images/icon/icon16.png" alt=""/>教学质量</p><div class="sub_stunav"><span ><a href="web/teacher_info.php?type=4&id=2" >教学奖励</a></span><span ><a href="web/teacher_info.php?type=4&id=3" >课程评估</a></span><span ><a href="web/teacher_info.php?type=4&id=4" >老教授调研组</a></span><span ><a href="web/teacher_info.php?type=4&id=5" >领导听课</a></span><span class="bdn"><a href="web/teacher_info.php?type=4&id=29" >教学奖励和项目目录</a></span></div></li><li>
+                        <p class="bdt tosubnav"><img src="web/images/icon/icon17.png" alt=""/>教材</p><div class="sub_stunav"><span ><a href="web/teacher_info.php?type=5&id=8" >教材</a></span><span class="bdn"><a href="web/teacher_info.php?type=5&id=24" >教材成果</a></span></div></li>                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="subcon">
+            <div class="public_nav student_nav">
+                <div class="public_item">
+                    <a href="web/alumnus_info.php?id=2">
+                        <img src="web/images/alumus/alumus1.png" alt="" />
+                        <span>本科成绩单、学历学位证明</span>
+                    </a>
+                </div>
+                <div class="public_item">
+                    <a href="web/alumnus_info.php?id=1">
+                        <img src="web/images/alumus/alumus2.png" alt="" />
+                        <span>补办毕业/学位证明书(遗失证书者)</span>
+                    </a>
+                </div><div class="public_item">
+                    <a href="https://dean.pku.edu.cn/service/web/certificateVerification.php" target="_blank">
+                        <img src="web/images/alumus/alumus4.png" alt="" />
+                        <span>本科学历学位验证</span>
+                    </a>
+                </div>
+                <div class="public_item">
+                   <a href="web/alumnus_info.php?id=4">
+                       <img src="web/images/alumus/alumus3.png" alt="" />
+                       <span>学信网相关事项</span>
+                   </a>
+               </div>
+            </div>
+        </div>
+        <div class="subcon">
+            <div class="public_nav student_nav">
+                <div class="public_item">
+                    <a href="http://www.gotopku.cn/" target="_blank">
+                        <img src="web/images/public1.png" alt="" />
+                        <span>本科招生</span>
+                    </a>
+                </div>
+                <div class="public_item">
+                    <a href="http://summer.pku.edu.cn/" target="_blank">
+                        <img src="web/images/public2.png" alt="" />
+                        <span>暑期学校</span>
+                    </a>
+                </div>
+                <div class="public_item">
+                    <a href="https://dean.pku.edu.cn/service/web/certificateVerification.php" target="_blank">
+                        <img src="web/images/public3.png" alt="" />
+                        <span>学历学位验证</span>
+                    </a>
+                </div>
+                <div class="public_item">
+                    <a href="web/public_info.php?id=2">
+                        <img src="web/images/public4.png" alt="" />
+                        <span>旁听</span>
+                    </a>
+                </div>
+                <div class="public_item">
+                    <a href="web/public_info.php?id=1">
+                        <img src="web/images/public5.png" alt="" />
+                        <span>交换生</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="subcon">
+            <div class="link_nav student_nav">
+                <div class="link_item">
+                    <div class="link_wrap">
+                        <a href="http://elective.pku.edu.cn" target="_blank">选课系统</a><a href="http://portal.pku.edu.cn" target="_blank">校内门户</a><a href="http://bdkj.pku.edu.cn/" target="_blank">教室预约</a><a href="https://dean.pku.edu.cn/service/web/courseSearch.php" target="_blank">课表查询</a><a href="http://kcpg.pku.edu.cn/" target="_blank">课程评估</a><a href="http://162.105.209.64/benyan" target="_blank">本科生科研</a><a href="https://dean.pku.edu.cn/service/web/login.php" target="_blank">申办成绩单</a><a href="http://dean.pku.edu.cn/web/student_info.php?type=12&amp;id=47" target="_blank">空闲教室查询</a>                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="subcon">
+            <div class="search_nav student_nav">
+                <div class="form">
+                    <input type="text" name="sear_right_txt" id="sear_right_txt" placeholder="搜索" value=""/>
+                    <input type="button" name="sear_right_btn" id="sear_right_btn" value="" />
+                </div>
+                <div id="result">
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<!--点击右侧出现遮罩层-->
+<div id="right_mark"></div>
+
+        <!--顶部下链接-->
+        <div id="wrap_nav">
+            <div class="nav_mark"></div>
+            <div class="link_box">
+                <div class="nav_item">
+                    <a href="web/about.php">
+                        <img src="web/images/bg_link1.png" alt="了解我们"/>
+                        <span>了解我们</span>
+                    </a>
+                </div>
+                <div class="nav_item">
+                    <a href="web/rules.php">
+                        <img src="web/images/bg_link2.png" alt="规章制度"/>
+                        <span>规章制度</span>
+                    </a>
+                </div>
+                <div class="nav_item">
+                    <a href="web/download.php">
+                        <img src="web/images/bg_link3.png" alt="信息下载"/>
+                        <span>信息下载</span>
+                    </a>
+                </div>
+                <!--<div class="nav_item">
+                    <a href="#">
+                        <img src="web/images/bg_link4.png" alt="投诉建议"/>
+                        <span>投诉建议</span>
+                    </a>
+                </div>
+                <div class="nav_item">
+                    <a href="#">
+                        <img src="web/images/bg_link5.png" alt="旧版网站"/>
+                        <span>旧版网站</span>
+                    </a>
+                </div>-->
+            </div>
+            <div id="link_return">
+                <img src="web/images/return_arr.png" alt=""/>
+            </div>
+        </div>
+    </div>
+    <!--顶部end-->
+    <div id="container">
+        <div class="wrap_box">
+            <div class="index_title">
+                <a href="web/notice.php">
+                    <p>INFORMATION</p>
+                    <span>通知公告</span>
+                </a>
+            </div>
+            <!--information-->
+            <div id="information">
+                                        <div class="info_item">
+                            <a href="web/notice.php?type=6">
+                                <div class="info_left">考试</div>
+                            </a>
+                            <div class="info_right">
+                                <a href="web/notice_details.php?id=745">
+                                    <p>25-26学年第2学期大学英语期末考试考场安排</p>
+                                </a>
+                                <span>2026.06.02</span>
+                            </div>
+                        </div>
+                                        <div class="info_item">
+                            <a href="web/notice.php?type=26">
+                                <div class="info_left">交流</div>
+                            </a>
+                            <div class="info_right">
+                                <a href="web/notice_details.php?id=744">
+                                    <p>关于南京大学2026年C9暑期学校报名的通知</p>
+                                </a>
+                                <span>2026.05.29</span>
+                            </div>
+                        </div>
+                                        <div class="info_item">
+                            <a href="web/notice.php?type=6">
+                                <div class="info_left">考试</div>
+                            </a>
+                            <div class="info_right">
+                                <a href="web/notice_details.php?id=743">
+                                    <p>关于2025－2026学年第二学期期末考试工作安排的通知</p>
+                                </a>
+                                <span>2026.05.20</span>
+                            </div>
+                        </div>
+                                        <div class="info_item">
+                            <a href="web/notice.php?type=6">
+                                <div class="info_left">考试</div>
+                            </a>
+                            <div class="info_right">
+                                <a href="web/notice_details.php?id=742">
+                                    <p>关于2026年上半年全国大学英语四、六级口语考试的考前通知</p>
+                                </a>
+                                <span>2026.05.18</span>
+                            </div>
+                        </div>
+                                        <div class="info_item">
+                            <a href="web/notice.php?type=26">
+                                <div class="info_left">交流</div>
+                            </a>
+                            <div class="info_right">
+                                <a href="web/notice_details.php?id=741">
+                                    <p>关于西安交通大学2026年“C9暑期学校” 的报名通知</p>
+                                </a>
+                                <span>2026.05.07</span>
+                            </div>
+                        </div>
+                                        <div class="info_item">
+                            <a href="web/notice.php?type=26">
+                                <div class="info_left">交流</div>
+                            </a>
+                            <div class="info_right">
+                                <a href="web/notice_details.php?id=740">
+                                    <p>哈尔滨工业大学2026国际暑期学校报名通知</p>
+                                </a>
+                                <span>2026.04.28</span>
+                            </div>
+                        </div>
+                            </div>
+            <div class="clear"></div>
+            <div class="more">
+                <a href="web/notice.php"></a>
+            </div>
+        </div>
+        <!--what's new-->
+        <div class="wrap_box">
+            <div class="index_title">
+                <a href="web/news.php">
+                    <p>WHAT'S NEW</p>
+                    <span>新闻资讯</span>
+                </a>
+            </div>
+            <div id="news">
+                <ul>
+                                        <li>
+                        <a href="web/news_details.php?id=42">
+                                                        <img src="https://dean.pku.edu.cn//userfiles/upload/news/202403301234425966.png" alt="打造“北大思政课”品牌，培养有理想、有本领、有担当的时代新人"/>
+                            <span>打造“北大思政课”品牌，培养有理想、有本领、有担当的时代新人</span>
+                        </a>
+                    </li>
+                                        <li>
+                        <a href="web/news_details.php?id=41">
+                                                        <img src="https://dean.pku.edu.cn//userfiles/upload/news/202403301035582218.jpg" alt="北京大学“图灵班”建设成果总结会暨计算机学科拔尖人才培养论坛举行"/>
+                            <span>北京大学“图灵班”建设成果总结会暨计算机学科拔尖人才培养论坛举行</span>
+                        </a>
+                    </li>
+                                        <li>
+                        <a href="web/news_details.php?id=40">
+                                                        <img src="https://dean.pku.edu.cn//userfiles/upload/news/202403291640541189.jpg" alt="北京大学召开2023年秋季学期本科教学工作会"/>
+                            <span>北京大学召开2023年秋季学期本科教学工作会</span>
+                        </a>
+                    </li>
+                                    </ul>
+            </div>
+            <div class="clear"></div>
+            <div class="more">
+                <a href="web/news.php"></a>
+            </div>
+        </div>
+        <!--data overview 信息下载-->
+        <div id="data_box">
+            <div id="data_over">
+                <div class="index_title">
+                    <a href="web/download.php">
+                        <p>DATA OVERVIEW</p>
+                        <span>信息下载</span>
+						<p style="font-size: 18px;"><br>（更新日期：2025年10月）</p>
+                    </a>
+                </div>
+                                <ul>
+                    <li>
+                        <a>
+                            <img src="web/images/data_over1.png" alt=""/>
+                            <span class="timer count-number" data-from="0" data-to="18326" data-speed="2000">18326</span>
+                            <p>本科生</p>
+                        </a>
+                    </li>
+                    <li>
+                        <a>
+                            <img src="web/images/data_over2.png" alt=""/>
+                            <span class="timer count-number" data-from="0" data-to="137" data-speed="2000">137</span>
+                            <p>本科专业</p>
+                        </a>
+                    </li>
+                    <li>
+                        <a>
+                            <img src="web/images/data_over3.png" alt=""/>
+                            <span class="timer count-number" data-from="0" data-to="7997" data-speed="2000">7997</span>
+                            <p>课程门次</p>
+                        </a>
+                    </li>
+                    <li>
+                        <a>
+                            <img src="web/images/data_over4.png" alt=""/>
+                            <span class="timer count-number" data-from="0" data-to="3849" data-speed="2000">3849</span>
+                            <p>专任教师</p>
+                        </a>
+                    </li>
+                    <li>
+                        <a>
+                            <img src="web/images/data_over5.png" alt=""/>
+                            <span class="timer count-number" data-from="0" data-to="4178" data-speed="2000">4178</span>
+                            <p>应届毕业生</p>
+                        </a>
+                    </li>
+                    <li>
+                        <a>
+                            <img src="web/images/data_over6.png" alt=""/>
+                            <span class="timer count-number" data-from="0" data-to="1259" data-speed="2000">1259</span>
+                            <p>出境交流</p>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <div class="clear"></div>
+            <div class="more">
+                <a href="web/download.php"></a>
+            </div>
+        </div>
+        <!--热点链接-->
+        <div id="hot_link">
+            <div class="link_box">
+
+                <div class="index_title">
+                    <a>
+                        <p>ACCESS</p>
+                        <span>热点链接</span>
+                    </a>
+                </div>
+                <div class="main_visual">
+                    <div class="flicking_con"></div>
+                    <div class="main_image">
+                        <ul>
+                                                    <li>
+                                                            <div class="hot_item">
+                                    <a href="https://bkzs.pku.edu.cn/" target="_blank">
+                                        <div class="sHoverItem">
+                                            <img src="https://dean.pku.edu.cn/userfiles/upload/link/201804251429536037.jpg" alt=""/>
+                                        </div>
+                                        <p>本科招生</p>
+                                        <span></span>
+                                    </a>
+                                </div>
+                                                            <div class="hot_item">
+                                    <a href="http://course.pku.edu.cn/" target="_blank">
+                                        <div class="sHoverItem">
+                                            <img src="https://dean.pku.edu.cn/userfiles/upload/link/201804261450333501.png" alt=""/>
+                                        </div>
+                                        <p>教学网</p>
+                                        <span></span>
+                                    </a>
+                                </div>
+                                                            <div class="hot_item">
+                                    <a href="http://162.105.209.64/benyan" target="_blank">
+                                        <div class="sHoverItem">
+                                            <img src="https://dean.pku.edu.cn/userfiles/upload/link/201804261857007536.png" alt=""/>
+                                        </div>
+                                        <p>本科科研</p>
+                                        <span></span>
+                                    </a>
+                                </div>
+                                                            <div class="hot_item">
+                                    <a href="http://bdkj.pku.edu.cn/" target="_blank">
+                                        <div class="sHoverItem">
+                                            <img src="https://dean.pku.edu.cn/userfiles/upload/link/201805031312257726.jpg" alt=""/>
+                                        </div>
+                                        <p>北大空间</p>
+                                        <span></span>
+                                    </a>
+                                </div>
+                                                            <div class="hot_item">
+                                    <a href="http://summer.pku.edu.cn/" target="_blank">
+                                        <div class="sHoverItem">
+                                            <img src="https://dean.pku.edu.cn/userfiles/upload/link/201804251429431390.jpg" alt=""/>
+                                        </div>
+                                        <p>暑期学校</p>
+                                        <span></span>
+                                    </a>
+                                </div>
+                                                            <div class="hot_item">
+                                    <a href="http://www.chinesemooc.org/" target="_blank">
+                                        <div class="sHoverItem">
+                                            <img src="https://dean.pku.edu.cn/userfiles/upload/link/201804251429186086.jpg" alt=""/>
+                                        </div>
+                                        <p>华文慕课</p>
+                                        <span></span>
+                                    </a>
+                                </div>
+                                                        </li>
+                                                    <li>
+                                                            <div class="hot_item">
+                                    <a href="http://dean.pku.edu.cn/tongshi.php" target="_blank">
+                                        <div class="sHoverItem">
+                                            <img src="https://dean.pku.edu.cn/userfiles/upload/link/201805031306517970.jpg" alt=""/>
+                                        </div>
+                                        <p>通识教育</p>
+                                        <span></span>
+                                    </a>
+                                </div>
+                                                            <div class="hot_item">
+                                    <a href="http://dean.pku.edu.cn/englishcourses/" target="_blank">
+                                        <div class="sHoverItem">
+                                            <img src="https://dean.pku.edu.cn/userfiles/upload/link/201804242141269382.jpg" alt=""/>
+                                        </div>
+                                        <p>英文授课</p>
+                                        <span></span>
+                                    </a>
+                                </div>
+                                                            <div class="hot_item">
+                                    <a href="http://mooc.pku.edu.cn/mooc/" target="_blank">
+                                        <div class="sHoverItem">
+                                            <img src="https://dean.pku.edu.cn/userfiles/upload/link/201805031304535989.png" alt=""/>
+                                        </div>
+                                        <p>北大慕课</p>
+                                        <span></span>
+                                    </a>
+                                </div>
+                                                            <div class="hot_item">
+                                    <a href="http://dean.pku.edu.cn/tutorialclasses/" target="_blank">
+                                        <div class="sHoverItem">
+                                            <img src="https://dean.pku.edu.cn/userfiles/upload/link/201804242142098314.jpg" alt=""/>
+                                        </div>
+                                        <p>小班课</p>
+                                        <span></span>
+                                    </a>
+                                </div>
+                                                            <div class="hot_item">
+                                    <a href="http://opencourse.pku.edu.cn/course/opencourse/" target="_blank">
+                                        <div class="sHoverItem">
+                                            <img src="https://dean.pku.edu.cn/userfiles/upload/link/201804242142334705.jpg" alt=""/>
+                                        </div>
+                                        <p>公开课</p>
+                                        <span></span>
+                                    </a>
+                                </div>
+                                                            <div class="hot_item">
+                                    <a href="http://cetl.pku.edu.cn/peking/cetl/view1/index.jsp" target="_blank">
+                                        <div class="sHoverItem">
+                                            <img src="https://dean.pku.edu.cn/userfiles/upload/link/201805031300538040.png" alt=""/>
+                                        </div>
+                                        <p>教师发展</p>
+                                        <span></span>
+                                    </a>
+                                </div>
+                                                        </li>
+                                                </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!--关注我们-->
+        <div id="follow">
+            <div class="follow_con">
+                <div class="bg_phone">
+                    <img src="web/images/bg_phone.png" alt="" />
+                </div>
+                <div class="follow_right">
+                    <div class="follow_title">
+                        <a>
+                            <p>FOLLOW US</p>
+                            <span>关注我们</span>
+                        </a>
+                    </div>
+                    <div class="bg_code">
+                        <img src="web/images/bg_code.png" alt=""/>
+                    </div>
+                    <div class="weixin_num">
+                        <img src="web/images/weixin_num.png" alt=""/>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="footer">
+        <div class="footer_con">
+            <div class="footer_logo">
+                <a href="http://www.pku.edu.cn/" target="_blank">
+                    <img src="web/images/logo1.png" alt="北京大学Logo"/>
+                </a>
+                <a href="index.php">
+                    <img src="web/images/logo2.png" alt="北大教务处Logo"/>
+                </a>
+            </div>
+            <ul class="footer_nav">
+                <li>
+                    <a class="a_top">了解我们</a>
+                    <a href="web/about.php">本科教育概览</a>
+                    <a href="web/about_inst.php">机构设置</a>
+                    <!--a href="http://dean.pku.edu.cn" target="_blank">旧版网站</a-->
+                </li>
+                <li>
+                    <a class="a_top">信息下载</a>
+                    <a href="web/openinfo.php">信息公开</a>
+                    <a href="http://xxgk.pku.edu.cn/" target="_blank">信息公开网</a>
+                    <a href="web/download.php" target="_blank">下载</a>
+                </li>
+                <li>
+                    <a class="a_top">友情链接</a>
+                    <a href="https://www.pku.edu.cn/campus.html#p3a" target="_blank">校历</a><a href="http://www.lib.pku.edu.cn" target="_blank">图书馆</a><a href="http://www.chsi.com.cn/" target="_blank">学信网</a><a href="http://xgb.pku.edu.cn/jxj/jxjxm/index.htm" target="_blank">奖励奖学金</a><a href="http://www.oir.pku.edu.cn/" target="_blank">国际交流</a><a href="http://hmt.pku.edu.cn/" target="_blank">港澳台交流</a><a href="https://scc.pku.edu.cn/" target="_blank">就业服务</a><a href="http://bdst.pku.edu.cn" target="_blank">北大社团</a><a href="http://bdjcjd.pku.edu.cn/index.php" target="_blank">北京大学教材基地</a>                </li>
+                <li class="last">
+                    <a class="a_top">常用服务</a>
+                    <a href="http://www.pku.edu.cn/academics/index.htm" target="_blank">本科院系</a><a href="http://elective.pku.edu.cn" target="_blank">选课系统</a><a href="http://portal.pku.edu.cn" target="_blank">校内门户</a><a href="https://dean.pku.edu.cn/service/web/courseSearch.php" target="_blank">课表查询</a><a href="http://bdkj.pku.edu.cn/" target="_blank">教室预约</a><a href="https://portal.pku.edu.cn/portal2017/#/pub/freeClassroom" target="_blank">空闲教室查询</a><a href="http://dean.pku.edu.cn/student/" target="_blank">申办成绩单</a><a href="http://kcpg.pku.edu.cn/" target="_blank">课程评估</a><a href="http://162.105.209.64/benyan" target="_blank">本科生科研</a>                </li>
+            </ul>
+            <div class="clear"></div>
+        </div>
+        <div class="footer_copy">Copyright©  北京大学教务部  All Rights Reserved. 技术支持：<a href="http://www.wiipu.com" target="_blank">微普科技</a></div>
+    </div>
+</div>
+
+</body>
+</html>

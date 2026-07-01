@@ -1,0 +1,23 @@
+# Claude Code / AI-assistant artifacts — keep out of this public repo
+CLAUDE.md
+**/CLAUDE.md
+CLAUDE.local.md
+.claude/
+
+# Secrets — keep the dir, never commit its contents (real PKU credentials)
+secrets/*
+!secrets/.gitkeep
+
+# Downloads
+downloads/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+build/
+dist/
