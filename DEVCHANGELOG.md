@@ -6,6 +6,16 @@ The **development decision log** — why changes were made, not what shipped. Ma
 
 ---
 
+## 2026-07-01 — TASTES/ coding-taste directory + tastes skill
+
+- **What**: added `TASTES/` (README + four broad topic files: `code-structure`, `naming-and-style`, `correctness`, `process`) capturing prescriptive coding-taste guidance, plus a `tastes` project skill to maintain it.
+- **Decision**: seed **codebase-first** — rules are distilled from this repo's own lessons (subclass+register, side-effect-free imports, accumulate-don't-replace, raw-byte CJK decode) with external principles (Ousterhout deep modules, Torvalds eliminate-special-cases) as a thin supplement only; generic internet boilerplate (SOLID/DRY lectures) explicitly excluded. Project-specific tastes are higher-value than generic ones and stay true to the code.
+- **Decision**: **a few broad files, not many narrow ones** (captain's call) — four topics keep the surface scannable and maintenance low.
+- **Decision**: TASTES sits on a distinct *taste* axis — cross-references CLAUDE.md (live invariants) / DEVCHANGELOG (dated decisions) / ARCHITECTURE (structure), never restates them; the skill enforces that boundary plus a drift audit against CLAUDE.md.
+- **Decision**: docs/tooling, not user-facing → DEVCHANGELOG entry only, **no CHANGELOG** (mirrors the agentic-auditing-machinery precedent); not a code structural change, so ARCHITECTURE/VERIFICATION don't fire.
+- **Files**: `TASTES/{README,code-structure,naming-and-style,correctness,process}.md`, `.claude/skills/tastes/SKILL.md`.
+- **Verify**: n/a (prose artifacts; no runtime behavior).
+
 ## 2026-06-29 — Credential redaction at the tool boundary + CLAUDE.md prune
 
 - **What**: added `src/tools/redact.py` (`redact(text, secrets)`); `run_plib` and `TreeholeAuthService` now strip injected/held credentials from any error string before it becomes a `ToolResult.error`. Compressed three verbose CLAUDE.md paragraphs to bring the file back under the 39k budget (38,561, below the 38,879 baseline).

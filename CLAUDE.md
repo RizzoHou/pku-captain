@@ -151,6 +151,8 @@ Three repo-root artifacts keep the project auditable by a non-coding architect �
 - `DEVCHANGELOG.md` — decision log, why X over Y (skill `devchangelog`, ~every non-trivial change). *Why* here; *what-shipped* in `CHANGELOG.md`.
 - `VERIFICATION.md` — human-run verification steps, Pending→Verified (skill `verification`, user-visible / release-critical / beyond-`pytest` changes).
 
+`TASTES/` — a peer prose artifact on a different axis (*how code should look/feel*): prescriptive coding-taste guidance (README + four broad topic files), maintained by the same-named `tastes` skill when a session surfaces a reusable taste lesson. Codebase-first; cross-references CLAUDE.md (rules) / DEVCHANGELOG.md (decisions) / ARCHITECTURE.md (structure), never restates.
+
 Experimental machinery — to be packaged as a Claude plugin once mature.
 
 **Plan-gate.** For any non-trivial/structural change, state the plan in plain prose *before* coding — files, approach, what could break, assumptions — and let the architect approve the **plan, not the diff**. Push boundary decisions (new service, new global) UP into the plan; leave idioms (which Qt signal, which API call) DOWN in code. Trivial changes (typo, one-liner, test tweak) skip it. Narrower than the `claude-md-improver` auto-apply waiver below, which covers only this file.
