@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pku-treehole"
+version = "0.1.0"
+description = "Monitor updates to followed (关注) holes on PKU Treehole"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["requests>=2.28"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+treehole = "treehole.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/treehole"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
