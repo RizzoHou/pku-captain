@@ -6,6 +6,16 @@ The **development decision log** — why changes were made, not what shipped. Ma
 
 ---
 
+## 2026-07-01 — Vendor plib/dean/treehole in-process (git subtree), drop subprocess transport
+
+- **What**: pulled the three self-crafted Python CLIs into `vendor/` via `git subtree`, exposed them as top-level packages (`plib_cli`/`dean`/`treehole`) through the pyproject hatchling `packages` mapping, and rewired the `plib`/`dean*`/`treehole*` Tool wrappers to drive the libraries **in-process** instead of shelling out to sibling `.venv`s / a `sys.path` shim. `pku3b` (Rust) left untouched.
+- **Decision**: **scope = Python CLIs only** (captain's call, post-deadline personal project). pku3b is a separate, much larger effort — reimplementing its ~7.8k-LOC Blackboard scraper in Python is the real "standalone" blocker; the three Python siblings (~700–860 core LOC each, `requests`+`bs4`) are a cheap lift-and-shift with clean library seams already present.
+- **Decision**: **git subtree over submodule/PyPI** (captain's call) — a submodule reintroduces a `clone --recursive` external step (fights "standalone"); subtree vendors the code into the repo, one `pip install -e .` provides everything, `subtree pull --squash` still tracks upstream.
+- **Decision**: keep the **Tool subclasses + schemas + `{ok,data}` envelope byte-identical** — only the transport under them changed. Reused each library's own serialization (`dean.output.jsonable`, model `.to_dict()`) so `data` shapes don't drift; injectable `client_factory` replaces subprocess mocking in tests.
+- **Decision**: plib creds now passed as explicit `Credentials(...)` (was `PLIB_EMAIL`/`PLIB_PASSWORD` env into the subprocess); redaction preserved. Treehole macOS notifier daemon now runs pku-captain's **own** venv `treehole` console script (new `[project.scripts]`) instead of the sibling venv binary.
+- **Files**: `vendor/{plib-cli,pku-dean-cli,pku-treehole-cli}/` (subtree), `pyproject.toml`, `src/tools/{dean_resources,dean_updates,plib_materials,treehole_updates}.py`, `tests/test_{dean_tool,dean_updates_tool,plib_materials_tool,redact}.py`, `docs/setup_zh.md`.
+- **Verify**: VERIFICATION.md → "Vendored plib/dean/treehole in-process" (pytest 376 green; live dean sidebar round-trip; treehole macOS notifier re-install).
+
 ## 2026-07-01 — TASTES/ coding-taste directory + tastes skill
 
 - **What**: added `TASTES/` (README + four broad topic files: `code-structure`, `naming-and-style`, `correctness`, `process`) capturing prescriptive coding-taste guidance, plus a `tastes` project skill to maintain it.

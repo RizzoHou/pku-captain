@@ -37,13 +37,16 @@ PKU Captain is a PyQt6 desktop app split into a **GUI lane** and a **backend lan
    │  workflows/ Workflow(ABC)+WorkflowRegistry → MorningBriefing · Hello (+WorkflowTool)  │
    │  rag/    Source(ABC)+SourceRegistry → DeanSource · CalendarSource (Embedder/KB retired)│
    └───────────┬──────────────────────────────────────────────────────────────────────────┘
-               │ subprocess / HTTPS
-   ┌───────────▼───────────────── External processes & APIs ──────────────────────────────┐
-   │  pku3b (Rust CLI, our fork) · plib-cli · pku-dean-cli · pku-treehole-cli (sibling     │
-   │  venvs) · DeepSeek API · Kimi/Moonshot API · pdftoppm (doc render) ·                  │
-   │  osascript + launchctl (macOS Calendar reminders / treehole notifier)                 │
+               │ subprocess (pku3b/pdftoppm/osascript) · in-process vendored clients · HTTPS
+   ┌───────────▼───────────────── External processes & endpoints ─────────────────────────┐
+   │  pku3b (Rust CLI, our fork — the one external process among the PKU tools) ·          │
+   │  vendored Python clients (plib_cli · dean · treehole, in vendor/) → pkuhub.cn /       │
+   │  dean.pku.edu.cn / treehole+IAAA over HTTPS · DeepSeek API · Kimi/Moonshot API ·      │
+   │  pdftoppm (doc render) · osascript + launchctl (macOS Calendar / treehole notifier)   │
    └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+**Vendored siblings.** `vendor/plib-cli`, `vendor/pku-dean-cli`, `vendor/pku-treehole-cli` are the captain's own Python CLIs pulled in via `git subtree` and exposed as top-level packages (`plib_cli` / `dean` / `treehole`) through the pyproject hatchling `packages` mapping. The `plib`/`dean*`/`treehole*` Tool wrappers drive these libraries **in-process** (no subprocess, no sibling `.venv`). Only `pku3b` (Rust) remains an external binary.
 
 **Entry points.** `python -m src` (`src/__main__.py` → `ui.main_window`, defaults offline); `python -m src --online`; `python -m src.cli` (REPL on the same `build_agent` loop — the GUI-seam conformance probe); `scripts/smoke_deepseek.py` (real DeepSeek round-trip).
 
@@ -93,15 +96,17 @@ Memory is folded per-iteration into a *snapshot copy* only — never written int
 | Dependency | Used by | Transport | Notes |
 |---|---|---|---|
 | `pku3b` (Rust CLI, fork) | `tools/pku3b.py` + pku3b_* tools | subprocess (`--format json`) | PATH then `.local/cargo/bin/pku3b` fallback; stdout breaks on `>` redirect |
-| `plib-cli` (fork) | `PLibMaterialsTool` | subprocess, `../plib-cli/.venv` | auto-injects `PLIB_EMAIL`/`PLIB_PASSWORD` from `secrets/plib/` |
-| `pku-dean-cli` | `DeanResourcesTool` / `DeanUpdatesTool` | subprocess, `../pku-dean-cli/.venv` | public, no creds |
-| `pku-treehole-cli` | `treehole_updates.py` | subprocess, `../pku-treehole-cli/.venv` | IAAA creds from `secrets/treehole/`; macOS notifier via `launchctl` |
+| `plib_cli` (vendored `vendor/plib-cli`) | `PLibMaterialsTool` | in-process (`import plib_cli`) → HTTPS pkuhub.cn | injects `secrets/plib` as `Credentials`; HTML scrape (bs4+lxml) |
+| `dean` (vendored `vendor/pku-dean-cli`) | `DeanResourcesTool` / `DeanUpdatesTool` | in-process (`import dean`) → HTTPS dean.pku.edu.cn | public, no creds; HTML scrape (bs4+lxml) |
+| `treehole` (vendored `vendor/pku-treehole-cli`) | `treehole_updates.py` | in-process (`import treehole`) → HTTPS treehole+IAAA | IAAA creds from `secrets/treehole/`; macOS notifier runs own-venv `treehole` console script via `launchctl` |
 | DeepSeek API | `DeepSeekProvider` | HTTPS SSE | `deepseek-v4-pro`, `reasoning_effort=max`, thinking replay required |
 | Kimi/Moonshot API | `KimiProvider` | HTTPS SSE | `kimi-k2.6`, vision (doc_read page images) |
 | `pdftoppm` | `doc_base.py` doc_read | subprocess | renders PDF pages to images |
 | `osascript` | `CalendarReminderTool` | subprocess (macOS) | writes Calendar.app events |
 
-**Data layout.** `secrets/` (gitignored — API keys, P-Lib/treehole creds, sessions), `data/` (gitignored — memory, sessions, inboxes, caches), `doc_base/` (committed — split PDFs + `manifest.json`), `downloads/` (gitignored).
+Runtime pip deps: `PyQt6`, `requests`, `numpy`, plus `beautifulsoup4` + `lxml` (the vendored plib/dean HTML scrapers).
+
+**Data layout.** `secrets/` (gitignored — API keys, P-Lib/treehole creds, sessions), `data/` (gitignored — memory, sessions, inboxes, caches), `doc_base/` (committed — split PDFs + `manifest.json`), `downloads/` (gitignored), `vendor/` (committed — git-subtree'd Python siblings, imported in-process).
 
 ---
 
