@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="description" content="A brief description of your website.">
+        <meta name="keywords" content="keyword1, keyword2, keyword3">
+        <!-- 添加CSRF标签用于JavaScript访问 -->
+        <meta name="csrf-token" content="IjkxNmY1YjQyMGE1YjM1OWJkNjcwMDY0ZmMyZDEyYjIyMWM2ZmFlZmQi.ah2gRQ.hqJm8E3nC7WBc0VDjFGfD9eXh5Q">
+        <!-- 添加favicon -->
+        <!-- 根据颜色模式使用不同版本的图标 -->
+        <link rel="icon"
+              href="/static/favicon-dark.ico"
+              type="image/x-icon"
+              media="(prefers-color-scheme: dark)">
+        <link rel="icon"
+              href="/static/favicon-light.ico"
+              type="image/x-icon"
+              media="(prefers-color-scheme: light)">
+        <link rel="shortcut icon"
+              href="/static/favicon-dark.ico"
+              type="image/x-icon"
+              media="(prefers-color-scheme: dark)">
+        <link rel="shortcut icon"
+              href="/static/favicon-light.ico"
+              type="image/x-icon"
+              media="(prefers-color-scheme: light)">
+        <title>
+            个人主页 - rz - Plib
+        </title>
+        <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"
+              rel="stylesheet">
+        <link rel="stylesheet"
+              href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+        <!-- 添加CSRF辅助脚本 -->
+        <script src="/static/js/csrf_helper.js"></script>
+        <!-- MathJax支持 -->
+        <script type="text/javascript" id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+        </script>
+        <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: {
+                fontCache: 'global'
+            },
+            options: {
+                enableMenu: false  // 禁用右键菜单以简化界面
+            },
+            startup: {
+                typeset: false     // 手动控制渲染时机
+            },
+            messageStyle: 'none',  // 关闭加载消息
+            renderActions: {
+                addMenu: [], // 禁用右键菜单
+                checkLoading: []  // 关闭加载检查
+            }
+        };
+        </script>
+        
+    <style>
+    .pku-red-border {
+        border-color: #900023;
+    }
+
+    .tab-active {
+        border-bottom: 2px solid #900023;
+        color: #900023;
+    }
+    </style>
+
+        <style>
+        .pku-red {
+            background-color: #900023;
+        }
+
+        .pku-red-text {
+            color: #900023;
+        }
+
+        .hover-pku-red:hover {
+            background-color: #700018;
+        }
+
+        /* 添加页面布局样式，确保页脚在底部 */
+        html,
+        body {
+            height: 100%;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .content-wrapper {
+            flex: 1 0 auto;
+        }
+
+        footer {
+            flex-shrink: 0;
+        }
+        </style>
+    </head>
+    <body class="bg-gray-50">
+        <!-- 导航栏 -->
+        <nav class="pku-red text-white py-3 sticky top-0 z-50">
+    <div class="container mx-auto px-4 flex justify-between items-center">
+        <!-- logo 区域 -->
+        <a href="/"
+           class="flex items-center space-x-2">
+            <div class="h-10 w-10 flex items-center justify-center">
+                <img src="/static/avatars/white.png"
+                     alt="Plib会徽"
+                     class="h-10 w-10 object-contain"
+                     loading="eager">
+            </div>
+            <div class="hidden sm:block sm:text-xl sm:font-bold">Plib</div>
+        </a>
+        <div class="flex items-center space-x-3 sm:space-x-6">
+            <!-- 更新其他导航链接 -->
+            <a href="/" class="hover:text-gray-300">首页</a>
+            <a href="/upload" class="hover:text-gray-300">上传资料</a>
+            <!-- 临时使用硬编码URL避免构建错误 -->
+            <a href="/ranking/" class="hover:text-gray-300">
+                <span class="hidden sm:inline">用户</span>排行榜
+            </a>
+            <a href="/about" class="hover:text-gray-300">
+                关于<span class="hidden sm:inline">平台</span>
+            </a>
+        </div>
+        <div class="flex items-center space-x-4">
+            <div class="relative" id="nav-search">
+                <button type="button"
+                        id="nav-search-button"
+                        class="hover:text-gray-300 relative flex justify-center"
+                        aria-label="搜索资料"
+                        aria-expanded="false"
+                        aria-controls="nav-search-panel">
+                    <i class="fas fa-search"></i>
+                </button>
+                <form id="nav-search-panel"
+                      action="/search"
+                      method="get"
+                      class="absolute right-0 top-full mt-3 w-72 sm:w-80 bg-white rounded-md shadow-lg p-3 z-30 hidden">
+                    <div class="flex">
+                        <input id="nav-search-input"
+                               name="q"
+                               type="text"
+                               value=""
+                               placeholder="搜索资料..."
+                               class="w-full h-10 px-3 text-sm text-gray-800 rounded-l-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-red-900">
+                        <button type="submit"
+                                class="h-10 px-3 bg-red-900 text-white rounded-r-md border border-red-900 hover:bg-red-800"
+                                aria-label="搜索">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                </form>
+            </div>
+            
+                <div class="relative">
+                    <a href="/notifications"
+                       class="hover:text-gray-300 relative flex justify-center">
+                        <i class="fas fa-bell"></i>
+                        <span id="notification-badge"
+                              class="absolute -top-3 -right-3 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center"
+                              style="">13</span>
+                    </a>
+                </div>
+                <div class="relative" id="user-menu">
+                    <div class="flex items-center space-x-2 cursor-pointer"
+                         id="user-menu-button">
+                        <img src="/static/avatars/default_avatar.png"
+                             alt="用户头像"
+                             class="h-8 w-8 rounded-full object-cover">
+                        <div class="hidden lg:block">
+                            <span class="text-sm font-medium">rz</span>
+                            <div class="text-xs flex items-center">
+                                Lv.0
+                                <span class="ml-1 px-1 py-0 rounded-sm font-semibold"
+                                      style="color: #545454;
+                                             background-color: #E6E6E6">
+                                    新手
+                                </span>
+                            </div>
+                        </div>
+                        <i class="fas fa-caret-down text-xs"></i>
+                    </div>
+                    <div id="user-menu-dropdown"
+                         class="absolute right-0 mt-2 w-36 bg-white rounded-md shadow-lg z-20 hidden">
+                        <a href="/profile"
+                           class="block px-4 pb-2 rounded-t-md text-gray-800 hover:bg-gray-100"
+                           style="padding-top: .625rem">
+                            <!-- 相当于 pt-2.5，这样 hover 时的灰色背景可以恰好覆盖整个单元格 -->
+                            <div class="flex items-center justify-center">
+                                <i class="fas fa-user mr-2 pt-0.5"></i>
+                                <div>个人主页</div>
+                            </div>
+                        </a>
+                        
+                        
+                        
+                        <div class="border-t border-gray-300"></div>
+                        <a href="/logout"
+                           class="block px-4 py-2 rounded-b-md text-red-600 hover:bg-gray-100"
+                           style="padding-bottom: .625rem">
+                            <div class="flex items-center justify-center">
+                                <i class="fas fa-sign-out-alt mr-2 pt-0.5"></i>
+                                <div>退出登录</div>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+                <script>
+                document.addEventListener('DOMContentLoaded', function () {
+                    const menuButton = document.getElementById('user-menu-button');
+                    const menuDropdown = document.getElementById('user-menu-dropdown');
+
+                    menuButton.addEventListener('click', function () {
+                        menuDropdown.classList.toggle('hidden');
+                    });
+
+                    // 点击页面其他地方关闭菜单
+                    document.addEventListener('click', function (event) {
+                        if (!document.getElementById('user-menu').contains(event.target)) {
+                            menuDropdown.classList.add('hidden');
+                        }
+                    });
+                });
+                </script>
+            
+        </div>
+    </div>
+</nav>
+
+    <script>
+    // 定期检查未读通知数量
+    function checkUnreadNotifications() {
+        fetch('/notifications/unread_count')
+            .then(response => response.json())
+            .then(data => {
+                const badge = document.getElementById('notification-badge');
+                if (badge) {
+                    if (data.count > 0) {
+                        badge.textContent = data.count;
+                        badge.style.display = 'flex';
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                }
+            });
+    }
+
+    // 页面加载完成后检查通知
+    document.addEventListener('DOMContentLoaded', function () {
+        const search = document.getElementById('nav-search');
+        const searchButton = document.getElementById('nav-search-button');
+        const searchPanel = document.getElementById('nav-search-panel');
+        const searchInput = document.getElementById('nav-search-input');
+
+        if (search && searchButton && searchPanel && searchInput) {
+            searchButton.addEventListener('click', function () {
+                const isHidden = searchPanel.classList.toggle('hidden');
+                searchButton.setAttribute('aria-expanded', String(!isHidden));
+                if (!isHidden) {
+                    searchInput.focus();
+                    searchInput.select();
+                }
+            });
+
+            document.addEventListener('click', function (event) {
+                if (!search.contains(event.target)) {
+                    searchPanel.classList.add('hidden');
+                    searchButton.setAttribute('aria-expanded', 'false');
+                }
+            });
+
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape') {
+                    searchPanel.classList.add('hidden');
+                    searchButton.setAttribute('aria-expanded', 'false');
+                }
+            });
+        }
+
+        // 立即检查一次
+        checkUnreadNotifications();
+
+        // 每60秒检查一次
+        setInterval(checkUnreadNotifications, 60000);
+    });
+    </script>
+
+        <!-- 内容包装器 -->
+        <div class="content-wrapper">
+            <!-- Flash消息显示区域 - 改为固定定位 -->
+            <div class="fixed top-16 inset-x-0 z-50 flex justify-center">
+                
+                    
+                
+            </div>
+            <!-- 主页搜索栏 -->
+            
+            
+            <!-- 主要内容 -->
+            <div class="container mx-auto px-4 py-8">
+                
+    <!-- 个人资料卡 -->
+    <div class="max-w-5xl mx-auto bg-white rounded-lg shadow-md overflow-hidden mb-8">
+        <div class="md:flex">
+            <div class="md:w-1/3 bg-gray-50 px-6 py-8 flex flex-col items-center justify-center">
+                <div class="w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-md">
+                    <img src="/static/avatars/default_avatar.png"
+                         alt="rz的头像"
+                         class="w-full h-full object-cover">
+                </div>
+                <h2 class="text-xl font-bold mt-4">rz</h2>
+                <div class="text-sm font-bold mt-1 flex items-center"
+                     style="color: #545454">
+                    等级：0
+                    <span class="ml-2 px-2 py-1 rounded-full text-xs font-semibold"
+                          style="background-color: #E6E6E6">
+                        新手
+                    </span>
+                </div>
+                <p class="text-gray-600 text-sm mb-1 mt-1 break-all">redacted@example.com</p>
+                <!-- 用户联系方式，靠左对齐 -->
+                <div>
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                </div>
+                <div class="text-sm text-gray-500 mb-4 mt-3">注册于 2026-05-28</div>
+                <div class="flex flex-row md:flex-col lg:flex-row space-x-2 md:space-x-0 md:space-y-2 lg:space-x-2 lg:space-y-0">
+                    <a href="/edit_profile"
+                       class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm">
+                        <i class="fas fa-edit mr-1"></i>编辑资料
+                    </a>
+                    
+                </div>
+                
+            </div>
+            <div class="md:w-2/3 p-8">
+                <div class="mb-4 w-full flex items-center justify-between">
+                    <h3 class="text-lg font-semibold flex items-center">
+                        <i class="fas fa-user-circle mr-2 pku-red-text"></i>个人简介
+                    </h3>
+                    <a href="/user/4744"
+                       target="_blank"
+                       class="text-sm text-blue-600 hover:text-blue-800 flex items-center">
+                        <i class="fas fa-external-link-alt mr-1"></i>查看我的主页
+                    </a>
+                </div>
+                <div class="text-gray-600 mb-6 min-h-[100px] border-l-4 pku-red-border pl-4">
+                    
+                        <p class="text-gray-400 italic">这个人很懒，什么都没有留下...</p>
+                    
+                </div>
+                <h3 class="text-lg font-semibold mb-4 flex items-center">
+                    <i class="fas fa-chart-bar mr-2 pku-red-text"></i>活动统计
+                </h3>
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 text-center">
+                    <div class="bg-blue-50 p-3 rounded-lg">
+                        <div class="text-xl font-bold text-blue-600">0</div>
+                        <div class="text-sm text-gray-500">上传资料</div>
+                    </div>
+                    <div class="bg-green-50 p-3 rounded-lg">
+                        <div class="text-xl font-bold text-green-600">0</div>
+                        <div class="text-sm text-gray-500">发表评论</div>
+                    </div>
+                    <div class="bg-purple-50 p-3 rounded-lg">
+                        <div class="text-xl font-bold text-purple-600">0</div>
+                        <div class="text-sm text-gray-500">资料被下载</div>
+                    </div>
+                    <div class="bg-yellow-50 p-3 rounded-lg">
+                        <div class="text-xl font-bold text-yellow-600">0</div>
+                        <div class="text-sm text-gray-500">获得收藏</div>
+                    </div>
+                    <div class="bg-pink-50 p-3 rounded-lg">
+                        <div class="text-xl font-bold text-pink-600">0</div>
+                        <div class="text-sm text-gray-500">粉丝数</div>
+                    </div>
+                </div>
+                <div class="mt-4 grid grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-sm text-gray-500 mb-1">今日剩余下载次数</p>
+                        <p>
+                            
+                                6
+                            
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="max-w-5xl mx-auto">
+        <div class="flex justify-between items-center mb-6">
+            <!-- 选项卡导航 -->
+            <div class="border-b flex">
+                <button id="tab-uploads"
+                        class="px-3 py-2 border-b-2 pku-red-border text-pku-red font-medium"
+                        onclick="showTab('uploads')">我的上传</button>
+                <button id="tab-liked"
+                        class="px-3 py-2 border-b-2 border-transparent font-medium text-gray-500 hover:text-gray-700"
+                        onclick="showTab('liked')">我的收藏</button>
+                <button id="tab-following"
+                        class="px-3 py-2 border-b-2 border-transparent font-medium text-gray-500 hover:text-gray-700"
+                        onclick="showTab('following')">关注用户</button>
+            </div>
+            <!-- 上传按钮只在"我的上传"标签中显示 -->
+            <a href="/upload"
+               id="upload-button"
+               class="pku-red hover-pku-red text-white px-4 py-2 rounded-lg text-sm flex items-center justify-center">
+                <i class="fas fa-upload mr-1"></i>
+                <span class="inline sm:hidden">上传</span>
+                <span class="hidden sm:inline">上传新资料</span>
+            </a>
+        </div>
+    </div>
+    <!-- 上传的资料标签页 -->
+    <div id="uploads-tab" class="max-w-5xl mx-auto tab-content">
+        <!-- 添加搜索和排序功能 -->
+        <div class="bg-white rounded-lg shadow p-4 mb-6">
+            <form action="/profile"
+                  method="get"
+                  class="flex flex-col md:flex-row md:items-center gap-4">
+                <input type="hidden" name="tab" value="uploads">
+                <!-- 搜索框 - md以下占满整行 -->
+                <div class="w-full md:flex-grow">
+                    <input type="text"
+                           name="query"
+                           placeholder="搜索我的资料或课程..."
+                           value=""
+                           class="w-full px-4 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <!-- 包装排序和搜索按钮的容器 -->
+                <div class="flex items-center gap-4">
+                    <!-- 排序下拉框 -->
+                    <div class="flex-shrink-0">
+                        <select name="sort_by"
+                                class="border rounded-lg px-4 py-2"
+                                onchange="this.form.submit()">
+                            <option value="最新上传" selected>最新上传</option>
+                            <option value="最多下载" >最多下载</option>
+                            <option value="按标题" >按标题</option>
+                        </select>
+                    </div>
+                    <!-- 搜索按钮 -->
+                    <div class="flex items-center space-x-3">
+                        <button type="submit"
+                                class="pku-red hover-pku-red text-white px-4 py-2 rounded-lg whitespace-nowrap">
+                            搜索
+                        </button>
+                        
+                    </div>
+                </div>
+            </form>
+        </div>
+        
+            <div class="bg-white rounded-lg shadow-md p-8 text-center">
+                
+                    <div class="text-gray-400 mb-4">
+                        <i class="fas fa-cloud-upload-alt text-6xl"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-2">您还没有上传过资料</h3>
+                    <p class="text-gray-500 mb-4">上传资料与同学分享，可以帮助他人更好地学习</p>
+                    <a href="/upload"
+                       class="pku-red hover-pku-red text-white px-6 py-3 rounded-lg inline-block">
+                        <i class="fas fa-upload mr-2"></i>立即上传
+                    </a>
+                
+            </div>
+        
+    </div>
+    <!-- 收藏的资料标签页 -->
+    <div id="liked-tab" class="max-w-5xl mx-auto tab-content hidden">
+        <!-- 添加搜索和排序功能 -->
+        <div class="bg-white rounded-lg shadow p-4 mb-6">
+            <form action="/profile"
+                  method="get"
+                  class="flex flex-col md:flex-row md:items-center gap-4">
+                <input type="hidden" name="tab" value="liked">
+                <!-- 搜索框 - md以下占满整行 -->
+                <div class="w-full md:flex-grow">
+                    <input type="text"
+                           name="query"
+                           placeholder="搜索收藏的资料或课程..."
+                           value=""
+                           class="w-full px-4 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <!-- 包装排序和搜索按钮的容器 -->
+                <div class="flex items-center gap-4">
+                    <!-- 排序下拉框 -->
+                    <div class="flex-shrink-0">
+                        <select name="sort_by"
+                                class="border rounded-lg px-4 py-2"
+                                onchange="this.form.submit()">
+                            <option value="最新上传" selected>最新上传</option>
+                            <option value="最多下载" >最多下载</option>
+                            <option value="按标题" >按标题</option>
+                        </select>
+                    </div>
+                    <!-- 搜索按钮 -->
+                    <div class="flex items-center space-x-3">
+                        <button type="submit"
+                                class="pku-red hover-pku-red text-white px-4 py-2 rounded-lg whitespace-nowrap">
+                            搜索
+                        </button>
+                        
+                    </div>
+                </div>
+            </form>
+        </div>
+        
+            <div class="bg-white rounded-lg shadow-md p-8 text-center">
+                
+                    <div class="text-gray-400 mb-4">
+                        <i class="fas fa-star text-6xl"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-2">您还没有收藏过资料</h3>
+                    <p class="text-gray-500 mb-4">收藏您感兴趣的资料，方便以后查找</p>
+                    <a href="/"
+                       class="pku-red hover-pku-red text-white px-6 py-3 rounded-lg inline-block">
+                        <i class="fas fa-search mr-2"></i>浏览资料
+                    </a>
+                
+            </div>
+        
+    </div>
+    <!-- 我关注的用户标签页 -->
+    <div id="following-tab" class="max-w-5xl mx-auto tab-content hidden">
+        
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                
+                    <div class="bg-white rounded-lg shadow-md overflow-hidden">
+                        <div class="px-5 py-4 flex items-center">
+                            <div class="w-12 h-12 rounded-full overflow-hidden mr-3 flex-shrink-0">
+                                <img src="/static/avatars/5/aa13f8a14e234384a3359197883459ae.jpg"
+                                     alt="iculizhi"
+                                     class="w-full h-full object-cover">
+                            </div>
+                            <div class="overflow-hidden">
+                                <h3 class="font-medium truncate whitespace-nowrap">iculizhi</h3>
+                                <p class="text-sm text-gray-500 truncate whitespace-nowrap">22级图灵班&amp;经济学双学位, 本站开发者之一.
+
+笔记风格:
+✨ 除与非理工同学合作外, 一律 markdown / LaTeX / Typst
+✨ 自2025春开始使用 Elegantbook 这一 LaTeX 模版作教材级精编 (致谢娄峻赫学长!!!)
+✨ 逐章节笔记外可能有名为 From think to thin (FTTT) 章节, 用以俯瞰全学期, 提炼 insight.
+✨ 偶尔整理分析往年题, 常用py和大模型api做大规模文字处理
+✨ Cheatpaper 会做到裸眼 5.0 视力极限, 一张 A4 可以塞 35000 字
+
+feel free to contact me! 🌹🌹🌹</p>
+                            </div>
+                        </div>
+                        <div class="bg-gray-50 px-5 py-3 flex justify-between">
+                            <a href="/user/5"
+                               class="text-blue-600 hover:text-blue-800">
+                                <i class="fas fa-user mr-1"></i>查看主页
+                            </a>
+                            <button onclick="unfollowUser(5, 'iculizhi')"
+                                    class="text-red-600 hover:text-red-800">
+                                <i class="fas fa-user-minus mr-1"></i>取消关注
+                            </button>
+                        </div>
+                    </div>
+                
+            </div>
+        
+    </div>
+</div>
+<!-- 我的粉丝模态框 -->
+<div id="followers-modal"
+     class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden z-50">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-3/4 md:w-1/2 max-h-[80vh] flex flex-col">
+        <div class="flex justify-between items-center mb-4 sticky top-0 bg-white py-2 z-10">
+            <h3 class="text-lg font-semibold">我的粉丝</h3>
+            <button onclick="closeFollowersModal()"
+                    class="text-gray-500 hover:text-gray-700">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div id="followers-list"
+             class="space-y-3 overflow-y-auto flex-grow"
+             style="max-height: calc(80vh - 4rem)">
+            
+                <p class="text-center text-gray-500 py-4">暂无粉丝</p>
+            
+        </div>
+    </div>
+</div>
+<!-- 确认删除模态框 -->
+<div id="deleteModal"
+     class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center hidden z-50">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-96">
+        <h3 class="text-lg font-semibold mb-4">确认删除</h3>
+        <p class="text-gray-600 mb-6">您确定要删除这份资料吗？此操作不可撤销。</p>
+        <div class="flex justify-end space-x-3">
+            <button onclick="closeDeleteModal()"
+                    class="px-4 py-2 border rounded text-gray-600 hover:bg-gray-100">取消</button>
+            <button id="confirmDeleteBtn"
+                    class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">删除</button>
+        </div>
+    </div>
+</div>
+
+            </div>
+        </div>
+        <!-- 页脚 -->
+        <footer class="bg-gray-800 pt-6 pb-8">
+            <div class="text-sm text-center text-gray-300">
+                © 2025 Plib 开发中 | <a href="https://beian.miit.gov.cn/"
+    target="_blank"
+    rel="noopener noreferrer">京ICP备2025114214号-1</a>
+            </div>
+            <div class="mt-3 text-sm text-center space-x-3">
+                <a href="/terms"
+                   class="text-gray-400 hover:text-gray-300 hover:underline">用户协议</a>
+                <a href="/privacy"
+                   class="text-gray-400 hover:text-gray-300 hover:underline">隐私政策</a>
+                <a href="https://status.thuhub.cn/status/pkuhub"
+                   class="text-gray-400 hover:text-gray-300 hover:underline">系统状态</a>
+                <a href="mailto:help@pkuhub.cn"
+                   class="text-gray-400 hover:text-gray-300 hover:underline">联系我们</a>
+                <a href="https://github.com/thepkuhub"
+                   target="_blank"
+                   class="text-gray-400 hover:text-gray-300 hover:underline">GitHub</a>
+            </div>
+        </footer>
+        
+    <script>
+    let materialIdToDelete = null;
+    const csrfToken = "IjkxNmY1YjQyMGE1YjM1OWJkNjcwMDY0ZmMyZDEyYjIyMWM2ZmFlZmQi.ah2gRQ.hqJm8E3nC7WBc0VDjFGfD9eXh5Q";
+
+    function confirmDelete(materialId) {
+        materialIdToDelete = materialId;
+        document.getElementById('deleteModal').classList.remove('hidden');
+    }
+
+    function closeDeleteModal() {
+        document.getElementById('deleteModal').classList.add('hidden');
+    }
+
+    function showFollowers() {
+        document.getElementById('followers-modal').classList.remove('hidden');
+    }
+
+    function closeFollowersModal() {
+        document.getElementById('followers-modal').classList.add('hidden');
+    }
+
+    document.getElementById('confirmDeleteBtn').addEventListener('click', function () {
+        if (materialIdToDelete) {
+            fetch(`/material/${materialIdToDelete}/delete`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // 删除成功，从页面上移除该行
+                        const row = document.getElementById(`material-row-${materialIdToDelete}`);
+                        if (row) {
+                            row.remove();
+                        }
+
+                        // 检查是否还有其他行
+                        const tbody = document.querySelector('tbody');
+                        if (tbody && tbody.children.length === 0) {
+                            // 如果没有更多行，刷新页面显示"没有上传"消息
+                            window.location.reload();
+                        }
+                    } else {
+                        alert(data.message || '删除失败，请稍后再试');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('删除请求失败，请稍后再试');
+                })
+                .finally(() => {
+                    closeDeleteModal();
+                });
+        }
+    });
+
+    // 添加选项卡切换功能，保持查询参数
+    function showTab(tabName) {
+        // 隐藏所有标签内容
+        document.querySelectorAll('.tab-content').forEach(tab => {
+            tab.classList.add('hidden');
+        });
+
+        // 显示选中的标签
+        document.getElementById(tabName + '-tab').classList.remove('hidden');
+
+        // 重置所有标签按钮样式
+        document.querySelectorAll('[id^="tab-"]').forEach(button => {
+            button.classList.remove('pku-red-border', 'text-pku-red');
+            button.classList.add('border-transparent', 'text-gray-500');
+        });
+
+        // 设置当前标签按钮样式
+        document.getElementById('tab-' + tabName).classList.remove('border-transparent', 'text-gray-500');
+        document.getElementById('tab-' + tabName).classList.add('pku-red-border', 'text-pku-red');
+
+        // 控制上传按钮的显示与隐藏
+        const uploadButton = document.getElementById('upload-button');
+        if (tabName === 'uploads') {
+            uploadButton.style.display = 'block';
+        } else {
+            uploadButton.style.display = 'none';
+        }
+
+        // 更新URL参数但不刷新页面
+        const url = new URL(window.location);
+        // 保留query和sort_by参数
+        const query = url.searchParams.get('query');
+        const sortBy = url.searchParams.get('sort_by');
+
+        url.searchParams.set('tab', tabName);
+        if (query) url.searchParams.set('query', query);
+        if (sortBy) url.searchParams.set('sort_by', sortBy);
+
+        window.history.pushState({}, '', url);
+    }
+
+    function unfollowUser(userId, username) {
+        if (confirm(`确定要取消关注 ${username} 吗？`)) {
+            fetch(`/unfollow/${userId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // 刷新页面以更新关注列表
+                        window.location.reload();
+                    } else {
+                        alert(data.message || '操作失败，请稍后再试');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('请求失败，请稍后重试');
+                });
+        }
+    }
+
+    // 取消收藏操作
+    function unlikeMaterial(materialId) {
+        // 获取CSRF令牌
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+        fetch(`/material/${materialId}/like`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/json'
+            }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // 从列表中移除该行
+                    const row = document.getElementById(`liked-material-row-${materialId}`);
+                    if (row) {
+                        const tbody = row.parentElement;
+                        row.remove();
+
+                        // 检查是否还有其他收藏资料
+                        if (tbody && tbody.children.length === 0) {
+                            // 如果没有更多行，刷新页面显示"没有收藏"消息
+                            window.location.reload();
+                        }
+                    }
+                } else {
+                    alert(data.message || '操作失败，请稍后再试');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('请求失败，请稍后重试');
+            });
+    }
+
+    // 检查URL参数以确定初始选项卡
+    document.addEventListener('DOMContentLoaded', function () {
+        const urlParams = new URLSearchParams(window.location.search);
+        const tab = urlParams.get('tab');
+        if (tab === 'liked') {
+            showTab('liked');
+        } else if (tab === 'following') {
+            showTab('following');
+        } else {
+            // 确保默认情况下上传按钮可见
+            document.getElementById('upload-button').style.display = 'block';
+        }
+    });
+    </script>
+
+    </body>
+</html>

@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "plib-cli"
+version = "0.1.0"
+description = "CLI for P-Lib (pkuhub.cn) — search and download PKU course materials. Built for pku-captain agents and humans."
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.31",
+    "beautifulsoup4>=4.12",
+    "lxml>=5.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.5"]
+
+[project.scripts]
+plib = "plib_cli.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/plib_cli"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]

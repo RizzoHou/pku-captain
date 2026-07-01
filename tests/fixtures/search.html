@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="description" content="A brief description of your website.">
+        <meta name="keywords" content="keyword1, keyword2, keyword3">
+        <!-- 添加CSRF标签用于JavaScript访问 -->
+        <meta name="csrf-token" content="IjhlMTIxMTYyZGIwNjJlNmY0NzI0ZjhkMTM4NGY3OTAwZjQ1ODYwMzci.ah2Ttg.jMJ9dALdl1ZJwpkocpWY-jQFEAA">
+        <!-- 添加favicon -->
+        <!-- 根据颜色模式使用不同版本的图标 -->
+        <link rel="icon"
+              href="/static/favicon-dark.ico"
+              type="image/x-icon"
+              media="(prefers-color-scheme: dark)">
+        <link rel="icon"
+              href="/static/favicon-light.ico"
+              type="image/x-icon"
+              media="(prefers-color-scheme: light)">
+        <link rel="shortcut icon"
+              href="/static/favicon-dark.ico"
+              type="image/x-icon"
+              media="(prefers-color-scheme: dark)">
+        <link rel="shortcut icon"
+              href="/static/favicon-light.ico"
+              type="image/x-icon"
+              media="(prefers-color-scheme: light)">
+        <title>
+            搜索结果 - 高等数学
+        </title>
+        <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"
+              rel="stylesheet">
+        <link rel="stylesheet"
+              href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+        <!-- 添加CSRF辅助脚本 -->
+        <script src="/static/js/csrf_helper.js"></script>
+        <!-- MathJax支持 -->
+        <script type="text/javascript" id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+        </script>
+        <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: {
+                fontCache: 'global'
+            },
+            options: {
+                enableMenu: false  // 禁用右键菜单以简化界面
+            },
+            startup: {
+                typeset: false     // 手动控制渲染时机
+            },
+            messageStyle: 'none',  // 关闭加载消息
+            renderActions: {
+                addMenu: [], // 禁用右键菜单
+                checkLoading: []  // 关闭加载检查
+            }
+        };
+        </script>
+        
+        
+        <style>
+        .pku-red {
+            background-color: #900023;
+        }
+
+        .pku-red-text {
+            color: #900023;
+        }
+
+        .hover-pku-red:hover {
+            background-color: #700018;
+        }
+
+        /* 添加页面布局样式，确保页脚在底部 */
+        html,
+        body {
+            height: 100%;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .content-wrapper {
+            flex: 1 0 auto;
+        }
+
+        footer {
+            flex-shrink: 0;
+        }
+        </style>
+    </head>
+    <body class="bg-gray-50">
+        <!-- 导航栏 -->
+        <nav class="pku-red text-white py-3 sticky top-0 z-50">
+    <div class="container mx-auto px-4 flex justify-between items-center">
+        <!-- logo 区域 -->
+        <a href="/"
+           class="flex items-center space-x-2">
+            <div class="h-10 w-10 flex items-center justify-center">
+                <img src="/static/avatars/white.png"
+                     alt="Plib会徽"
+                     class="h-10 w-10 object-contain"
+                     loading="eager">
+            </div>
+            <div class="hidden sm:block sm:text-xl sm:font-bold">Plib</div>
+        </a>
+        <div class="flex items-center space-x-3 sm:space-x-6">
+            <!-- 更新其他导航链接 -->
+            <a href="/" class="hover:text-gray-300">首页</a>
+            <a href="/upload" class="hover:text-gray-300">上传资料</a>
+            <!-- 临时使用硬编码URL避免构建错误 -->
+            <a href="/ranking/" class="hover:text-gray-300">
+                <span class="hidden sm:inline">用户</span>排行榜
+            </a>
+            <a href="/about" class="hover:text-gray-300">
+                关于<span class="hidden sm:inline">平台</span>
+            </a>
+        </div>
+        <div class="flex items-center space-x-4">
+            <div class="relative" id="nav-search">
+                <button type="button"
+                        id="nav-search-button"
+                        class="hover:text-gray-300 relative flex justify-center"
+                        aria-label="搜索资料"
+                        aria-expanded="false"
+                        aria-controls="nav-search-panel">
+                    <i class="fas fa-search"></i>
+                </button>
+                <form id="nav-search-panel"
+                      action="/search"
+                      method="get"
+                      class="absolute right-0 top-full mt-3 w-72 sm:w-80 bg-white rounded-md shadow-lg p-3 z-30 hidden">
+                    <div class="flex">
+                        <input id="nav-search-input"
+                               name="q"
+                               type="text"
+                               value="高等数学"
+                               placeholder="搜索资料..."
+                               class="w-full h-10 px-3 text-sm text-gray-800 rounded-l-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-red-900">
+                        <button type="submit"
+                                class="h-10 px-3 bg-red-900 text-white rounded-r-md border border-red-900 hover:bg-red-800"
+                                aria-label="搜索">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                </form>
+            </div>
+            
+                <div class="relative">
+                    <a href="/notifications"
+                       class="hover:text-gray-300 relative flex justify-center">
+                        <i class="fas fa-bell"></i>
+                        <span id="notification-badge"
+                              class="absolute -top-3 -right-3 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center"
+                              style="">13</span>
+                    </a>
+                </div>
+                <div class="relative" id="user-menu">
+                    <div class="flex items-center space-x-2 cursor-pointer"
+                         id="user-menu-button">
+                        <img src="/static/avatars/default_avatar.png"
+                             alt="用户头像"
+                             class="h-8 w-8 rounded-full object-cover">
+                        <div class="hidden lg:block">
+                            <span class="text-sm font-medium">rz</span>
+                            <div class="text-xs flex items-center">
+                                Lv.0
+                                <span class="ml-1 px-1 py-0 rounded-sm font-semibold"
+                                      style="color: #545454;
+                                             background-color: #E6E6E6">
+                                    新手
+                                </span>
+                            </div>
+                        </div>
+                        <i class="fas fa-caret-down text-xs"></i>
+                    </div>
+                    <div id="user-menu-dropdown"
+                         class="absolute right-0 mt-2 w-36 bg-white rounded-md shadow-lg z-20 hidden">
+                        <a href="/profile"
+                           class="block px-4 pb-2 rounded-t-md text-gray-800 hover:bg-gray-100"
+                           style="padding-top: .625rem">
+                            <!-- 相当于 pt-2.5，这样 hover 时的灰色背景可以恰好覆盖整个单元格 -->
+                            <div class="flex items-center justify-center">
+                                <i class="fas fa-user mr-2 pt-0.5"></i>
+                                <div>个人主页</div>
+                            </div>
+                        </a>
+                        
+                        
+                        
+                        <div class="border-t border-gray-300"></div>
+                        <a href="/logout"
+                           class="block px-4 py-2 rounded-b-md text-red-600 hover:bg-gray-100"
+                           style="padding-bottom: .625rem">
+                            <div class="flex items-center justify-center">
+                                <i class="fas fa-sign-out-alt mr-2 pt-0.5"></i>
+                                <div>退出登录</div>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+                <script>
+                document.addEventListener('DOMContentLoaded', function () {
+                    const menuButton = document.getElementById('user-menu-button');
+                    const menuDropdown = document.getElementById('user-menu-dropdown');
+
+                    menuButton.addEventListener('click', function () {
+                        menuDropdown.classList.toggle('hidden');
+                    });
+
+                    // 点击页面其他地方关闭菜单
+                    document.addEventListener('click', function (event) {
+                        if (!document.getElementById('user-menu').contains(event.target)) {
+                            menuDropdown.classList.add('hidden');
+                        }
+                    });
+                });
+                </script>
+            
+        </div>
+    </div>
+</nav>
+
+    <script>
+    // 定期检查未读通知数量
+    function checkUnreadNotifications() {
+        fetch('/notifications/unread_count')
+            .then(response => response.json())
+            .then(data => {
+                const badge = document.getElementById('notification-badge');
+                if (badge) {
+                    if (data.count > 0) {
+                        badge.textContent = data.count;
+                        badge.style.display = 'flex';
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                }
+            });
+    }
+
+    // 页面加载完成后检查通知
+    document.addEventListener('DOMContentLoaded', function () {
+        const search = document.getElementById('nav-search');
+        const searchButton = document.getElementById('nav-search-button');
+        const searchPanel = document.getElementById('nav-search-panel');
+        const searchInput = document.getElementById('nav-search-input');
+
+        if (search && searchButton && searchPanel && searchInput) {
+            searchButton.addEventListener('click', function () {
+                const isHidden = searchPanel.classList.toggle('hidden');
+                searchButton.setAttribute('aria-expanded', String(!isHidden));
+                if (!isHidden) {
+                    searchInput.focus();
+                    searchInput.select();
+                }
+            });
+
+            document.addEventListener('click', function (event) {
+                if (!search.contains(event.target)) {
+                    searchPanel.classList.add('hidden');
+                    searchButton.setAttribute('aria-expanded', 'false');
+                }
+            });
+
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape') {
+                    searchPanel.classList.add('hidden');
+                    searchButton.setAttribute('aria-expanded', 'false');
+                }
+            });
+        }
+
+        // 立即检查一次
+        checkUnreadNotifications();
+
+        // 每60秒检查一次
+        setInterval(checkUnreadNotifications, 60000);
+    });
+    </script>
+
+        <!-- 内容包装器 -->
+        <div class="content-wrapper">
+            <!-- Flash消息显示区域 - 改为固定定位 -->
+            <div class="fixed top-16 inset-x-0 z-50 flex justify-center">
+                
+                    
+                
+            </div>
+            <!-- 主页搜索栏 -->
+            
+            
+            <!-- 主要内容 -->
+            <div class="container mx-auto px-4 py-8">
+                
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-2xl font-bold mb-6">
+            搜索结果: "<span class="text-blue-600">高等数学</span>"
+        </h1>
+        <!-- 筛选表单 -->
+        <form id="filter-form"
+              method="get"
+              action="/search"
+              class="bg-white p-4 rounded shadow mb-6">
+            <input type="hidden" name="q" value="高等数学">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="flex items-center gap-2">
+                    <label for="type"
+                           class="text-sm font-medium text-gray-700 whitespace-nowrap">资料类型：</label>
+                    <select id="type"
+                            name="type"
+                            onchange="this.form.submit()"
+                            class="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        
+                            <option value="" selected>全部类型</option>
+                        
+                            <option value="习题" >习题</option>
+                        
+                            <option value="其他" >其他</option>
+                        
+                            <option value="汇编" >汇编</option>
+                        
+                            <option value="笔记" >笔记</option>
+                        
+                            <option value="答案" >答案</option>
+                        
+                            <option value="试卷" >试卷</option>
+                        
+                            <option value="课件" >课件</option>
+                        
+                            <option value="课本" >课本</option>
+                        
+                    </select>
+                </div>
+                <div class="flex items-center gap-2">
+                    <label for="time"
+                           class="text-sm font-medium text-gray-700 whitespace-nowrap">时间范围：</label>
+                    <select id="time"
+                            name="time"
+                            onchange="this.form.submit()"
+                            class="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        <option value="" selected>全部时间</option>
+                        <option value="week" >最近一周</option>
+                        <option value="month" >最近一月</option>
+                        <option value="year" >最近一年</option>
+                    </select>
+                </div>
+                <div class="flex items-center gap-2">
+                    <label for="sort"
+                           class="text-sm font-medium text-gray-700 whitespace-nowrap">排序方式：</label>
+                    <select id="sort"
+                            name="sort"
+                            onchange="this.form.submit()"
+                            class="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        <option value="relevance"
+                                selected>相关性</option>
+                        <option value="newest" >最新发布</option>
+                        <option value="downloads"
+                                >下载次数</option>
+                        <option value="views" >浏览次数</option>
+                        <option value="likes" >收藏次数</option>
+                        <option value="title" >标题排序</option>
+                        <!-- <option value="comments"
+         >评论数量</option> -->
+                    </select>
+                </div>
+            </div>
+            <!-- Removed Course Type Filter Section -->
+        </form>
+        <!-- 搜索结果列表 -->
+        
+            <div class="space-y-4">
+                
+                    <div class="bg-white p-4 rounded shadow hover:shadow-md transition-shadow duration-200">
+                        <div class="flex justify-between items-start mb-2 gap-4">
+                            <h2 class="text-lg font-semibold truncate">
+                                <a href="/material/1544"
+                                   class="text-blue-600 hover:underline truncate">高等数学C（二） 2026春季 期中考试</a>
+                            </h2>
+                            <span class="text-xs font-bold px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0"
+                                  style="background-color: #dbeafe;
+                                         color: #1e40af;
+                                         ">试卷</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mb-3">任课教师：统考
+搬运自树洞</p>
+                        <div class="flex flex-col md:flex-row md:justify-between items-start md:items-center gap-2 text-xs text-gray-500">
+                            <!-- 课程和院系信息 -->
+                            <div class="flex overflow-hidden w-full md:w-1/2 gap-2 sm:gap-3">
+                                <span class="flex items-center min-w-0">
+                                    <i class="fas fa-book mr-1 flex-shrink-0"></i>
+                                    <a href="/course/1316"
+                                       class="hover:underline truncate block">高等数学C (二)</a>
+                                </span>
+                                <span class="flex items-center min-w-0">
+                                    <i class="fas fa-university mr-1 flex-shrink-0"></i>
+                                    <a href="/department/1"
+                                       class="hover:underline truncate block">数学科学学院</a>
+                                </span>
+                                
+                                    <span class="flex items-center min-w-0">
+                                        <i class="fas fa-calendar-alt mr-1 flex-shrink-0"></i>
+                                        <span class="truncate block">2026春季</span>
+                                    </span>
+                                
+                            </div>
+                            <!-- 上传者和统计信息 -->
+                            <div class="flex overflow-hidden w-full md:w-1/2 md:justify-end">
+                                <span class="flex items-center min-w-0 mr-2 sm:mr-3">
+                                    <i class="fas fa-user mr-1 flex-shrink-0"></i>
+                                    <a href="/user/69"
+                                       class="hover:underline truncate block">Sparkle</a>
+                                </span>
+                                <div class="flex flex-shrink-0 items-center gap-2 sm:gap-3">
+                                    <span class="flex-shrink-0"><i class="fas fa-clock mr-1"></i>2026-04-27</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-download mr-1"></i>1</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-eye mr-1"></i>29</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-star mr-1"></i>0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                
+                    <div class="bg-white p-4 rounded shadow hover:shadow-md transition-shadow duration-200">
+                        <div class="flex justify-between items-start mb-2 gap-4">
+                            <h2 class="text-lg font-semibold truncate">
+                                <a href="/material/1543"
+                                   class="text-blue-600 hover:underline truncate">高等数学B（二） 2026春季 期中考试</a>
+                            </h2>
+                            <span class="text-xs font-bold px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0"
+                                  style="background-color: #dbeafe;
+                                         color: #1e40af;
+                                         ">试卷</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mb-3">任课教师：统考
+搬运自树洞</p>
+                        <div class="flex flex-col md:flex-row md:justify-between items-start md:items-center gap-2 text-xs text-gray-500">
+                            <!-- 课程和院系信息 -->
+                            <div class="flex overflow-hidden w-full md:w-1/2 gap-2 sm:gap-3">
+                                <span class="flex items-center min-w-0">
+                                    <i class="fas fa-book mr-1 flex-shrink-0"></i>
+                                    <a href="/course/1502"
+                                       class="hover:underline truncate block">高等数学 (B) (二)</a>
+                                </span>
+                                <span class="flex items-center min-w-0">
+                                    <i class="fas fa-university mr-1 flex-shrink-0"></i>
+                                    <a href="/department/1"
+                                       class="hover:underline truncate block">数学科学学院</a>
+                                </span>
+                                
+                                    <span class="flex items-center min-w-0">
+                                        <i class="fas fa-calendar-alt mr-1 flex-shrink-0"></i>
+                                        <span class="truncate block">2026春季</span>
+                                    </span>
+                                
+                            </div>
+                            <!-- 上传者和统计信息 -->
+                            <div class="flex overflow-hidden w-full md:w-1/2 md:justify-end">
+                                <span class="flex items-center min-w-0 mr-2 sm:mr-3">
+                                    <i class="fas fa-user mr-1 flex-shrink-0"></i>
+                                    <a href="/user/69"
+                                       class="hover:underline truncate block">Sparkle</a>
+                                </span>
+                                <div class="flex flex-shrink-0 items-center gap-2 sm:gap-3">
+                                    <span class="flex-shrink-0"><i class="fas fa-clock mr-1"></i>2026-04-26</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-download mr-1"></i>4</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-eye mr-1"></i>26</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-star mr-1"></i>0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                
+                    <div class="bg-white p-4 rounded shadow hover:shadow-md transition-shadow duration-200">
+                        <div class="flex justify-between items-start mb-2 gap-4">
+                            <h2 class="text-lg font-semibold truncate">
+                                <a href="/material/1541"
+                                   class="text-blue-600 hover:underline truncate">26春高等数学A2期中试题</a>
+                            </h2>
+                            <span class="text-xs font-bold px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0"
+                                  style="background-color: #dbeafe;
+                                         color: #1e40af;
+                                         ">试卷</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mb-3">暂无描述</p>
+                        <div class="flex flex-col md:flex-row md:justify-between items-start md:items-center gap-2 text-xs text-gray-500">
+                            <!-- 课程和院系信息 -->
+                            <div class="flex overflow-hidden w-full md:w-1/2 gap-2 sm:gap-3">
+                                <span class="flex items-center min-w-0">
+                                    <i class="fas fa-book mr-1 flex-shrink-0"></i>
+                                    <a href="/course/1318"
+                                       class="hover:underline truncate block">高等数学A（二）</a>
+                                </span>
+                                <span class="flex items-center min-w-0">
+                                    <i class="fas fa-university mr-1 flex-shrink-0"></i>
+                                    <a href="/department/1"
+                                       class="hover:underline truncate block">数学科学学院</a>
+                                </span>
+                                
+                                    <span class="flex items-center min-w-0">
+                                        <i class="fas fa-calendar-alt mr-1 flex-shrink-0"></i>
+                                        <span class="truncate block">2026春季</span>
+                                    </span>
+                                
+                            </div>
+                            <!-- 上传者和统计信息 -->
+                            <div class="flex overflow-hidden w-full md:w-1/2 md:justify-end">
+                                <span class="flex items-center min-w-0 mr-2 sm:mr-3">
+                                    <i class="fas fa-user mr-1 flex-shrink-0"></i>
+                                    <a href="/user/2052"
+                                       class="hover:underline truncate block">Kitten</a>
+                                </span>
+                                <div class="flex flex-shrink-0 items-center gap-2 sm:gap-3">
+                                    <span class="flex-shrink-0"><i class="fas fa-clock mr-1"></i>2026-04-26</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-download mr-1"></i>1</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-eye mr-1"></i>12</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-star mr-1"></i>0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                
+                    <div class="bg-white p-4 rounded shadow hover:shadow-md transition-shadow duration-200">
+                        <div class="flex justify-between items-start mb-2 gap-4">
+                            <h2 class="text-lg font-semibold truncate">
+                                <a href="/material/1528"
+                                   class="text-blue-600 hover:underline truncate">高等数学 A 下 2026 春 期中试题</a>
+                            </h2>
+                            <span class="text-xs font-bold px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0"
+                                  style="background-color: #dbeafe;
+                                         color: #1e40af;
+                                         ">试卷</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mb-3">暂无描述</p>
+                        <div class="flex flex-col md:flex-row md:justify-between items-start md:items-center gap-2 text-xs text-gray-500">
+                            <!-- 课程和院系信息 -->
+                            <div class="flex overflow-hidden w-full md:w-1/2 gap-2 sm:gap-3">
+                                <span class="flex items-center min-w-0">
+                                    <i class="fas fa-book mr-1 flex-shrink-0"></i>
+                                    <a href="/course/2132"
+                                       class="hover:underline truncate block">高等数学（A）（二）</a>
+                                </span>
+                                <span class="flex items-center min-w-0">
+                                    <i class="fas fa-university mr-1 flex-shrink-0"></i>
+                                    <a href="/department/1"
+                                       class="hover:underline truncate block">数学科学学院</a>
+                                </span>
+                                
+                                    <span class="flex items-center min-w-0">
+                                        <i class="fas fa-calendar-alt mr-1 flex-shrink-0"></i>
+                                        <span class="truncate block">2026 春</span>
+                                    </span>
+                                
+                            </div>
+                            <!-- 上传者和统计信息 -->
+                            <div class="flex overflow-hidden w-full md:w-1/2 md:justify-end">
+                                <span class="flex items-center min-w-0 mr-2 sm:mr-3">
+                                    <i class="fas fa-user mr-1 flex-shrink-0"></i>
+                                    <a href="/user/541"
+                                       class="hover:underline truncate block">ADreamLeft</a>
+                                </span>
+                                <div class="flex flex-shrink-0 items-center gap-2 sm:gap-3">
+                                    <span class="flex-shrink-0"><i class="fas fa-clock mr-1"></i>2026-04-23</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-download mr-1"></i>7</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-eye mr-1"></i>62</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-star mr-1"></i>0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                
+                    <div class="bg-white p-4 rounded shadow hover:shadow-md transition-shadow duration-200">
+                        <div class="flex justify-between items-start mb-2 gap-4">
+                            <h2 class="text-lg font-semibold truncate">
+                                <a href="/material/1498"
+                                   class="text-blue-600 hover:underline truncate">高等数学C（二）2022-2025期中试题详解（PDF）</a>
+                            </h2>
+                            <span class="text-xs font-bold px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0"
+                                  style="background-color: #cffafe;
+                                         color: #155e75;
+                                         ">答案</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mb-3">内容简介：高等数学C（下）2022-2025期中试题详解，题目根据赛艇等资料来源整理并按题型分类，答案和解析由本人撰写。
+作者简介：生科院2024级学生，去年高数期中考炸后中期退课，今年重新再来。
+由于本人水平极为有限，且为了在考前尽快上传这份解析，没来得及校对，解析中可能含有错误或不严谨之处，请同学们多批评指教。</p>
+                        <div class="flex flex-col md:flex-row md:justify-between items-start md:items-center gap-2 text-xs text-gray-500">
+                            <!-- 课程和院系信息 -->
+                            <div class="flex overflow-hidden w-full md:w-1/2 gap-2 sm:gap-3">
+                                <span class="flex items-center min-w-0">
+                                    <i class="fas fa-book mr-1 flex-shrink-0"></i>
+                                    <a href="/course/1316"
+                                       class="hover:underline truncate block">高等数学C (二)</a>
+                                </span>
+                                <span class="flex items-center min-w-0">
+                                    <i class="fas fa-university mr-1 flex-shrink-0"></i>
+                                    <a href="/department/1"
+                                       class="hover:underline truncate block">数学科学学院</a>
+                                </span>
+                                
+                            </div>
+                            <!-- 上传者和统计信息 -->
+                            <div class="flex overflow-hidden w-full md:w-1/2 md:justify-end">
+                                <span class="flex items-center min-w-0 mr-2 sm:mr-3">
+                                    <i class="fas fa-user mr-1 flex-shrink-0"></i>
+                                    <a href="/user/1000"
+                                       class="hover:underline truncate block">卷猫</a>
+                                </span>
+                                <div class="flex flex-shrink-0 items-center gap-2 sm:gap-3">
+                                    <span class="flex-shrink-0"><i class="fas fa-clock mr-1"></i>2026-04-20</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-download mr-1"></i>3</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-eye mr-1"></i>23</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-star mr-1"></i>0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                
+                    <div class="bg-white p-4 rounded shadow hover:shadow-md transition-shadow duration-200">
+                        <div class="flex justify-between items-start mb-2 gap-4">
+                            <h2 class="text-lg font-semibold truncate">
+                                <a href="/material/1450"
+                                   class="text-blue-600 hover:underline truncate">高等数学A | 高数A 童嘉骏老师补充题与个人笔记</a>
+                            </h2>
+                            <span class="text-xs font-bold px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0"
+                                  style="background-color: #dcfce7;
+                                         color: #166534;
+                                         ">笔记</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mb-3">文件是童嘉骏老师补充题。笔记见github，网址https://github.com/asceticism-pku/Advanced-Mathematics</p>
+                        <div class="flex flex-col md:flex-row md:justify-between items-start md:items-center gap-2 text-xs text-gray-500">
+                            <!-- 课程和院系信息 -->
+                            <div class="flex overflow-hidden w-full md:w-1/2 gap-2 sm:gap-3">
+                                <span class="flex items-center min-w-0">
+                                    <i class="fas fa-book mr-1 flex-shrink-0"></i>
+                                    <a href="/course/1318"
+                                       class="hover:underline truncate block">高等数学A（二）</a>
+                                </span>
+                                <span class="flex items-center min-w-0">
+                                    <i class="fas fa-university mr-1 flex-shrink-0"></i>
+                                    <a href="/department/1"
+                                       class="hover:underline truncate block">数学科学学院</a>
+                                </span>
+                                
+                                    <span class="flex items-center min-w-0">
+                                        <i class="fas fa-calendar-alt mr-1 flex-shrink-0"></i>
+                                        <span class="truncate block">其他</span>
+                                    </span>
+                                
+                            </div>
+                            <!-- 上传者和统计信息 -->
+                            <div class="flex overflow-hidden w-full md:w-1/2 md:justify-end">
+                                <span class="flex items-center min-w-0 mr-2 sm:mr-3">
+                                    <i class="fas fa-user mr-1 flex-shrink-0"></i>
+                                    <a href="/user/493"
+                                       class="hover:underline truncate block">asceticism</a>
+                                </span>
+                                <div class="flex flex-shrink-0 items-center gap-2 sm:gap-3">
+                                    <span class="flex-shrink-0"><i class="fas fa-clock mr-1"></i>2026-03-23</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-download mr-1"></i>33</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-eye mr-1"></i>140</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-star mr-1"></i>0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                
+                    <div class="bg-white p-4 rounded shadow hover:shadow-md transition-shadow duration-200">
+                        <div class="flex justify-between items-start mb-2 gap-4">
+                            <h2 class="text-lg font-semibold truncate">
+                                <a href="/material/1379"
+                                   class="text-blue-600 hover:underline truncate">高等数学B|高数课本下册（李忠版）</a>
+                            </h2>
+                            <span class="text-xs font-bold px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0"
+                                  style="background-color: #fee2e2;
+                                         color: #991b1b;
+                                         ">课本</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mb-3">暂无描述</p>
+                        <div class="flex flex-col md:flex-row md:justify-between items-start md:items-center gap-2 text-xs text-gray-500">
+                            <!-- 课程和院系信息 -->
+                            <div class="flex overflow-hidden w-full md:w-1/2 gap-2 sm:gap-3">
+                                <span class="flex items-center min-w-0">
+                                    <i class="fas fa-book mr-1 flex-shrink-0"></i>
+                                    <a href="/course/1838"
+                                       class="hover:underline truncate block">高等数学</a>
+                                </span>
+                                <span class="flex items-center min-w-0">
+                                    <i class="fas fa-university mr-1 flex-shrink-0"></i>
+                                    <a href="/department/1"
+                                       class="hover:underline truncate block">数学科学学院</a>
+                                </span>
+                                
+                                    <span class="flex items-center min-w-0">
+                                        <i class="fas fa-calendar-alt mr-1 flex-shrink-0"></i>
+                                        <span class="truncate block">其他</span>
+                                    </span>
+                                
+                            </div>
+                            <!-- 上传者和统计信息 -->
+                            <div class="flex overflow-hidden w-full md:w-1/2 md:justify-end">
+                                <span class="flex items-center min-w-0 mr-2 sm:mr-3">
+                                    <i class="fas fa-user mr-1 flex-shrink-0"></i>
+                                    <a href="/user/2675"
+                                       class="hover:underline truncate block">linlin</a>
+                                </span>
+                                <div class="flex flex-shrink-0 items-center gap-2 sm:gap-3">
+                                    <span class="flex-shrink-0"><i class="fas fa-clock mr-1"></i>2026-02-06</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-download mr-1"></i>11</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-eye mr-1"></i>51</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-star mr-1"></i>0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                
+                    <div class="bg-white p-4 rounded shadow hover:shadow-md transition-shadow duration-200">
+                        <div class="flex justify-between items-start mb-2 gap-4">
+                            <h2 class="text-lg font-semibold truncate">
+                                <a href="/material/1378"
+                                   class="text-blue-600 hover:underline truncate">高等数学B|高数课本上册（李忠版）</a>
+                            </h2>
+                            <span class="text-xs font-bold px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0"
+                                  style="background-color: #fee2e2;
+                                         color: #991b1b;
+                                         ">课本</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mb-3">暂无描述</p>
+                        <div class="flex flex-col md:flex-row md:justify-between items-start md:items-center gap-2 text-xs text-gray-500">
+                            <!-- 课程和院系信息 -->
+                            <div class="flex overflow-hidden w-full md:w-1/2 gap-2 sm:gap-3">
+                                <span class="flex items-center min-w-0">
+                                    <i class="fas fa-book mr-1 flex-shrink-0"></i>
+                                    <a href="/course/1838"
+                                       class="hover:underline truncate block">高等数学</a>
+                                </span>
+                                <span class="flex items-center min-w-0">
+                                    <i class="fas fa-university mr-1 flex-shrink-0"></i>
+                                    <a href="/department/1"
+                                       class="hover:underline truncate block">数学科学学院</a>
+                                </span>
+                                
+                                    <span class="flex items-center min-w-0">
+                                        <i class="fas fa-calendar-alt mr-1 flex-shrink-0"></i>
+                                        <span class="truncate block">其他</span>
+                                    </span>
+                                
+                            </div>
+                            <!-- 上传者和统计信息 -->
+                            <div class="flex overflow-hidden w-full md:w-1/2 md:justify-end">
+                                <span class="flex items-center min-w-0 mr-2 sm:mr-3">
+                                    <i class="fas fa-user mr-1 flex-shrink-0"></i>
+                                    <a href="/user/2675"
+                                       class="hover:underline truncate block">linlin</a>
+                                </span>
+                                <div class="flex flex-shrink-0 items-center gap-2 sm:gap-3">
+                                    <span class="flex-shrink-0"><i class="fas fa-clock mr-1"></i>2026-02-06</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-download mr-1"></i>0</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-eye mr-1"></i>24</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-star mr-1"></i>0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                
+                    <div class="bg-white p-4 rounded shadow hover:shadow-md transition-shadow duration-200">
+                        <div class="flex justify-between items-start mb-2 gap-4">
+                            <h2 class="text-lg font-semibold truncate">
+                                <a href="/material/1070"
+                                   class="text-blue-600 hover:underline truncate">2025 秋 高等数学 B 上期中试题</a>
+                            </h2>
+                            <span class="text-xs font-bold px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0"
+                                  style="background-color: #dbeafe;
+                                         color: #1e40af;
+                                         ">试卷</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mb-3">#高数
+#高等数学B</p>
+                        <div class="flex flex-col md:flex-row md:justify-between items-start md:items-center gap-2 text-xs text-gray-500">
+                            <!-- 课程和院系信息 -->
+                            <div class="flex overflow-hidden w-full md:w-1/2 gap-2 sm:gap-3">
+                                <span class="flex items-center min-w-0">
+                                    <i class="fas fa-book mr-1 flex-shrink-0"></i>
+                                    <a href="/course/2030"
+                                       class="hover:underline truncate block">高等数学 (B) (一)</a>
+                                </span>
+                                <span class="flex items-center min-w-0">
+                                    <i class="fas fa-university mr-1 flex-shrink-0"></i>
+                                    <a href="/department/1"
+                                       class="hover:underline truncate block">数学科学学院</a>
+                                </span>
+                                
+                                    <span class="flex items-center min-w-0">
+                                        <i class="fas fa-calendar-alt mr-1 flex-shrink-0"></i>
+                                        <span class="truncate block">2025 秋季</span>
+                                    </span>
+                                
+                            </div>
+                            <!-- 上传者和统计信息 -->
+                            <div class="flex overflow-hidden w-full md:w-1/2 md:justify-end">
+                                <span class="flex items-center min-w-0 mr-2 sm:mr-3">
+                                    <i class="fas fa-user mr-1 flex-shrink-0"></i>
+                                    <a href="/user/541"
+                                       class="hover:underline truncate block">ADreamLeft</a>
+                                </span>
+                                <div class="flex flex-shrink-0 items-center gap-2 sm:gap-3">
+                                    <span class="flex-shrink-0"><i class="fas fa-clock mr-1"></i>2025-11-10</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-download mr-1"></i>4</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-eye mr-1"></i>50</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-star mr-1"></i>0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                
+                    <div class="bg-white p-4 rounded shadow hover:shadow-md transition-shadow duration-200">
+                        <div class="flex justify-between items-start mb-2 gap-4">
+                            <h2 class="text-lg font-semibold truncate">
+                                <a href="/material/1064"
+                                   class="text-blue-600 hover:underline truncate">高等数学A期中考试2025年试题</a>
+                            </h2>
+                            <span class="text-xs font-bold px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0"
+                                  style="background-color: #dbeafe;
+                                         color: #1e40af;
+                                         ">试卷</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mb-3">暂无描述</p>
+                        <div class="flex flex-col md:flex-row md:justify-between items-start md:items-center gap-2 text-xs text-gray-500">
+                            <!-- 课程和院系信息 -->
+                            <div class="flex overflow-hidden w-full md:w-1/2 gap-2 sm:gap-3">
+                                <span class="flex items-center min-w-0">
+                                    <i class="fas fa-book mr-1 flex-shrink-0"></i>
+                                    <a href="/course/1846"
+                                       class="hover:underline truncate block">高等数学A（一）</a>
+                                </span>
+                                <span class="flex items-center min-w-0">
+                                    <i class="fas fa-university mr-1 flex-shrink-0"></i>
+                                    <a href="/department/1"
+                                       class="hover:underline truncate block">数学科学学院</a>
+                                </span>
+                                
+                                    <span class="flex items-center min-w-0">
+                                        <i class="fas fa-calendar-alt mr-1 flex-shrink-0"></i>
+                                        <span class="truncate block">2025年秋季</span>
+                                    </span>
+                                
+                            </div>
+                            <!-- 上传者和统计信息 -->
+                            <div class="flex overflow-hidden w-full md:w-1/2 md:justify-end">
+                                <span class="flex items-center min-w-0 mr-2 sm:mr-3">
+                                    <i class="fas fa-user mr-1 flex-shrink-0"></i>
+                                    <a href="/user/897"
+                                       class="hover:underline truncate block">虚怀若谷</a>
+                                </span>
+                                <div class="flex flex-shrink-0 items-center gap-2 sm:gap-3">
+                                    <span class="flex-shrink-0"><i class="fas fa-clock mr-1"></i>2025-11-06</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-download mr-1"></i>52</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-eye mr-1"></i>138</span>
+                                    <span class="flex-shrink-0"><i class="fas fa-star mr-1"></i>0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                
+            </div>
+            <!-- 分页导航 -->
+            
+                <div class="mt-6">
+                    <div class="flex justify-between items-center">
+                        <div class="hidden lg:block text-sm text-gray-700">
+                            显示 <span class="font-medium">1</span> 到
+                            <span class="font-medium">10</span>
+                            ，共 <span class="font-medium">44</span> 条结果
+                        </div>
+                        <div class="flex space-x-1 md:space-x-2 mx-auto lg:mx-0">
+                            
+                                <span class="px-2 md:px-3 py-1 border rounded text-gray-400 cursor-not-allowed flex items-center">
+                                    <i class="fas fa-angle-double-left"></i>
+                                    <span class="hidden lg:inline ml-2">首页</span>
+                                </span>
+                                <span class="hidden md:inline-block px-2 md:px-3 py-1 border rounded text-gray-400 cursor-not-allowed flex items-center">
+                                    <i class="fas fa-angle-left"></i>
+                                    <span class="hidden lg:inline ml-1">上一页</span>
+                                </span>
+                            
+                            
+                             <!-- 上取整 -->
+                            
+                            
+                            
+                            
+                            
+                                
+                                    <span class="px-2 md:px-3 py-1 border rounded bg-blue-600 text-white">1</span>
+                                
+                            
+                                
+                                    <a href="/search?q=%E9%AB%98%E7%AD%89%E6%95%B0%E5%AD%A6&amp;page=2&amp;type=&amp;time=&amp;sort=relevance"
+                                       class="px-2 md:px-3 py-1 border rounded text-blue-600 hover:bg-blue-50">2</a>
+                                
+                            
+                                
+                                    <a href="/search?q=%E9%AB%98%E7%AD%89%E6%95%B0%E5%AD%A6&amp;page=3&amp;type=&amp;time=&amp;sort=relevance"
+                                       class="px-2 md:px-3 py-1 border rounded text-blue-600 hover:bg-blue-50">3</a>
+                                
+                            
+                                
+                                    <a href="/search?q=%E9%AB%98%E7%AD%89%E6%95%B0%E5%AD%A6&amp;page=4&amp;type=&amp;time=&amp;sort=relevance"
+                                       class="px-2 md:px-3 py-1 border rounded text-blue-600 hover:bg-blue-50">4</a>
+                                
+                            
+                                
+                                    <a href="/search?q=%E9%AB%98%E7%AD%89%E6%95%B0%E5%AD%A6&amp;page=5&amp;type=&amp;time=&amp;sort=relevance"
+                                       class="px-2 md:px-3 py-1 border rounded text-blue-600 hover:bg-blue-50">5</a>
+                                
+                            
+                            
+                            
+                                <a href="/search?q=%E9%AB%98%E7%AD%89%E6%95%B0%E5%AD%A6&amp;page=2&amp;type=&amp;time=&amp;sort=relevance"
+                                   class="hidden md:inline-block px-2 md:px-3 py-1 border rounded text-blue-600 hover:bg-blue-50 flex items-center">
+                                    <span class="hidden lg:inline mr-1">下一页</span>
+                                    <i class="fas fa-angle-right"></i>
+                                </a>
+                                <a href="/search?q=%E9%AB%98%E7%AD%89%E6%95%B0%E5%AD%A6&amp;page=5&amp;type=&amp;time=&amp;sort=relevance"
+                                   class="px-2 md:px-3 py-1 border rounded text-blue-600 hover:bg-blue-50 flex items-center">
+                                    <span class="hidden lg:inline mr-2">末页</span>
+                                    <i class="fas fa-angle-double-right"></i>
+                                </a>
+                            
+                        </div>
+                    </div>
+                </div>
+            
+        
+    </div>
+
+            </div>
+        </div>
+        <!-- 页脚 -->
+        <footer class="bg-gray-800 pt-6 pb-8">
+            <div class="text-sm text-center text-gray-300">
+                © 2025 Plib 开发中 | <a href="https://beian.miit.gov.cn/"
+    target="_blank"
+    rel="noopener noreferrer">京ICP备2025114214号-1</a>
+            </div>
+            <div class="mt-3 text-sm text-center space-x-3">
+                <a href="/terms"
+                   class="text-gray-400 hover:text-gray-300 hover:underline">用户协议</a>
+                <a href="/privacy"
+                   class="text-gray-400 hover:text-gray-300 hover:underline">隐私政策</a>
+                <a href="https://status.thuhub.cn/status/pkuhub"
+                   class="text-gray-400 hover:text-gray-300 hover:underline">系统状态</a>
+                <a href="mailto:help@pkuhub.cn"
+                   class="text-gray-400 hover:text-gray-300 hover:underline">联系我们</a>
+                <a href="https://github.com/thepkuhub"
+                   target="_blank"
+                   class="text-gray-400 hover:text-gray-300 hover:underline">GitHub</a>
+            </div>
+        </footer>
+        
+        
+    </body>
+</html>

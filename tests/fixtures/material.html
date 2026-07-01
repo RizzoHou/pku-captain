@@ -1,0 +1,2745 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="description" content="A brief description of your website.">
+        <meta name="keywords" content="keyword1, keyword2, keyword3">
+        <!-- 添加CSRF标签用于JavaScript访问 -->
+        <meta name="csrf-token" content="IjhlMTIxMTYyZGIwNjJlNmY0NzI0ZjhkMTM4NGY3OTAwZjQ1ODYwMzci.ah2Tlw.oYfnNPsoDcFbebirpwYbvagZjNs">
+        <!-- 添加favicon -->
+        <!-- 根据颜色模式使用不同版本的图标 -->
+        <link rel="icon"
+              href="/static/favicon-dark.ico"
+              type="image/x-icon"
+              media="(prefers-color-scheme: dark)">
+        <link rel="icon"
+              href="/static/favicon-light.ico"
+              type="image/x-icon"
+              media="(prefers-color-scheme: light)">
+        <link rel="shortcut icon"
+              href="/static/favicon-dark.ico"
+              type="image/x-icon"
+              media="(prefers-color-scheme: dark)">
+        <link rel="shortcut icon"
+              href="/static/favicon-light.ico"
+              type="image/x-icon"
+              media="(prefers-color-scheme: light)">
+        <title>
+            英语名著与电影 小测与期末考 资料 - 资料详情 - Plib
+        </title>
+        <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"
+              rel="stylesheet">
+        <link rel="stylesheet"
+              href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+        <!-- 添加CSRF辅助脚本 -->
+        <script src="/static/js/csrf_helper.js"></script>
+        <!-- MathJax支持 -->
+        <script type="text/javascript" id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+        </script>
+        <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: {
+                fontCache: 'global'
+            },
+            options: {
+                enableMenu: false  // 禁用右键菜单以简化界面
+            },
+            startup: {
+                typeset: false     // 手动控制渲染时机
+            },
+            messageStyle: 'none',  // 关闭加载消息
+            renderActions: {
+                addMenu: [], // 禁用右键菜单
+                checkLoading: []  // 关闭加载检查
+            }
+        };
+        </script>
+        
+    <!-- 添加KaTeX和marked.js支持 -->
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@9.1.5/marked.min.js"></script>
+    <style>
+    /* 自定义Markdown渲染样式 */
+    .markdown-content h1 {
+        font-size: 1.5rem;
+        font-weight: bold;
+        margin: 1rem 0;
+    }
+
+    .markdown-content h2 {
+        font-size: 1.3rem;
+        font-weight: bold;
+        margin: 0.8rem 0;
+    }
+
+    .markdown-content h3 {
+        font-size: 1.1rem;
+        font-weight: bold;
+        margin: 0.6rem 0;
+    }
+
+    .markdown-content p {
+        margin-bottom: 0.5rem;
+    }
+
+    .markdown-content ul {
+        list-style-type: disc;
+        padding-left: 2rem;
+        margin: 0.5rem 0;
+    }
+
+    .markdown-content ol {
+        list-style-type: decimal;
+        padding-left: 2rem;
+        margin: 0.5rem 0;
+    }
+
+    .markdown-content blockquote {
+        border-left: 3px solid #ddd;
+        padding-left: 1rem;
+        color: #666;
+    }
+
+    .markdown-content pre {
+        background-color: #f5f5f5;
+        padding: 0.5rem;
+        border-radius: 0.25rem;
+        overflow-x: auto;
+    }
+
+    .markdown-content code {
+        font-family: monospace;
+        background-color: #f5f5f5;
+        padding: 0.1rem 0.3rem;
+        border-radius: 0.2rem;
+    }
+
+    .markdown-content a {
+        color: #3b82f6;
+        text-decoration: underline;
+    }
+
+    .markdown-content img {
+        max-width: 100%;
+    }
+
+    .markdown-content table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 0.5rem 0;
+    }
+
+    .markdown-content th,
+    .markdown-content td {
+        border: 1px solid #ddd;
+        padding: 0.3rem;
+    }
+
+    /* 数学公式块的样式 */
+    .math-block {
+        display: block;
+        width: 100%;
+        overflow-x: auto;
+        margin: 1rem 0;
+        padding: 0.5rem 0;
+    }
+
+    /* 确保KaTeX元素在块内正确显示 */
+    .katex-display {
+        display: block;
+        margin: 1em 0;
+        text-align: center;
+        overflow-x: auto;
+        overflow-y: hidden;
+    }
+
+    /* 预览区域样式 */
+    #preview-container {
+        border: 1px solid #e5e7eb;
+        border-radius: 0.375rem;
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+        background-color: #f9fafb;
+        min-height: 6rem;
+    }
+
+    /* Tailwind CSS v2.2.19 颜色很少，暂时按照 v3.4.17 的设计打个补丁 */
+    .text-amber-500 {
+        color: #f59e0b;
+    }
+
+    .border-amber-400 {
+        border-color: #fbbf24;
+    }
+
+    .bg-amber-50 {
+        background-color: #fffbeb;
+    }
+
+    .hover-bg-amber-100:hover {
+        background-color: #fef3c7;
+    }
+    </style>
+
+        <style>
+        .pku-red {
+            background-color: #900023;
+        }
+
+        .pku-red-text {
+            color: #900023;
+        }
+
+        .hover-pku-red:hover {
+            background-color: #700018;
+        }
+
+        /* 添加页面布局样式，确保页脚在底部 */
+        html,
+        body {
+            height: 100%;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .content-wrapper {
+            flex: 1 0 auto;
+        }
+
+        footer {
+            flex-shrink: 0;
+        }
+        </style>
+    </head>
+    <body class="bg-gray-50">
+        <!-- 导航栏 -->
+        <nav class="pku-red text-white py-3 sticky top-0 z-50">
+    <div class="container mx-auto px-4 flex justify-between items-center">
+        <!-- logo 区域 -->
+        <a href="/"
+           class="flex items-center space-x-2">
+            <div class="h-10 w-10 flex items-center justify-center">
+                <img src="/static/avatars/white.png"
+                     alt="Plib会徽"
+                     class="h-10 w-10 object-contain"
+                     loading="eager">
+            </div>
+            <div class="hidden sm:block sm:text-xl sm:font-bold">Plib</div>
+        </a>
+        <div class="flex items-center space-x-3 sm:space-x-6">
+            <!-- 更新其他导航链接 -->
+            <a href="/" class="hover:text-gray-300">首页</a>
+            <a href="/upload" class="hover:text-gray-300">上传资料</a>
+            <!-- 临时使用硬编码URL避免构建错误 -->
+            <a href="/ranking/" class="hover:text-gray-300">
+                <span class="hidden sm:inline">用户</span>排行榜
+            </a>
+            <a href="/about" class="hover:text-gray-300">
+                关于<span class="hidden sm:inline">平台</span>
+            </a>
+        </div>
+        <div class="flex items-center space-x-4">
+            <div class="relative" id="nav-search">
+                <button type="button"
+                        id="nav-search-button"
+                        class="hover:text-gray-300 relative flex justify-center"
+                        aria-label="搜索资料"
+                        aria-expanded="false"
+                        aria-controls="nav-search-panel">
+                    <i class="fas fa-search"></i>
+                </button>
+                <form id="nav-search-panel"
+                      action="/search"
+                      method="get"
+                      class="absolute right-0 top-full mt-3 w-72 sm:w-80 bg-white rounded-md shadow-lg p-3 z-30 hidden">
+                    <div class="flex">
+                        <input id="nav-search-input"
+                               name="q"
+                               type="text"
+                               value=""
+                               placeholder="搜索资料..."
+                               class="w-full h-10 px-3 text-sm text-gray-800 rounded-l-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-red-900">
+                        <button type="submit"
+                                class="h-10 px-3 bg-red-900 text-white rounded-r-md border border-red-900 hover:bg-red-800"
+                                aria-label="搜索">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                </form>
+            </div>
+            
+                <div class="relative">
+                    <a href="/notifications"
+                       class="hover:text-gray-300 relative flex justify-center">
+                        <i class="fas fa-bell"></i>
+                        <span id="notification-badge"
+                              class="absolute -top-3 -right-3 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center"
+                              style="">13</span>
+                    </a>
+                </div>
+                <div class="relative" id="user-menu">
+                    <div class="flex items-center space-x-2 cursor-pointer"
+                         id="user-menu-button">
+                        <img src="/static/avatars/default_avatar.png"
+                             alt="用户头像"
+                             class="h-8 w-8 rounded-full object-cover">
+                        <div class="hidden lg:block">
+                            <span class="text-sm font-medium">rz</span>
+                            <div class="text-xs flex items-center">
+                                Lv.0
+                                <span class="ml-1 px-1 py-0 rounded-sm font-semibold"
+                                      style="color: #545454;
+                                             background-color: #E6E6E6">
+                                    新手
+                                </span>
+                            </div>
+                        </div>
+                        <i class="fas fa-caret-down text-xs"></i>
+                    </div>
+                    <div id="user-menu-dropdown"
+                         class="absolute right-0 mt-2 w-36 bg-white rounded-md shadow-lg z-20 hidden">
+                        <a href="/profile"
+                           class="block px-4 pb-2 rounded-t-md text-gray-800 hover:bg-gray-100"
+                           style="padding-top: .625rem">
+                            <!-- 相当于 pt-2.5，这样 hover 时的灰色背景可以恰好覆盖整个单元格 -->
+                            <div class="flex items-center justify-center">
+                                <i class="fas fa-user mr-2 pt-0.5"></i>
+                                <div>个人主页</div>
+                            </div>
+                        </a>
+                        
+                        
+                        
+                        <div class="border-t border-gray-300"></div>
+                        <a href="/logout"
+                           class="block px-4 py-2 rounded-b-md text-red-600 hover:bg-gray-100"
+                           style="padding-bottom: .625rem">
+                            <div class="flex items-center justify-center">
+                                <i class="fas fa-sign-out-alt mr-2 pt-0.5"></i>
+                                <div>退出登录</div>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+                <script>
+                document.addEventListener('DOMContentLoaded', function () {
+                    const menuButton = document.getElementById('user-menu-button');
+                    const menuDropdown = document.getElementById('user-menu-dropdown');
+
+                    menuButton.addEventListener('click', function () {
+                        menuDropdown.classList.toggle('hidden');
+                    });
+
+                    // 点击页面其他地方关闭菜单
+                    document.addEventListener('click', function (event) {
+                        if (!document.getElementById('user-menu').contains(event.target)) {
+                            menuDropdown.classList.add('hidden');
+                        }
+                    });
+                });
+                </script>
+            
+        </div>
+    </div>
+</nav>
+
+    <script>
+    // 定期检查未读通知数量
+    function checkUnreadNotifications() {
+        fetch('/notifications/unread_count')
+            .then(response => response.json())
+            .then(data => {
+                const badge = document.getElementById('notification-badge');
+                if (badge) {
+                    if (data.count > 0) {
+                        badge.textContent = data.count;
+                        badge.style.display = 'flex';
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                }
+            });
+    }
+
+    // 页面加载完成后检查通知
+    document.addEventListener('DOMContentLoaded', function () {
+        const search = document.getElementById('nav-search');
+        const searchButton = document.getElementById('nav-search-button');
+        const searchPanel = document.getElementById('nav-search-panel');
+        const searchInput = document.getElementById('nav-search-input');
+
+        if (search && searchButton && searchPanel && searchInput) {
+            searchButton.addEventListener('click', function () {
+                const isHidden = searchPanel.classList.toggle('hidden');
+                searchButton.setAttribute('aria-expanded', String(!isHidden));
+                if (!isHidden) {
+                    searchInput.focus();
+                    searchInput.select();
+                }
+            });
+
+            document.addEventListener('click', function (event) {
+                if (!search.contains(event.target)) {
+                    searchPanel.classList.add('hidden');
+                    searchButton.setAttribute('aria-expanded', 'false');
+                }
+            });
+
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape') {
+                    searchPanel.classList.add('hidden');
+                    searchButton.setAttribute('aria-expanded', 'false');
+                }
+            });
+        }
+
+        // 立即检查一次
+        checkUnreadNotifications();
+
+        // 每60秒检查一次
+        setInterval(checkUnreadNotifications, 60000);
+    });
+    </script>
+
+        <!-- 内容包装器 -->
+        <div class="content-wrapper">
+            <!-- Flash消息显示区域 - 改为固定定位 -->
+            <div class="fixed top-16 inset-x-0 z-50 flex justify-center">
+                
+                    
+                
+            </div>
+            <!-- 主页搜索栏 -->
+            
+            
+            <!-- 主要内容 -->
+            <div class="container mx-auto px-4 py-8">
+                
+    <div class="lg:mx-4 space-y-6">
+        <!-- 面包屑导航 -->
+        <div class="text-sm mb-6">
+            <a href="/"
+               class="text-blue-600 hover:underline">首页</a> &gt;
+            <a href="/department/23"
+               class="text-blue-600 hover:underline">外国语学院</a> &gt;
+            <a href="/course/1952"
+               class="text-blue-600 hover:underline">英语名著与电影</a> &gt;
+            <span class="text-gray-600">英语名著与电影 小测与期末考 资料</span>
+        </div>
+        <!-- 资料标题与基本信息 -->
+        <div class="bg-white rounded-lg shadow overflow-hidden">
+            <div class="p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <span class="inline-block px-3 py-1 rounded-full text-sm font-semibold"
+                          style="background-color: #f3e8ff;
+                                 color: #6b21a8;
+                                 ">汇编</span>
+                    <div class="flex space-x-3">
+                        
+                        <a href="/download/727"
+                           class="pku-red hover-pku-red text-white px-5 py-2 rounded-lg font-medium flex items-center">
+                            <i class="fas fa-download mr-2"></i>
+                            
+                                <span>下载完整资料</span>
+                            
+                        </a>
+                    </div>
+                </div>
+                <h1 class="text-2xl font-bold">
+                    
+                    英语名著与电影 小测与期末考 资料
+                </h1>
+                <div class="flex items-center mt-4">
+                    <a href="/user/1128"
+                       class="flex items-center">
+                        <img src="/static/avatars/1128/eb1c64527e2648ba878cebe1e886dd4d.png"
+                             alt="joker_ceva"
+                             class="h-10 w-10 rounded-full mr-2 object-cover">
+                        <div>
+                            <div class="text-sm font-medium">joker_ceva</div>
+                            <div class="mt-0.5 text-xs flex items-center"
+                                 style="color: #724713">
+                                Lv.102
+                                <span class="font-bold ml-1 px-1 py-0.5 rounded-md"
+                                      style="background-color: #FFE138">
+                                    百讲华章
+                                </span>
+                            </div>
+                        </div>
+                    </a>
+                    
+                        <button id="followAuthorBtn"
+                                onclick="toggleFollowAuthor(1128, 'joker_ceva')"
+                                class="ml-4 text-xs px-2 py-1 rounded whitespace-nowrap pku-red hover-pku-red text-white">
+                            
+                                <i class="fas fa-user-plus mr-1"></i>关注作者
+                            
+                        </button>
+                    
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+                    <div>
+                        <p class="text-gray-700">
+                            <span class="font-medium">课程:</span> 英语名著与电影
+                        </p>
+                        <p class="text-gray-700">
+                            <span class="font-medium">学期:</span> 2025春
+                        </p>
+                        <p class="text-gray-700">
+                            <span class="font-medium">上传者:</span> joker_ceva
+                        </p>
+                    </div>
+                    <div>
+                        <p class="text-gray-700">
+                            <span class="font-medium">上传时间:</span> 2025-06-11 22:31
+                        </p>
+                        <div class="flex items-center space-x-4">
+                            <p class="text-gray-700">
+                                <span class="font-medium">下载次数:</span> 816
+                            </p>
+                            <p class="text-gray-700">
+                                <span class="font-medium">浏览次数:</span> 1388
+                            </p>
+                        </div>
+                        <p class="text-gray-700">
+                            <span class="font-medium">文件类型:</span> ZIP
+                        </p>
+                    </div>
+                </div>
+                <!-- 添加收藏按钮 -->
+                <div class="mt-4 flex items-center space-x-3">
+                    
+                        <button id="like-button"
+                                class="flex items-center space-x-1 px-3 py-1 border rounded-full text-sm transition-colors text-gray-700 border-gray-300 hover:bg-gray-100">
+                            <i class="fas fa-star "></i>
+                            <span id="like-count">21</span>
+                            <span id="like-text">收藏</span>
+                        </button>
+                    
+                    <a href="/material/727/report"
+                       id="report-button"
+                       class="flex items-center space-x-1 px-3 py-1 border rounded-full text-sm transition-colors text-red-500 border-red-300 hover:bg-red-50">
+                        <i class="fas fa-flag"></i>
+                        <span>举报</span>
+                    </a>
+                </div>
+            </div>
+            <!-- 资料描述 -->
+            
+                <div class="p-6 border-t bg-gray-50">
+                    <h2 class="text-lg font-semibold mb-3">资料描述</h2>
+                    <div class="text-gray-700 markdown-content" id="material-description">往年题：含4~6次小测往年题，5次期末考简答题和论述题
+资料：针对期末考的每种题型都有对应资料
+补充资料：树洞7433098(25春期末试卷回忆)，7550399(25夏小测&amp;期末，pkuhub.cn/material/931)，7924359（25秋期末）</div>
+                </div>
+            
+            <!-- PDF预览区域 -->
+            
+            <!-- 压缩包文件结构区域 -->
+            
+                <!-- 渲染树节点的宏定义 -->
+                
+                <div class="p-6 border-t">
+                    <h2 class="flex items-center mb-3">
+                        <span class="text-lg font-semibold">压缩包文件结构</span>
+                        <span class="text-sm font-medium text-gray-500">（如显示不全请上下滑动查看）</span>
+                    </h2>
+                    <div class="overflow-auto pl-0.5 max-h-80">
+                        
+                            
+                    
+                        
+                        
+                            
+                    
+                        
+                            <div class="pl-0 py-1 pr-6 flex items-center">
+                                <i class="fas fa-folder text-yellow-500 mr-2"></i>
+                                <span>英语名著与电影 资料</span>
+                            </div>
+                        
+                        
+                            
+                    
+                        
+                            <div class="pl-8 py-1 pr-6 flex items-center">
+                                <i class="fas fa-folder text-yellow-500 mr-2"></i>
+                                <span>0-往年题</span>
+                            </div>
+                        
+                        
+                            
+                    
+                        
+                            <div class="pl-16 py-1 pr-6 flex items-center">
+                                <i class="fas fa-folder text-yellow-500 mr-2"></i>
+                                <span>1-小测</span>
+                            </div>
+                        
+                        
+                            
+                    
+                        
+                            <div class="pl-24 py-1 pr-6 flex items-center">
+                                <i class="fas fa-folder text-yellow-500 mr-2"></i>
+                                <span>1-Pride and Prejudice</span>
+                            </div>
+                        
+                        
+                            
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>18春.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>18秋.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>21春-Page1.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>21春-Page2.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>21秋-Page1.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>21秋-Page2.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>23秋-Page1.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>23秋-Page2.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>25春.docx</span>
+                        </div>
+                    
+                
+                    
+                        
+                            <div class="pl-32 py-1 pr-6 flex items-center">
+                                <i class="fas fa-folder text-yellow-500 mr-2"></i>
+                                <span>未知年份</span>
+                            </div>
+                        
+                        
+                            
+                    
+                        <div class="pl-40 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>A1.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-40 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>A2.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-40 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>A3.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-40 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>A4.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-40 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>A5.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-40 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>A6.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-40 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>A7.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-40 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>A_answer_by_author.jpg</span>
+                        </div>
+                    
+                
+                        
+                    
+                
+                        
+                    
+                
+                    
+                        
+                            <div class="pl-24 py-1 pr-6 flex items-center">
+                                <i class="fas fa-folder text-yellow-500 mr-2"></i>
+                                <span>2-Jane Eyre</span>
+                            </div>
+                        
+                        
+                            
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>18春.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>18秋.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>21春-Page1.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>21春-Page2.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>21秋-Page1.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>21秋-Page2.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>23秋-Page1.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>23秋-Page2.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>25春-Page1.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>25春-Page2.jpg</span>
+                        </div>
+                    
+                
+                    
+                        
+                            <div class="pl-32 py-1 pr-6 flex items-center">
+                                <i class="fas fa-folder text-yellow-500 mr-2"></i>
+                                <span>未知年份</span>
+                            </div>
+                        
+                        
+                            
+                    
+                        <div class="pl-40 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>B1.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-40 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>B2.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-40 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>B3.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-40 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>B4.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-40 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>B5.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-40 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>B_answer_by_author.jpg.jpg</span>
+                        </div>
+                    
+                
+                        
+                    
+                
+                        
+                    
+                
+                    
+                        
+                            <div class="pl-24 py-1 pr-6 flex items-center">
+                                <i class="fas fa-folder text-yellow-500 mr-2"></i>
+                                <span>3-Tess</span>
+                            </div>
+                        
+                        
+                            
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>18春.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>18秋.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>21春-Page1.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>21春-Page2.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>21秋.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>23秋-Page1.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>23秋-Page2.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>25春-Page1.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>25春-Page2.jpg</span>
+                        </div>
+                    
+                
+                    
+                        
+                            <div class="pl-32 py-1 pr-6 flex items-center">
+                                <i class="fas fa-folder text-yellow-500 mr-2"></i>
+                                <span>未知年份</span>
+                            </div>
+                        
+                        
+                            
+                    
+                        <div class="pl-40 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>C1.png</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-40 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>C2.png</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-40 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>C3.png</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-40 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>C4.png</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-40 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>C5.png</span>
+                        </div>
+                    
+                
+                        
+                    
+                
+                        
+                    
+                
+                    
+                        
+                            <div class="pl-24 py-1 pr-6 flex items-center">
+                                <i class="fas fa-folder text-yellow-500 mr-2"></i>
+                                <span>4-Age of Innocence</span>
+                            </div>
+                        
+                        
+                            
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>18春.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>18秋.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>23秋-答案.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>23秋.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>25春.docx</span>
+                        </div>
+                    
+                
+                    
+                        
+                            <div class="pl-32 py-1 pr-6 flex items-center">
+                                <i class="fas fa-folder text-yellow-500 mr-2"></i>
+                                <span>未知年份</span>
+                            </div>
+                        
+                        
+                            
+                    
+                        <div class="pl-40 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>D1.png</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-40 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>D2.png</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-40 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>D3.png</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-40 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>D4.png</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-40 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>D5.png</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-40 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>D6.png</span>
+                        </div>
+                    
+                
+                        
+                    
+                
+                        
+                    
+                
+                    
+                        
+                            <div class="pl-24 py-1 pr-6 flex items-center">
+                                <i class="fas fa-folder text-yellow-500 mr-2"></i>
+                                <span>5-Gatsby</span>
+                            </div>
+                        
+                        
+                            
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>18春.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>18秋.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>21春.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>21秋.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-32 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>25春.docx</span>
+                        </div>
+                    
+                
+                        
+                    
+                
+                    
+                        <div class="pl-24 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>readme - 资料概述 - 小测往年题.txt</span>
+                        </div>
+                    
+                
+                        
+                    
+                
+                    
+                        
+                            <div class="pl-16 py-1 pr-6 flex items-center">
+                                <i class="fas fa-folder text-yellow-500 mr-2"></i>
+                                <span>2-期末考</span>
+                            </div>
+                        
+                        
+                            
+                    
+                        <div class="pl-24 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>18秋.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-24 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>21秋.pdf</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-24 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>22秋.jpg</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-24 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>23秋.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-24 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>25春.docx</span>
+                        </div>
+                    
+                
+                        
+                    
+                
+                        
+                    
+                
+                    
+                        
+                            <div class="pl-8 py-1 pr-6 flex items-center">
+                                <i class="fas fa-folder text-yellow-500 mr-2"></i>
+                                <span>1-选择</span>
+                            </div>
+                        
+                        
+                            
+                    
+                        <div class="pl-16 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>readme - 资料概述 - 选择.txt</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-16 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>全部重点生词.pdf</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-16 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>单词 By 赛艇.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-16 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>单词 Unit 1.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-16 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>单词 Unit 2.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-16 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>单词 Unit 3.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-16 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>单词 Unit 4.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-16 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>单词 Unit 5.docx</span>
+                        </div>
+                    
+                
+                        
+                    
+                
+                    
+                        
+                            <div class="pl-8 py-1 pr-6 flex items-center">
+                                <i class="fas fa-folder text-yellow-500 mr-2"></i>
+                                <span>2-填空</span>
+                            </div>
+                        
+                        
+                            
+                    
+                        <div class="pl-16 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>Brief Introduction to American Literature.doc</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-16 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>Brief Introduction to British Literature.doc</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-16 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>readme - 资料概述 - 填空.txt</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-16 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>情节填空.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-16 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>文学常识.docx</span>
+                        </div>
+                    
+                
+                        
+                    
+                
+                    
+                        
+                            <div class="pl-8 py-1 pr-6 flex items-center">
+                                <i class="fas fa-folder text-yellow-500 mr-2"></i>
+                                <span>3-人物</span>
+                            </div>
+                        
+                        
+                            
+                    
+                        <div class="pl-16 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>Important quotations.docx</span>
+                        </div>
+                    
+                
+                        
+                    
+                
+                    
+                        
+                            <div class="pl-8 py-1 pr-6 flex items-center">
+                                <i class="fas fa-folder text-yellow-500 mr-2"></i>
+                                <span>4-简答</span>
+                            </div>
+                        
+                        
+                            
+                    
+                        <div class="pl-16 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>readme - 资料概述 - 简答.txt</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-16 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>情节梗概 and 人物介绍 and 简答题整理.docx</span>
+                        </div>
+                    
+                
+                    
+                        
+                            <div class="pl-16 py-1 pr-6 flex items-center">
+                                <i class="fas fa-folder text-yellow-500 mr-2"></i>
+                                <span>教学网资料 ( ... to Ss)</span>
+                            </div>
+                        
+                        
+                            
+                    
+                        <div class="pl-24 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>1 - Pride and Prejudice to Ss.doc</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-24 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>2 - Jane Eyre to Ss.doc</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-24 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>3 - Tess to Ss.doc</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-24 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>4 - Age of Innocence to Ss.doc</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-24 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>5 - Gatsby to Ss.doc</span>
+                        </div>
+                    
+                
+                        
+                    
+                
+                    
+                        
+                            <div class="pl-16 py-1 pr-6 flex items-center">
+                                <i class="fas fa-folder text-yellow-500 mr-2"></i>
+                                <span>赛艇资料</span>
+                            </div>
+                        
+                        
+                            
+                    
+                        <div class="pl-24 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>打印-故事情节梗概与问答题_好心人+补充.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-24 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>打印-故事情节梗概与问答题整理.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-24 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>期末复习 General Questions.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-24 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>英语名著与阅读期末大整理.docx</span>
+                        </div>
+                    
+                
+                        
+                    
+                
+                        
+                    
+                
+                    
+                        
+                            <div class="pl-8 py-1 pr-6 flex items-center">
+                                <i class="fas fa-folder text-yellow-500 mr-2"></i>
+                                <span>5-判断[仅期末考]</span>
+                            </div>
+                        
+                        
+                            
+                    
+                        <div class="pl-16 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>18春-小测判断.docx</span>
+                        </div>
+                    
+                
+                        
+                    
+                
+                    
+                        
+                            <div class="pl-8 py-1 pr-6 flex items-center">
+                                <i class="fas fa-folder text-yellow-500 mr-2"></i>
+                                <span>6-论述[仅期末考]</span>
+                            </div>
+                        
+                        
+                            
+                    
+                        <div class="pl-16 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>Tess&#39;s tragedy.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-16 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>美国论述题整理.docx</span>
+                        </div>
+                    
+                
+                    
+                        
+                            <div class="pl-16 py-1 pr-6 flex items-center">
+                                <i class="fas fa-folder text-yellow-500 mr-2"></i>
+                                <span>赛艇资料</span>
+                            </div>
+                        
+                        
+                            
+                    
+                        <div class="pl-24 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>论述题 示例1(Tess&#39;s tragedy).docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-24 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>论述题 示例2.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-24 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>论述题.docx</span>
+                        </div>
+                    
+                
+                        
+                    
+                
+                        
+                    
+                
+                    
+                        <div class="pl-8 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>readme - 考纲概述与资料使用方法.docx</span>
+                        </div>
+                    
+                
+                    
+                        <div class="pl-8 py-1 pr-6 flex items-center">
+                            <i class="fas fa-file text-blue-400 mr-2"></i>
+                            <span>题型.docx</span>
+                        </div>
+                    
+                
+                        
+                    
+                
+                        
+                    
+                
+                        
+                    </div>
+                </div>
+            
+        </div>
+        <!-- 评论区域 -->
+        <div class="bg-white rounded-lg shadow overflow-hidden">
+            <div class="p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold">
+                        评论与反馈 (<span id="comment-count">10</span>)
+                    </h2>
+                    <!-- 添加排序选择器 -->
+                    <div class="flex items-center">
+                        <label for="comment-sort" class="text-sm text-gray-600 mr-2">排序方式:</label>
+                        <select id="comment-sort" class="text-sm border rounded px-2 py-1 bg-white">
+                            <option value="newest_first" selected>最新在前</option>
+                            <option value="oldest_first">最早在前</option>
+                        </select>
+                    </div>
+                </div>
+                
+                    <div class="mb-8">
+                        <form id="comment-form" method="POST">
+                            <input id="csrf_token" name="csrf_token" type="hidden" value="IjhlMTIxMTYyZGIwNjJlNmY0NzI0ZjhkMTM4NGY3OTAwZjQ1ODYwMzci.ah2Tlw.oYfnNPsoDcFbebirpwYbvagZjNs">
+                            <div class="mb-4">
+                                <label for="content" class="block text-gray-700 text-sm font-bold mb-2">发表评论</label>
+                                <textarea class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700
+                                                                leading-tight focus:outline-none focus:shadow-outline h-24" id="content" maxlength="1000" minlength="1" name="content" placeholder="分享你对这份资料的看法..." required>
+</textarea>
+                                
+                                <div class="text-xs text-gray-500 mt-1 mb-2">
+                                    支持 Markdown 语法和 LaTeX 公式。用 \$...\$
+                                    表示行内公式，\$\$...\$\$ 表示块级公式。
+                                </div>
+                            </div>
+                            <input class="pku-red hover-pku-red text-white font-medium py-2 px-4 rounded" id="submit-comment" name="submit" type="submit" value="提交评论">
+                        </form>
+                    </div>
+                
+                <!-- 评论列表 -->
+                <div id="comments-container" class="space-y-6">
+                    
+                        
+                            <div class="bg-gray-50 p-4 rounded" id="comment-111">
+                                <div class="flex justify-between items-start mb-2">
+                                    <a href="/user/420"
+                                       class="flex items-center flex-shrink min-w-0 max-w-[70%]">
+                                        <img src="/static/avatars/default_avatar.png"
+                                             alt="wyyj"
+                                             class="h-10 w-10 rounded-full mr-2 object-cover flex-shrink-0">
+                                        <div class="min-w-0 overflow-hidden">
+                                            <div class="text-sm font-medium truncate">wyyj</div>
+                                            <div class="mt-0.5 text-xs flex items-center truncate"
+                                                 style="color: #116F6E">
+                                                Lv.8
+                                                <span class="font-bold ml-1 px-1 py-0.5 rounded-md whitespace-nowrap"
+                                                      style="background-color: #DAF6F5">
+                                                    翻尾石鱼
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </a>
+                                    <div class="flex items-center whitespace-nowrap flex-shrink-0 ml-2">
+                                        <span class="text-xs text-gray-500">2025-06-29 20:41</span>
+                                    </div>
+                                </div>
+                                <div class="text-gray-700 markdown-content raw-content">这份资料实在是太伟大了！！！
+</div>
+                                
+                            </div>
+                        
+                            <div class="bg-gray-50 p-4 rounded" id="comment-112">
+                                <div class="flex justify-between items-start mb-2">
+                                    <a href="/user/277"
+                                       class="flex items-center flex-shrink min-w-0 max-w-[70%]">
+                                        <img src="/static/avatars/277/9074b71218f340ffa61eb7e829b901e7.jpg"
+                                             alt="gxr_mk"
+                                             class="h-10 w-10 rounded-full mr-2 object-cover flex-shrink-0">
+                                        <div class="min-w-0 overflow-hidden">
+                                            <div class="text-sm font-medium truncate">gxr_mk</div>
+                                            <div class="mt-0.5 text-xs flex items-center truncate"
+                                                 style="color: #136C2F ">
+                                                Lv.9
+                                                <span class="font-bold ml-1 px-1 py-0.5 rounded-md whitespace-nowrap"
+                                                      style="background-color: #E3F2E7 ">
+                                                    静园草坪
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </a>
+                                    <div class="flex items-center whitespace-nowrap flex-shrink-0 ml-2">
+                                        <span class="text-xs text-gray-500">2025-06-30 01:37</span>
+                                    </div>
+                                </div>
+                                <div class="text-gray-700 markdown-content raw-content">伟大！！！</div>
+                                
+                            </div>
+                        
+                            <div class="bg-gray-50 p-4 rounded" id="comment-116">
+                                <div class="flex justify-between items-start mb-2">
+                                    <a href="/user/239"
+                                       class="flex items-center flex-shrink min-w-0 max-w-[70%]">
+                                        <img src="/static/avatars/239/bc8d71a07dde49b3bd2684542fbcaaf5.jpg"
+                                             alt="Madeline"
+                                             class="h-10 w-10 rounded-full mr-2 object-cover flex-shrink-0">
+                                        <div class="min-w-0 overflow-hidden">
+                                            <div class="text-sm font-medium truncate">Madeline</div>
+                                            <div class="mt-0.5 text-xs flex items-center truncate"
+                                                 style="color: #0162AD ">
+                                                Lv.2
+                                                <span class="font-bold ml-1 px-1 py-0.5 rounded-md whitespace-nowrap"
+                                                      style="background-color: #D5F1FC ">
+                                                    未名湖底
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </a>
+                                    <div class="flex items-center whitespace-nowrap flex-shrink-0 ml-2">
+                                        <span class="text-xs text-gray-500">2025-07-05 00:48</span>
+                                    </div>
+                                </div>
+                                <div class="text-gray-700 markdown-content raw-content">请问这是哪位老师的啊qwq</div>
+                                
+                            </div>
+                        
+                            <div class="bg-gray-50 p-4 rounded" id="comment-117">
+                                <div class="flex justify-between items-start mb-2">
+                                    <a href="/user/1128"
+                                       class="flex items-center flex-shrink min-w-0 max-w-[70%]">
+                                        <img src="/static/avatars/1128/eb1c64527e2648ba878cebe1e886dd4d.png"
+                                             alt="joker_ceva"
+                                             class="h-10 w-10 rounded-full mr-2 object-cover flex-shrink-0">
+                                        <div class="min-w-0 overflow-hidden">
+                                            <div class="text-sm font-medium truncate">joker_ceva</div>
+                                            <div class="mt-0.5 text-xs flex items-center truncate"
+                                                 style="color: #724713">
+                                                Lv.102
+                                                <span class="font-bold ml-1 px-1 py-0.5 rounded-md whitespace-nowrap"
+                                                      style="background-color: #FFE138">
+                                                    百讲华章
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </a>
+                                    <div class="flex items-center whitespace-nowrap flex-shrink-0 ml-2">
+                                        <span class="text-xs text-gray-500">2025-07-08 22:31</span>
+                                    </div>
+                                </div>
+                                <div class="text-gray-700 markdown-content raw-content">两位老师小测和期末考试卷相同，资料通用</div>
+                                
+                            </div>
+                        
+                            <div class="bg-gray-50 p-4 rounded" id="comment-119">
+                                <div class="flex justify-between items-start mb-2">
+                                    <a href="/user/564"
+                                       class="flex items-center flex-shrink min-w-0 max-w-[70%]">
+                                        <img src="/static/avatars/564/34da89621b8c4d24aad41a44b1fa1c7c.jpeg"
+                                             alt="rover"
+                                             class="h-10 w-10 rounded-full mr-2 object-cover flex-shrink-0">
+                                        <div class="min-w-0 overflow-hidden">
+                                            <div class="text-sm font-medium truncate">rover</div>
+                                            <div class="mt-0.5 text-xs flex items-center truncate"
+                                                 style="color: #545454">
+                                                Lv.0
+                                                <span class="font-bold ml-1 px-1 py-0.5 rounded-md whitespace-nowrap"
+                                                      style="background-color: #E6E6E6">
+                                                    新手
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </a>
+                                    <div class="flex items-center whitespace-nowrap flex-shrink-0 ml-2">
+                                        <span class="text-xs text-gray-500">2025-07-22 09:33</span>
+                                    </div>
+                                </div>
+                                <div class="text-gray-700 markdown-content raw-content">伟大！！！</div>
+                                
+                            </div>
+                        
+                            <div class="bg-gray-50 p-4 rounded" id="comment-132">
+                                <div class="flex justify-between items-start mb-2">
+                                    <a href="/user/2855"
+                                       class="flex items-center flex-shrink min-w-0 max-w-[70%]">
+                                        <img src="/static/avatars/default_avatar.png"
+                                             alt="raceme"
+                                             class="h-10 w-10 rounded-full mr-2 object-cover flex-shrink-0">
+                                        <div class="min-w-0 overflow-hidden">
+                                            <div class="text-sm font-medium truncate">raceme</div>
+                                            <div class="mt-0.5 text-xs flex items-center truncate"
+                                                 style="color: #545454">
+                                                Lv.0
+                                                <span class="font-bold ml-1 px-1 py-0.5 rounded-md whitespace-nowrap"
+                                                      style="background-color: #E6E6E6">
+                                                    新手
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </a>
+                                    <div class="flex items-center whitespace-nowrap flex-shrink-0 ml-2">
+                                        <span class="text-xs text-gray-500">2025-10-15 19:55</span>
+                                    </div>
+                                </div>
+                                <div class="text-gray-700 markdown-content raw-content">伟大!!!</div>
+                                
+                            </div>
+                        
+                            <div class="bg-gray-50 p-4 rounded" id="comment-134">
+                                <div class="flex justify-between items-start mb-2">
+                                    <a href="/user/3152"
+                                       class="flex items-center flex-shrink min-w-0 max-w-[70%]">
+                                        <img src="/static/avatars/default_avatar.png"
+                                             alt="辞御风"
+                                             class="h-10 w-10 rounded-full mr-2 object-cover flex-shrink-0">
+                                        <div class="min-w-0 overflow-hidden">
+                                            <div class="text-sm font-medium truncate">辞御风</div>
+                                            <div class="mt-0.5 text-xs flex items-center truncate"
+                                                 style="color: #545454">
+                                                Lv.0
+                                                <span class="font-bold ml-1 px-1 py-0.5 rounded-md whitespace-nowrap"
+                                                      style="background-color: #E6E6E6">
+                                                    新手
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </a>
+                                    <div class="flex items-center whitespace-nowrap flex-shrink-0 ml-2">
+                                        <span class="text-xs text-gray-500">2025-11-01 22:55</span>
+                                    </div>
+                                </div>
+                                <div class="text-gray-700 markdown-content raw-content">伟大伟大！！！</div>
+                                
+                            </div>
+                        
+                            <div class="bg-gray-50 p-4 rounded" id="comment-139">
+                                <div class="flex justify-between items-start mb-2">
+                                    <a href="/user/5"
+                                       class="flex items-center flex-shrink min-w-0 max-w-[70%]">
+                                        <img src="/static/avatars/5/aa13f8a14e234384a3359197883459ae.jpg"
+                                             alt="iculizhi"
+                                             class="h-10 w-10 rounded-full mr-2 object-cover flex-shrink-0">
+                                        <div class="min-w-0 overflow-hidden">
+                                            <div class="text-sm font-medium truncate">iculizhi</div>
+                                            <div class="mt-0.5 text-xs flex items-center truncate"
+                                                 style="color: #724713">
+                                                Lv.270
+                                                <span class="font-bold ml-1 px-1 py-0.5 rounded-md whitespace-nowrap"
+                                                      style="background-color: #FFE138">
+                                                    百讲华章
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </a>
+                                    <div class="flex items-center whitespace-nowrap flex-shrink-0 ml-2">
+                                        <span class="text-xs text-gray-500">2025-11-02 23:23</span>
+                                    </div>
+                                </div>
+                                <div class="text-gray-700 markdown-content raw-content">我23年选课的时候要是有这个多好😭😭😭</div>
+                                
+                            </div>
+                        
+                            <div class="bg-gray-50 p-4 rounded" id="comment-152">
+                                <div class="flex justify-between items-start mb-2">
+                                    <a href="/user/3542"
+                                       class="flex items-center flex-shrink min-w-0 max-w-[70%]">
+                                        <img src="/static/avatars/default_avatar.png"
+                                             alt="zhan"
+                                             class="h-10 w-10 rounded-full mr-2 object-cover flex-shrink-0">
+                                        <div class="min-w-0 overflow-hidden">
+                                            <div class="text-sm font-medium truncate">zhan</div>
+                                            <div class="mt-0.5 text-xs flex items-center truncate"
+                                                 style="color: #545454">
+                                                Lv.0
+                                                <span class="font-bold ml-1 px-1 py-0.5 rounded-md whitespace-nowrap"
+                                                      style="background-color: #E6E6E6">
+                                                    新手
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </a>
+                                    <div class="flex items-center whitespace-nowrap flex-shrink-0 ml-2">
+                                        <span class="text-xs text-gray-500">2025-12-22 22:49</span>
+                                    </div>
+                                </div>
+                                <div class="text-gray-700 markdown-content raw-content">伟大！！非常感谢！
+</div>
+                                
+                            </div>
+                        
+                            <div class="bg-gray-50 p-4 rounded" id="comment-153">
+                                <div class="flex justify-between items-start mb-2">
+                                    <a href="/user/423"
+                                       class="flex items-center flex-shrink min-w-0 max-w-[70%]">
+                                        <img src="/static/avatars/423/30c904a4c6024ff79fe9ba8f83ea2f8d.jpg"
+                                             alt="蓝月_歪歪"
+                                             class="h-10 w-10 rounded-full mr-2 object-cover flex-shrink-0">
+                                        <div class="min-w-0 overflow-hidden">
+                                            <div class="text-sm font-medium truncate">蓝月_歪歪</div>
+                                            <div class="mt-0.5 text-xs flex items-center truncate"
+                                                 style="color: #724713">
+                                                Lv.254
+                                                <span class="font-bold ml-1 px-1 py-0.5 rounded-md whitespace-nowrap"
+                                                      style="background-color: #FFE138">
+                                                    百讲华章
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </a>
+                                    <div class="flex items-center whitespace-nowrap flex-shrink-0 ml-2">
+                                        <span class="text-xs text-gray-500">2025-12-24 18:46</span>
+                                    </div>
+                                </div>
+                                <div class="text-gray-700 markdown-content raw-content">\wzgg/</div>
+                                
+                            </div>
+                        
+                    
+                </div>
+            </div>
+        </div>
+        <!-- 同课程下的其他资料 -->
+        <div class="bg-white rounded-lg shadow overflow-hidden p-6">
+            <h2 class="text-lg font-semibold mb-4">查看同课程下的其他资料</h2>
+            <!-- 搜索框 -->
+            <div class="mb-4">
+                <div class="relative flex items-center">
+                    <input type="text"
+                           id="material-search"
+                           placeholder="搜索资料名称..."
+                           autocomplete="off"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-800 focus:border-transparent">
+                    <div class="absolute right-3 text-gray-400">
+                        <i class="fas fa-search"></i>
+                    </div>
+                </div>
+            </div>
+            <!-- 筛选与排序选项 -->
+            <div class="w-full gap-3 flex flex-row items-center flex-wrap">
+                <div class="mr-6">
+                    <label class="text-sm font-medium text-gray-700 mr-2">类型:</label>
+                    <select id="file-type-select" class="border rounded px-2 py-1 text-sm">
+                        <option value="全部">全部</option><option value="汇编">汇编</option>
+                    </select>
+                </div>
+                <div class="mr-6">
+                    <label class="text-sm font-medium text-gray-700 mr-2">学期:</label>
+                    <select id="semester-select" class="border rounded px-2 py-1 text-sm">
+                        <option value="全部学期">全部学期</option><option value="2023秋季">2023秋季</option>
+                    </select>
+                </div>
+                <div class="mr-6">
+                    <label class="text-sm font-medium text-gray-700 mr-2">排序:</label>
+                    <select id="sort-select" class="border rounded px-2 py-1 text-sm">
+                        <option value="标题最相关">标题最相关</option>
+                        <option value="最新上传">最新上传</option>
+                        <option value="最多下载">最多下载</option>
+                    </select>
+                </div>
+                <button id="reset-filters"
+                        class="text-sm text-red-600 hover:text-red-800 flex items-center">
+                    <i class="fas fa-times mr-1"></i>
+                    <span>重置筛选</span>
+                </button>
+            </div>
+        </div>
+        <!-- 相关资料列表 -->
+        
+            <div class="overflow-hidden bg-white border shadow rounded-lg">
+                <table class="w-full table-fixed divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col"
+                                class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap"
+                                style="width: 30%">资料名称</th>
+                            <th scope="col"
+                                class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap"
+                                style="width: 8%">类型</th>
+                            <th scope="col"
+                                class="hidden sm:table-cell px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap"
+                                style="width: 17%">学期</th>
+                            <th scope="col"
+                                class="hidden md:table-cell px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap"
+                                style="width: 22%">上传者</th>
+                            <th scope="col"
+                                class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap"
+                                style="width: 8%">下载量</th>
+                            <th scope="col"
+                                class="hidden lg:table-cell px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap"
+                                style="width: 15%">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200" id="materials-table-body">
+                        
+                            <tr data-title="钱清-英语名著与电影-23秋-汇编"
+                                data-file-type="汇编"
+                                data-semester="2023秋季"
+                                data-relevance="0"
+                                data-downloads="83"
+                                data-timestamp="1749549505.939825">
+                                <td class="pl-6 pr-2 py-4 whitespace-nowrap" style="width: 30%">
+                                    <a href="/material/675">
+                                        <div class="flex items-center">
+                                            <i class="far fa-file-archive text-purple-500  mr-3 flex-shrink-0"></i>
+                                            <div class="min-w-0 flex-1">
+                                                <div class="text-sm font-medium text-gray-900 truncate hover:text-blue-600 hover:underline">
+                                                    钱清-英语名著与电影-23秋-汇编
+                                                </div>
+                                                <div class="text-xs text-gray-500">上传于 2025-06-10</div>
+                                            </div>
+                                        </div>
+                                    </a>
+                                </td>
+                                <td class="px-3 py-4 text-center whitespace-nowrap" style="width: 8%">
+                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                          style="background-color: #f3e8ff;
+                                                 color: #6b21a8;
+                                                 ">汇编</span>
+                                </td>
+                                <td class="hidden sm:table-cell px-3 py-4 whitespace-nowrap text-center text-sm text-gray-500"
+                                    style="width: 17%">
+                                    <div class="truncate max-w-full">2023秋季</div>
+                                </td>
+                                <td class="hidden md:table-cell px-3 py-4 whitespace-nowrap text-center"
+                                    style="width: 22%">
+                                    <a href="/user/534"
+                                       class="flex items-center justify-center">
+                                        <img src="/static/avatars/534/6779977cd65845199f27127cf1a54c8a.jpg"
+                                             alt="Star"
+                                             class="w-6 h-6 rounded-full mr-2 object-cover border border-gray-200 flex-shrink-0">
+                                        <div class="text-sm text-gray-900 truncate hover:text-blue-600 hover:underline">
+                                            Star
+                                        </div>
+                                    </a>
+                                </td>
+                                <td class="px-3 py-4 whitespace-nowrap text-center text-sm text-gray-500"
+                                    style="width: 8%">
+                                    83
+                                </td>
+                                <td class="hidden lg:table-cell px-3 py-4 whitespace-nowrap text-center text-sm"
+                                    style="width: 15%">
+                                    <a href="/material/675"
+                                       class="text-blue-600 hover:text-blue-900 mr-3">预览</a>
+                                    <a href="/download/675"
+                                       class="text-green-600 hover:text-green-900">下载</a>
+                                </td>
+                            </tr>
+                        
+                    </tbody>
+                </table>
+            </div>
+            <!-- 无搜索结果提示 -->
+            <div id="no-results-message"
+                 class="bg-white shadow rounded-lg text-center py-12 hidden">
+                <i class="fas fa-search text-gray-400 text-4xl mb-4"></i>
+                <p class="text-lg text-gray-500">没有找到匹配的资料</p>
+            </div>
+        
+    </div>
+
+            </div>
+        </div>
+        <!-- 页脚 -->
+        <footer class="bg-gray-800 pt-6 pb-8">
+            <div class="text-sm text-center text-gray-300">
+                © 2025 Plib 开发中 | <a href="https://beian.miit.gov.cn/"
+    target="_blank"
+    rel="noopener noreferrer">京ICP备2025114214号-1</a>
+            </div>
+            <div class="mt-3 text-sm text-center space-x-3">
+                <a href="/terms"
+                   class="text-gray-400 hover:text-gray-300 hover:underline">用户协议</a>
+                <a href="/privacy"
+                   class="text-gray-400 hover:text-gray-300 hover:underline">隐私政策</a>
+                <a href="https://status.thuhub.cn/status/pkuhub"
+                   class="text-gray-400 hover:text-gray-300 hover:underline">系统状态</a>
+                <a href="mailto:help@pkuhub.cn"
+                   class="text-gray-400 hover:text-gray-300 hover:underline">联系我们</a>
+                <a href="https://github.com/thepkuhub"
+                   target="_blank"
+                   class="text-gray-400 hover:text-gray-300 hover:underline">GitHub</a>
+            </div>
+        </footer>
+        
+    
+        
+    <script src="/static/js/markdown_latex.js"></script>
+    <script>
+    // 声明全局变量，用于跟踪重复请求
+    let isRefreshing = false;
+    // 记录最后一条评论的ID，用于检测新评论
+    let lastKnownCommentId = 0;
+    // 检查新评论的间隔时间（秒）
+    const CHECK_INTERVAL = 10;
+    // 当前排序方式
+    let currentSortOrder = 'newest_first';
+    // 获取CSRF令牌，定义为全局变量以便所有函数访问
+    const globalCsrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
+        const pdfEmbed = document.querySelector('#pdf-container embed');
+        const pdfContainer = document.getElementById('pdf-container');
+
+        // 只有在PDF预览元素存在的情况下才设置全屏功能
+        if (fullscreenBtn && pdfEmbed && pdfContainer) {
+            // 全屏按钮点击事件
+            fullscreenBtn.addEventListener('click', function () {
+                if (!document.fullscreenElement) {
+                    // 进入全屏模式
+                    if (pdfEmbed.requestFullscreen) {
+                        console.log("调用 pdfEmbed.requestFullscreen() 进入全屏");
+                        pdfEmbed.requestFullscreen();
+                    } else if (pdfEmbed.mozRequestFullScreen) {
+                        console.log("调用 pdfEmbed.mozRequestFullScreen() 进入全屏");
+                        pdfEmbed.mozRequestFullScreen();
+                    } else if (pdfEmbed.webkitRequestFullscreen) {
+                        console.log("调用 pdfEmbed.webkitRequestFullscreen() 进入全屏");
+                        pdfEmbed.webkitRequestFullscreen();
+                    } else if (pdfEmbed.msRequestFullscreen) {
+                        console.log("调用 pdfEmbed.msRequestFullscreen() 进入全屏");
+                        pdfEmbed.msRequestFullscreen();
+                    }
+                }
+            });
+        }
+
+        // 评论相关功能
+        const commentForm = document.getElementById('comment-form');
+        const commentsContainer = document.getElementById('comments-container');
+        const commentCount = document.getElementById('comment-count');
+        const contentTextarea = document.getElementById('content');
+        const previewContainer = document.getElementById('preview-container');
+        const commentSort = document.getElementById('comment-sort');
+
+        // 实时预览功能优化
+
+
+
+        // 添加排序选择器的事件监听
+        if (commentSort) {
+            commentSort.addEventListener('change', function () {
+                currentSortOrder = this.value;
+                // 更改排序方式后刷新评论
+                refreshComments();
+            });
+        }
+
+        // 确保所有需要的元素都存在
+        if (commentsContainer && commentCount) {
+            // 添加评论提交事件监听
+            if (commentForm && globalCsrfToken) {
+                commentForm.addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    console.log('评论表单提交');
+
+                    const formData = new FormData(commentForm);
+
+                    fetch('/material/727', {
+                        method: 'POST',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'X-CSRFToken': globalCsrfToken
+                        },
+                        body: formData
+                    })
+                        .then(response => {
+                            console.log('评论提交响应状态:', response.status);
+                            return response.json();
+                        })
+                        .then(data => {
+                            console.log('评论提交响应数据:', data);
+                            if (data.success) {
+                                // 清空评论输入框和预览区域
+                                document.getElementById('content').value = '';
+                                if (previewContainer) {
+                                    previewContainer.innerHTML = '';
+                                }
+
+                                // 添加评论后立即刷新评论区
+                                console.log('提交评论后调用refreshComments()');
+                                refreshComments();
+                            }
+                        })
+                        .catch(error => {
+                            console.error('评论提交错误:', error);
+                            alert('评论提交失败，请稍后重试');
+                        });
+                });
+            }
+
+            // 初始化删除评论按钮事件
+            console.log('初始化评论删除按钮');
+            initDeleteButtons();
+
+            // 页面加载后立即刷新评论
+            console.log('页面加载完成，首次刷新评论');
+            refreshComments();
+
+            // 替换15秒定时完整刷新为检查新评论
+            // console.log('设置定时检查新评论');
+            // const checkInterval = setInterval(checkForNewComments, CHECK_INTERVAL * 1000);
+
+            // 检查是否有新评论的函数
+            function checkForNewComments() {
+                const timestamp = new Date().getTime();
+                fetch(`/material/727/check_new_comments?t=${timestamp}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // 如果发现有新评论，才触发完整刷新
+                            if (data.last_comment_id > lastKnownCommentId && lastKnownCommentId !== 0) {
+                                console.log(`检测到新评论 ID: ${data.last_comment_id} > ${lastKnownCommentId}`);
+                                refreshComments();
+                            } else {
+                                console.log('无新评论');
+                            }
+                            // 更新最后已知评论ID
+                            lastKnownCommentId = Math.max(lastKnownCommentId, data.last_comment_id);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('检查新评论错误:', error);
+                    });
+            }
+
+            // 刷新评论函数 - 修改为支持排序选项
+            function refreshComments() {
+                // 防止重复请求
+                if (isRefreshing) {
+                    console.log('正在刷新中，跳过本次请求');
+                    return;
+                }
+
+                isRefreshing = true;
+                console.log('开始刷新评论');
+
+                // 添加时间戳防止浏览器缓存，并添加排序参数
+                const timestamp = new Date().getTime();
+                fetch(`/material/727/comments?t=${timestamp}&sort=${currentSortOrder}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log('刷新评论响应数据:', data);
+                        if (data.success) {
+                            // 更新评论计数
+                            commentCount.textContent = data.count;
+
+                            // 更新最后已知评论ID
+                            if (data.comments.length > 0) {
+                                // 找出所有评论ID中的最大值
+                                lastKnownCommentId = Math.max(...data.comments.map(comment => comment.id));
+                            }
+
+                            // 获取当前页面上的评论ID列表
+                            const existingCommentIds = Array.from(
+                                document.querySelectorAll('[id^="comment-"]')
+                            ).map(el => {
+                                // 确保解析为数字,避免NaN
+                                const idStr = el.id.replace('comment-', '');
+                                return parseInt(idStr) || 0; // 如果不是数字，返回0
+                            }).filter(id => id > 0); // 只保留有效ID
+
+                            console.log('现有评论IDs:', existingCommentIds);
+                            console.log('服务器评论数据:', data.comments);
+
+                            // 检查服务器上是否有评论已被删除
+                            const serverCommentIds = data.comments.map(comment => comment.id);
+                            existingCommentIds.forEach(id => {
+                                if (!serverCommentIds.includes(id)) {
+                                    console.log('删除不存在的评论:', id);
+                                    const commentElement = document.getElementById(`comment-${id}`);
+                                    if (commentElement) commentElement.remove();
+                                }
+                            });
+
+                            // 清空评论容器，完全重新渲染所有评论
+                            if (data.count > 0) {
+                                // 移除"暂无评论"提示(如果有)
+                                const noCommentsMsg = document.getElementById('no-comments-message');
+                                if (noCommentsMsg) {
+                                    noCommentsMsg.remove();
+                                }
+
+                                // 清空现有评论并重新渲染
+                                commentsContainer.innerHTML = '';
+
+                                // 按后端返回的顺序添加评论
+                                data.comments.forEach(comment => {
+                                    addCommentToDOM(comment);
+                                });
+                            } else {
+                                // 如果没有评论，显示"暂无评论"提示
+                                commentsContainer.innerHTML = `
+                                    <div id="no-comments-message" class="text-center text-gray-500 py-8">
+                                        <p>暂无评论，来发表第一条评论吧！</p>
+                                    </div>
+                                `;
+                            }
+
+                            // 渲染所有评论中的公式
+                            if (window.MathJax && window.MathJax.typesetPromise) {
+                                window.MathJax.typesetPromise().catch(function (err) {
+                                    console.error('MathJax全局渲染错误:', err);
+                                });
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('刷新评论错误:', error);
+                    })
+                    .finally(() => {
+                        isRefreshing = false;
+                        console.log('评论刷新完成');
+                    });
+            }
+        }
+
+        // 获取用户等级对应的文字颜色
+        function getUserLevelColor(level) {
+            if (level < 1) return '#545454';
+            else if (level < 4) return '#0162AD';
+            else if (level < 9) return '#116F6E';
+            else if (level < 16) return '#136C2F';
+            else if (level < 25) return '#AD5401';
+            else if (level < 36) return '#CC3A00';
+            else if (level < 49) return '#BD005E';
+            else if (level < 64) return '#7E00A8';
+            else if (level < 81) return '#0F3295';
+            else if (level < 100) return '#94070A';
+            else return '#724713';
+        }
+
+        // 获取用户等级对应的背景颜色
+        function getUserLevelBgColor(level) {
+            if (level < 1) return '#E6E6E6';
+            else if (level < 4) return '#D5F1FC';
+            else if (level < 9) return '#DAF6F5';
+            else if (level < 16) return '#E3F2E7';
+            else if (level < 25) return '#FFF2C7';
+            else if (level < 36) return '#FFEAE0';
+            else if (level < 49) return '#FFE5F4';
+            else if (level < 64) return '#F9E5FF';
+            else if (level < 81) return '#DCE3FA';
+            else if (level < 100) return '#FDD3D8';
+            else return '#FFE138';
+        }
+
+        // 添加评论到DOM
+        function addCommentToDOM(comment) {
+            if (!commentsContainer) return;
+
+            const commentElement = document.createElement('div');
+            commentElement.className = 'bg-gray-50 p-4 rounded';
+            commentElement.id = `comment-${comment.id}`;
+
+            commentElement.innerHTML = `
+                <div class="flex justify-between items-start mb-2">
+                    <a href="/user/${comment.user.id}" class="flex items-center flex-shrink min-w-0 max-w-[70%]">
+                        <img src="/static/avatars/${comment.user.avatar}" alt="${comment.user.username}" class="h-10 w-10 rounded-full mr-2 object-cover flex-shrink-0">
+                        <div class="min-w-0 overflow-hidden">
+                            <div class="text-sm font-medium truncate">${comment.user.username}</div>
+                            <div class="mt-0.5 text-xs flex items-center truncate" style="color: ${getUserLevelColor(comment.user.level)}">
+                                Lv.${comment.user.level}
+                                <span class="font-bold ml-1 px-1 py-0.5 rounded-md whitespace-nowrap" style="background-color: ${getUserLevelBgColor(comment.user.level)}">
+                                    ${comment.user.title}
+                                </span>
+                            </div>
+                        </div>
+                    </a>
+                    <div class="flex items-center whitespace-nowrap flex-shrink-0 ml-2">
+                        <span class="text-xs text-gray-500">${comment.created_at}</span>
+                    </div>
+                </div>
+                <div class="text-gray-700 markdown-content">${renderMarkdown(comment.content)}</div>
+                ${comment.can_delete ? `
+                    <div class="flex flex-col items-end">
+                        <button class="text-xs text-red-500 hover:text-red-700 delete-comment-btn flex-shrink-0" data-id="${comment.id}">
+                            <i class="fas fa-trash-alt"></i> 删除
+                        </button>
+                    </div>
+                ` : ''}
+            `;
+
+            // 将评论添加到容器中（按后端排序，新评论在前）
+            commentsContainer.appendChild(commentElement);
+
+            // 渲染新添加的评论中的Markdown和LaTeX
+            const commentContentDiv = commentElement.querySelector('.markdown-content');
+            commentContentDiv.innerHTML = renderMarkdown(comment.content);
+
+            // 使用MathJax渲染新添加的评论中的公式
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise([commentContentDiv])
+                    .catch(err => console.error('新评论MathJax渲染错误:', err));
+            }
+        }
+
+        // 初始化删除按钮事件
+        function initDeleteButtons() {
+            console.log('初始化删除按钮事件');
+
+            document.querySelectorAll('.delete-comment-btn').forEach(button => {
+                // 避免重复添加事件
+                if (!button.hasAttribute('data-handler-attached')) {
+                    button.setAttribute('data-handler-attached', 'true');
+
+                    button.addEventListener('click', function () {
+                        const commentId = this.getAttribute('data-id');
+                        if (commentId) {
+                            deleteComment(commentId);
+                        }
+                    });
+                }
+            });
+        }
+
+        // 确保页面加载完成后初始化删除按钮
+        initDeleteButtons();
+
+        // 处理点赞功能
+        const likeButton = document.getElementById('like-button');
+        if (likeButton && globalCsrfToken) {
+            const likeCount = document.getElementById('like-count');
+            const likeText = document.getElementById('like-text');
+
+            likeButton.addEventListener('click', function () {
+                fetch('/material/727/like', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': globalCsrfToken,
+                        'Content-Type': 'application/json'
+                    }
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // 更新点赞状态
+                            likeCount.textContent = data.like_count;
+
+                            if (data.is_liked) {
+                                likeButton.classList.add('text-amber-500', 'border-amber-400', 'bg-amber-50', 'hover-bg-amber-100');
+                                likeButton.classList.remove('text-gray-700', 'border-gray-300', 'hover:bg-gray-100');
+                                likeButton.querySelector('i').classList.add('text-amber-500');
+                                likeText.textContent = '已收藏';
+                            } else {
+                                likeButton.classList.remove('text-amber-500', 'border-amber-400', 'bg-amber-50', 'hover-bg-amber-100');
+                                likeButton.classList.add('text-gray-700', 'border-gray-300', 'hover:bg-gray-100');
+                                likeButton.querySelector('i').classList.remove('text-amber-500');
+                                likeText.textContent = '收藏';
+                            }
+                        } else {
+                            alert(data.message || '操作失败，请稍后再试');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('请求失败，请稍后重试');
+                    });
+            });
+        }
+
+        // 初始化Markdown和LaTeX渲染器
+        initMarkdownLatexRenderer();
+
+        // 在页面加载时渲染所有评论中的Markdown和LaTeX
+        renderAllMarkdownContent();
+
+        // 页面加载完成后，确保已有评论中的公式能被正确渲染
+        if (window.MathJax && window.MathJax.typesetPromise) {
+            window.MathJax.typesetPromise().catch(function (err) {
+                console.error('页面加载后MathJax渲染错误:', err);
+            });
+        }
+
+        // 页面加载时统一处理所有评论中的Markdown和LaTeX，确保一致渲染
+        function renderAllInitialComments() {
+            document.querySelectorAll('.raw-content').forEach(element => {
+                const rawContent = element.textContent; // 获取原始文本内容
+                element.innerHTML = renderMarkdown(rawContent);
+                element.classList.remove('raw-content'); // 移除标记类，避免重复处理
+            });
+
+            // 使用MathJax渲染页面上所有公式
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise().catch(function (err) {
+                    console.error('初始评论MathJax渲染错误:', err);
+                });
+            }
+        }
+
+        // 初始渲染所有已加载的评论
+        renderAllInitialComments();
+    });
+
+    // 添加关注作者功能
+    function toggleFollowAuthor(userId, username) {
+        const followAuthorBtn = document.getElementById('followAuthorBtn');
+        if (!followAuthorBtn) return;
+
+        const isFollowing = followAuthorBtn.innerText.includes('取消关注');
+        const endpoint = isFollowing ? `/unfollow/${userId}` : `/follow/${userId}`;
+
+        if (!globalCsrfToken) {
+            console.error('无法获取CSRF令牌');
+            return;
+        }
+
+        fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': globalCsrfToken
+            }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    if (isFollowing) {
+                        // 变为关注按钮
+                        followAuthorBtn.innerHTML = '<i class="fas fa-user-plus mr-1"></i>关注作者';
+                        followAuthorBtn.classList.remove('bg-gray-500', 'hover:bg-gray-600');
+                        followAuthorBtn.classList.add('pku-red', 'hover-pku-red');
+                    } else {
+                        // 变为取消关注按钮
+                        followAuthorBtn.innerHTML = '<i class="fas fa-user-minus mr-1"></i>取消关注';
+                        followAuthorBtn.classList.remove('pku-red', 'hover-pku-red');
+                        followAuthorBtn.classList.add('bg-gray-500', 'hover:bg-gray-600');
+                    }
+                } else {
+                    alert(data.message || '操作失败，请稍后再试');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('请求失败，请稍后重试');
+            });
+    }
+
+    function deleteComment(commentId) {
+        console.log('deleteComment函数被调用，commentId:', commentId);
+
+        if (!confirm('确定要删除这条评论吗？此操作不可撤销。')) {
+            console.log('用户取消删除');
+            return;
+        }
+
+        // 检查CSRF令牌
+        if (!globalCsrfToken) {
+            console.error('无法获取CSRF令牌，value:', globalCsrfToken);
+            alert('系统错误：无法获取安全令牌');
+            return;
+        }
+
+        console.log('开始发送删除请求, URL:', `/comment/${commentId}/delete`);
+        console.log('使用的CSRF令牌:', globalCsrfToken);
+
+        // 发送删除请求
+        fetch(`/comment/${commentId}/delete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': globalCsrfToken,
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+            .then(response => {
+                console.log('收到服务器响应，状态:', response.status);
+                return response.json();
+            })
+            .then(data => {
+                console.log('解析响应JSON成功:', data);
+                if (data.success) {
+                    console.log('删除评论成功');
+
+                    // 更新评论计数
+                    const commentCount = document.getElementById('comment-count');
+                    if (commentCount) {
+                        const currentCount = parseInt(commentCount.textContent) || 0;
+                        commentCount.textContent = Math.max(0, currentCount - 1);
+                    }
+
+                    // 直接从DOM中删除评论元素
+                    const commentElement = document.getElementById(`comment-${commentId}`);
+                    if (commentElement) {
+                        commentElement.remove();
+                        checkEmptyComments();
+                    }
+
+                    // 可选：显示成功消息
+                    const successMessage = document.createElement('div');
+                    successMessage.className = 'fixed bottom-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50';
+                    successMessage.innerHTML = '<span class="font-bold">成功：</span> 评论已删除';
+                    document.body.appendChild(successMessage);
+
+                    // 3秒后移除成功消息
+                    setTimeout(() => {
+                        successMessage.remove();
+                    }, 3000);
+                } else {
+                    console.error('服务器返回删除失败:', data.message);
+                    alert(data.message || '删除评论失败');
+                }
+            })
+            .catch(error => {
+                console.error('删除评论请求出错:', error);
+
+                // 尽管请求处理失败，但可能评论已经被删除，我们检查一下
+                const commentElement = document.getElementById(`comment-${commentId}`);
+
+                // 如果评论仍然存在，显示错误信息
+                if (commentElement) {
+                    alert('评论删除请求处理失败，请稍后再试或刷新页面查看最新状态');
+                } else {
+                    console.log('尽管出现错误，但评论元素已不存在，可能已成功删除');
+                }
+            });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        console.log('页面加载完成，初始化事件');
+
+        // 全局事件委托，处理评论删除按钮点击事件
+        document.addEventListener('click', function (event) {
+            // 查找最近的删除按钮祖先元素
+            const deleteButton = event.target.closest('.delete-comment-btn');
+
+            if (deleteButton) {
+                event.preventDefault();
+                const commentId = deleteButton.getAttribute('data-id');
+                console.log('检测到删除按钮点击，评论ID:', commentId);
+
+                if (commentId) {
+                    deleteComment(commentId);
+                } else {
+                    console.error('删除按钮没有data-id属性');
+                }
+            }
+        });
+    });
+
+    // 检查是否没有评论了
+    function checkEmptyComments() {
+        const commentContainer = document.getElementById('comments-container');
+        if (commentContainer && commentContainer.querySelectorAll('[id^="comment-"]').length === 0) {
+            console.log('创建"暂无评论"提示');
+            commentContainer.innerHTML = `
+                <div id="no-comments-message" class="text-center text-gray-500 py-8">
+                    <p>暂无评论，来发表第一条评论吧！</p>
+            `;
+        }
+    }
+    document.addEventListener('DOMContentLoaded', function () {
+        const descriptionElement = document.getElementById('material-description');
+        if (descriptionElement) {
+            const rawDescription = descriptionElement.textContent.trim();
+            descriptionElement.innerHTML = marked.parse(rawDescription);
+        }
+    });
+
+    // 同课程其他资料的搜索、筛选、排序功能
+    document.addEventListener('DOMContentLoaded', function () {
+        // 获取所有DOM元素
+        const materialSearch = document.getElementById('material-search');
+        const fileTypeSelect = document.getElementById('file-type-select');
+        const semesterSelect = document.getElementById('semester-select');
+        const sortSelect = document.getElementById('sort-select');
+        const resetFiltersBtn = document.getElementById('reset-filters');
+        const materialRows = document.querySelectorAll('#materials-table-body tr');
+        const noResultsMessage = document.getElementById('no-results-message');
+
+        // 强制重置所有输入控件为初始状态（页面加载时执行）
+        if (fileTypeSelect.options.length > 0) {
+            fileTypeSelect.selectedIndex = 0; // 选择第一项（全部）
+        }
+        if (semesterSelect.options.length > 0) {
+            semesterSelect.selectedIndex = 0; // 选择第一项（全部学期）
+        }
+        if (sortSelect.options.length > 0) {
+            sortSelect.selectedIndex = 0; // 选择第一项（标题最相关）
+        }
+
+        if (document.querySelector('table')) {
+            const materialsTable = document.querySelector('table').parentNode;
+            // 当前筛选状态
+            const filters = {
+                search: '',
+                fileType: '全部',
+                semester: '全部学期',
+                sortBy: '标题最相关'
+            };
+
+            // 应用筛选和排序
+            function applyFilters() {
+                let visibleCount = 0;
+                let filteredRows = Array.from(materialRows);
+
+                // 筛选处理
+                filteredRows = filteredRows.filter(row => {
+                    const title = row.getAttribute('data-title').toLowerCase();
+                    const fileType = row.getAttribute('data-file-type');
+                    const semester = row.getAttribute('data-semester');
+
+                    // 标题搜索匹配
+                    const searchMatch = filters.search === '' || title.includes(filters.search.toLowerCase());
+
+                    // 文件类型匹配
+                    const fileTypeMatch = filters.fileType === '全部' || fileType === filters.fileType;
+
+                    // 学期匹配
+                    const semesterMatch = filters.semester === '全部学期' || semester === filters.semester;
+
+                    // 只有全部条件匹配的行才显示
+                    const isVisible = searchMatch && fileTypeMatch && semesterMatch;
+                    row.classList.toggle('hidden', !isVisible);
+
+                    if (isVisible) visibleCount++;
+                    return isVisible;
+                });
+
+                // 排序处理
+                if (filteredRows.length > 0) {
+                    const tbody = document.getElementById('materials-table-body');
+
+                    filteredRows.sort((a, b) => {
+                        if (filters.sortBy === '标题最相关') {
+                            return parseFloat(b.getAttribute('data-relevance')) - parseFloat(a.getAttribute('data-relevance'));
+                        } else if (filters.sortBy === '最新上传') {
+                            return parseFloat(b.getAttribute('data-timestamp')) - parseFloat(a.getAttribute('data-timestamp'));
+                        } else if (filters.sortBy === '最多下载') {
+                            return parseInt(b.getAttribute('data-downloads')) - parseInt(a.getAttribute('data-downloads'));
+                        }
+                        return 0;
+                    });
+
+                    // 重新排序DOM元素
+                    filteredRows.forEach(row => {
+                        tbody.appendChild(row);
+                    });
+                }
+
+                // 显示或隐藏无结果提示
+                if (visibleCount === 0) {
+                    materialsTable.classList.add('hidden');
+                    noResultsMessage.classList.remove('hidden');
+                } else {
+                    materialsTable.classList.remove('hidden');
+                    noResultsMessage.classList.add('hidden');
+                }
+            }
+
+            // 重置所有筛选条件
+            function resetFilters() {
+                materialSearch.value = '';
+                fileTypeSelect.value = '全部';
+                semesterSelect.value = '全部学期';
+                sortSelect.value = '标题最相关';
+
+                filters.search = '';
+                filters.fileType = '全部';
+                filters.semester = '全部学期';
+                filters.sortBy = '标题最相关';
+
+                applyFilters();
+            }
+
+            // 搜索框输入事件监听
+            materialSearch.addEventListener('input', function () {
+                filters.search = this.value.trim();
+                applyFilters();
+            });
+
+            // 文件类型选择事件
+            fileTypeSelect.addEventListener('change', function () {
+                filters.fileType = this.value;
+                applyFilters();
+            });
+
+            // 学期选择事件
+            semesterSelect.addEventListener('change', function () {
+                filters.semester = this.value;
+                applyFilters();
+            });
+
+            // 排序选择事件
+            sortSelect.addEventListener('change', function () {
+                filters.sortBy = this.value;
+                applyFilters();
+            });
+
+            // 重置按钮点击事件
+            resetFiltersBtn.addEventListener('click', resetFilters);
+
+            // 初始化应用一次筛选
+            applyFilters();
+        }
+    });
+    </script>
+
+    </body>
+</html>
