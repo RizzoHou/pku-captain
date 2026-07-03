@@ -33,6 +33,11 @@ class Assignment:
     last_attempt: str | None
     descriptions: list[str] = field(default_factory=list)
     attachments: list[Attachment] = field(default_factory=list)
+    # Blackboard-native link data (not in pku3b's JSON; kept off ``to_dict`` so
+    # the CLI stays byte-compatible). A host app can build submit/entry URLs
+    # from these without probing pku3b's on-disk cache.
+    content_id: str = ""
+    course_url: str | None = None
 
     def to_dict(self) -> dict:
         # Key order mirrors pku3b's JsonAssignment for drop-in compatibility.
@@ -71,6 +76,8 @@ class Announcement:
     body: str = ""
     descriptions: list[str] = field(default_factory=list)
     attachments: list[Attachment] = field(default_factory=list)
+    # The course 课程通知 entry URL (for a clickable link); off ``to_dict``.
+    course_url: str | None = None
 
     def to_dict(self) -> dict:
         return {

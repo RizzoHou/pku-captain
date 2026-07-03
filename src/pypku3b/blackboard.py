@@ -11,7 +11,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Callable, Iterable, TypeVar
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urljoin, urlparse
 
 from bs4 import BeautifulSoup
 from bs4 import NavigableString, Tag
@@ -34,6 +34,11 @@ BB_LOGIN = "https://course.pku.edu.cn/webapps/login/"
 COURSE_INFO = "https://course.pku.edu.cn/webapps/blackboard/execute/announcement"
 UPLOAD_ASSIGNMENT = "https://course.pku.edu.cn/webapps/assignment/uploadAssignment"
 LIST_CONTENT = "https://course.pku.edu.cn/webapps/blackboard/content/listContent.jsp"
+WEB_URL = "https://course.pku.edu.cn/"
+
+# Course-menu entry labels whose hrefs become the assignment/announcement links.
+_ASSIGNMENT_MENU_LABEL = "课程作业"
+_ANNOUNCEMENT_MENU_LABEL = "课程通知"
 
 _APPID = "blackboard"
 _COURSE_KEY_RE = re.compile(r"key=([\d_]+),")
@@ -65,6 +70,12 @@ def _collect_text(el: Tag) -> str:
             if node.name != "script":
                 out.append(_collect_text(node))
     return "".join(out)
+
+
+def _menu_url(menu: dict[str, str], label: str) -> str | None:
+    """Absolutize a course-menu entry href, or ``None`` when absent."""
+    href = menu.get(label)
+    return urljoin(WEB_URL, href) if href else None
 
 
 def _course_name(title: str) -> str:
@@ -439,11 +450,8 @@ class BlackboardClient:
         title = _course_title(long_title)
         name = _course_name(title)
 
-        menu = self.cache.get_or_compute(
-            f"menu_{course_id}",
-            lambda: parse_course_menu(self._get_coursepage(course_id)),
-            force=force,
-        )
+        menu = self._menu(course_id, force=force)
+        course_url = _menu_url(menu, _ASSIGNMENT_MENU_LABEL)
         seed_ids = _seed_content_ids(menu)
 
         contents = self.cache.get_or_compute(
@@ -478,9 +486,18 @@ class BlackboardClient:
                     Attachment(name=a[0], uri=a[1])
                     for a in (content.get("attachments") or [])
                 ],
+                content_id=content["id"],
+                course_url=course_url,
             )
 
         return _map_concurrent(build, assignment_contents, workers=self.workers)
+
+    def _menu(self, course_id: str, *, force: bool) -> dict[str, str]:
+        return self.cache.get_or_compute(
+            f"menu_{course_id}",
+            lambda: parse_course_menu(self._get_coursepage(course_id)),
+            force=force,
+        )
 
     def _crawl_contents(self, course_id: str, seed_ids: list[str]) -> list[_ContentData]:
         visited: set[str] = set(seed_ids)
@@ -540,9 +557,10 @@ class BlackboardClient:
         self, *, only_current: bool, force: bool
     ) -> list[Announcement]:
         courses = self.get_courses(only_current=only_current, force=force)
-        collected: list[tuple[str, _ContentData]] = []
+        collected: list[tuple[str, str | None, _ContentData]] = []
         for course_id, long_title, _is_current in courses:
             name = _course_name(_course_title(long_title))
+            course_url = _menu_url(self._menu(course_id, force=force), _ANNOUNCEMENT_MENU_LABEL)
             raw = self.cache.get_or_compute(
                 f"announcements_{course_id}",
                 lambda cid=course_id, nm=name: [
@@ -552,13 +570,13 @@ class BlackboardClient:
                 force=force,
             )
             for record in raw:
-                collected.append((name, _content_from_dict(record)))
+                collected.append((name, course_url, _content_from_dict(record)))
 
         # newest first: items with a time before those without (pku3b sort).
-        collected.sort(key=lambda pair: pair[1].time or "", reverse=True)
+        collected.sort(key=lambda triple: triple[2].time or "", reverse=True)
 
         announcements: list[Announcement] = []
-        for index, (name, content) in enumerate(collected, start=1):
+        for index, (name, course_url, content) in enumerate(collected, start=1):
             course_id = content.id.rsplit("_", 1)[0]
             announcements.append(
                 Announcement(
@@ -574,6 +592,7 @@ class BlackboardClient:
                     attachments=[
                         Attachment(name=a[0], uri=a[1]) for a in content.attachments
                     ],
+                    course_url=course_url,
                 )
             )
         return announcements
