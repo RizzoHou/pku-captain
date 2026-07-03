@@ -45,6 +45,7 @@ packages = [
     "vendor/plib-cli/src/plib_cli",
     "vendor/pku-dean-cli/src/dean",
     "vendor/pku-treehole-cli/src/treehole",
+    "vendor/pypku3b/src/pypku3b",
 ]
 
 [tool.ruff]
