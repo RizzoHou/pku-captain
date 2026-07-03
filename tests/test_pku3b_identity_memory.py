@@ -1,42 +1,46 @@
 from __future__ import annotations
 
-import json
+from pypku3b import Identity
+from pypku3b.errors import AuthError
 
 from src.core import bootstrap
 from src.core.memory import MemoryStore
-from src.tools.pku3b import Pku3bRun
 
 
-def test_sync_pku3b_identity_memory_stores_stable_identity_fields(
-    tmp_path, monkeypatch
-) -> None:
-    calls: list[list[str]] = []
+class _FakeClient:
+    def __init__(self, identity=None, error=None):
+        self._identity = identity
+        self._error = error
 
-    def fake_run(args):
-        calls.append(list(args))
-        return Pku3bRun(
-            returncode=0,
-            stdout=json.dumps(
-                {
-                    "name": "测试用户",
-                    "student_id": "2300010000",
-                    "department": "信息科学技术学院",
-                    "speciality": "智能科学与技术",
-                    "direction": None,
-                    "student_type": "普通本科",
-                    "user_identity": "学生",
-                    "ethnic": "不应写入长期记忆",
-                }
-            ),
-            stderr="",
-        )
+    def get_identity(self, **_):
+        if self._error is not None:
+            raise self._error
+        return self._identity
 
-    monkeypatch.setattr(bootstrap, "run_pku3b", fake_run)
+
+def _factory(identity=None, error=None):
+    def make(**_kwargs):
+        return _FakeClient(identity, error)
+
+    return make
+
+
+def test_sync_stores_stable_identity_fields(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(bootstrap, "stored_credentials", lambda _d: object())
+    identity = Identity(
+        name="测试用户",
+        student_id="2300010000",
+        department="信息科学技术学院",
+        speciality="智能科学与技术",
+        direction=None,
+        student_type="普通本科",
+        user_identity="学生",
+        ethnic="不应写入长期记忆",
+    )
     store = MemoryStore(tmp_path / "memory.json")
 
-    bootstrap._sync_pku3b_identity_memory(store)
+    bootstrap._sync_pku3b_identity_memory(store, client_factory=_factory(identity))
 
-    assert calls == [["identity", "--format", "json"]]
     assert store.get("identity.name").value == "测试用户"
     assert store.get("identity.student_id").value == "2300010000"
     assert store.get("identity.department").value == "信息科学技术学院"
@@ -44,36 +48,51 @@ def test_sync_pku3b_identity_memory_stores_stable_identity_fields(
     assert store.get("identity.student_type").value == "普通本科"
     assert store.get("identity.user_identity").value == "学生"
     assert store.get("identity.direction") is None
+    # ethnic is not one of the synced fields.
     assert store.get("ethnic") is None
+    assert store.get("identity.ethnic") is None
 
 
-def test_sync_pku3b_identity_memory_ignores_failed_cli(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(
-        bootstrap,
-        "run_pku3b",
-        lambda _args: Pku3bRun(returncode=1, stdout="", stderr="needs otp"),
-    )
+def test_sync_ignores_auth_error(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(bootstrap, "stored_credentials", lambda _d: object())
     store = MemoryStore(tmp_path / "memory.json")
 
-    bootstrap._sync_pku3b_identity_memory(store)
+    bootstrap._sync_pku3b_identity_memory(
+        store, client_factory=_factory(error=AuthError("needs otp"))
+    )
 
     assert store.list() == []
 
 
-def test_sync_pku3b_identity_memory_skips_when_already_synced(tmp_path, monkeypatch) -> None:
-    calls: list[list[str]] = []
+def test_sync_skips_without_credentials(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(bootstrap, "stored_credentials", lambda _d: None)
+    called: list[int] = []
 
-    def fake_run(args):
-        calls.append(list(args))
-        return Pku3bRun(returncode=0, stdout=json.dumps({"name": "新名字"}), stderr="")
+    def factory(**_kwargs):
+        called.append(1)
+        raise AssertionError("should not build a client without credentials")
 
-    monkeypatch.setattr(bootstrap, "run_pku3b", fake_run)
+    store = MemoryStore(tmp_path / "memory.json")
+    bootstrap._sync_pku3b_identity_memory(store, client_factory=factory)
+
+    assert called == []
+    assert store.list() == []
+
+
+def test_sync_skips_when_already_synced(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(bootstrap, "stored_credentials", lambda _d: object())
+    called: list[int] = []
+
+    def factory(**_kwargs):
+        called.append(1)
+        raise AssertionError("sync-once guard should skip the portal login")
+
     store = MemoryStore(tmp_path / "memory.json")
     store.set("identity.name", "已存在")
 
-    bootstrap._sync_pku3b_identity_memory(store)
+    bootstrap._sync_pku3b_identity_memory(store, client_factory=factory)
 
-    assert calls == []  # sync-once guard skips the blocking subprocess
+    assert called == []
     assert store.get("identity.name").value == "已存在"
 
 
