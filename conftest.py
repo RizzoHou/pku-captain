@@ -12,4 +12,12 @@ test imports src, and inserting at position 0 beats the .pth entry. See CLAUDE.m
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _ROOT)
+
+# Bridge the newly-vendored `pypku3b` until the main checkout is reinstalled
+# (`pip install -e .`): the shared venv's editable install has not yet picked up
+# its hatchling packages entry, and worktrees must not `pip install` into the
+# shared venv. Once main is reinstalled this resolves via the .pth too, so the
+# insert is a harmless duplicate. The other vendored libs are already installed.
+sys.path.insert(0, os.path.join(_ROOT, "vendor", "pypku3b", "src"))

@@ -16,6 +16,9 @@ secrets/
   treehole/
     id                   # 树洞登录账号（IAAA 学号）
     password             # 树洞登录密码
+  pku/
+    id                   # PKU IAAA 学号（教学网 Blackboard + 信息门户）
+    password             # IAAA 门户密码（内嵌 pypku3b 登录用）
 ```
 
 - `api_keys/deepseek_key.txt`（在线必需）—— DeepSeek 对话模型。缺失时 `--online` 会回退到离线模式（`EchoLLMProvider`）。也兼容旧布局 `secrets/deepseek_key.txt`。
@@ -23,58 +26,48 @@ secrets/
 - `api_keys/embedding_key.txt`（已弃用）—— 旧 RAG 的阿里云百炼嵌入模型。文档库（拆分 PDF + 视觉阅读）取代 RAG 后不再读取此文件，保留仅为历史兼容。
 - `plib/{email,password}`（P-Lib 必需）—— `PLibMaterialsTool` 会在每次调用前把它们作为 `Credentials` 直接传给内嵌的 `plib_cli` 库，所以 search / quota / download 无需手动 `login`（P-Lib 登录是自愈的）。
 - `treehole/{id,password}`（树洞必需）—— `TreeholeUpdatesTool` / `TreeholeAuthService` 从此目录读取登录凭据；首次在线运行会提示“需要短信验证”，在 GUI 树洞面板完成一次短信验证后会缓存 `secrets/treehole/session.json` 并复用。
+- `pku/{id,password}`（作业/公告/课表/身份必需）—— 内嵌的 `pypku3b` 用它登录 PKU IAAA（教学网 Blackboard + 信息门户）。登录成功后会话 cookie 缓存在 `secrets/pku/cookies.json`，后续调用复用会话（免重复登录/OTP）。见下文「pku3b（内嵌 pypku3b）」。
 
 ```bash
 python -m src --online          # DeepSeek + 实时工具；表头可切换到 Kimi K2.6（需 kimi key）
 python -m src.cli               # CLI 走真实 DeepSeek
 ```
 
-## pku3b（必需）
+## pku3b（内嵌 pypku3b —— 无需 Rust）
 
-PKU Captain 通过 [`pku3b`](https://github.com/sshwy/pku3b) Rust CLI 读取 Blackboard 上的作业、课程通知与附件。**我们用的是 fork，不是上游**——fork 在 `assignment list` 上新增了 `--format json` 标志，让 Python 包装层（`src/tools/pku3b.py`）直接消费结构化输出，而不是用正则去解析渲染后的 ANSI 文本。装上游版本会让我们的工具直接报错。
+PKU Captain 读取 Blackboard 上的作业、课程通知、个人课表与身份信息。**不再依赖外部 `pku3b` Rust 二进制**——这几个用到的功能已用纯 Python 重写为 [`pypku3b`](https://github.com/RizzoHou/pypku3b)，像 plib/dean/treehole 一样通过 `git subtree` **内嵌**在 `vendor/pypku3b/`，作为顶层 `pypku3b` 包由 pku-captain 自己的 `pip install -e ".[dev]"` 一并装好——**无需**装 Rust 工具链、`cargo install`，也没有子进程。工具在进程内直接驱动 `pypku3b.Client`。
+
+### 凭据
+
+只需在 `secrets/pku/` 放两个文件（见上文「密钥与凭据」）：
+
+```
+secrets/pku/id           # IAAA 学号
+secrets/pku/password     # IAAA 门户密码
+```
+
+`pypku3b` 用它们登录三个独立的 IAAA 应用：`blackboard`（作业/公告）、`portalPublicQuery`（课表）、`portal2017`（身份）。
 
 ### 系统依赖
 
-- Rust toolchain（推荐 [`rustup`](https://rustup.rs/) 安装）
-- `pkg-config` + `libssl-dev`
-
-Debian / Ubuntu：
-
-```bash
-sudo apt install pkg-config libssl-dev
-```
-
-macOS：
-
-```bash
-brew install openssl pkg-config
-```
-
-### 安装
-
-```bash
-cargo install --git https://github.com/RizzoHou/pku3b --branch master
-```
-
-二进制会被放到 `~/.cargo/bin/pku3b`，确认它在 `PATH` 上（或自行 symlink 到 `~/.local/bin/`）。
+无额外系统依赖——`requests` + `beautifulsoup4` + `lxml` 都在 `pip install -e ".[dev]"` 里。TLS 默认走**操作系统信任库**而非 certifi（`course.pku.edu.cn` 的 GlobalSign 证书链在部分 certifi 版本里验不过），这一点已内置无需配置。
 
 ### 验证
 
 ```bash
-pku3b --version                              # 0.13.0+，来自我们的分支
-pku3b assignment list --format json | jq .   # 验证 --format json 标志可用
-pku3b identity --format json | jq .          # 验证身份摘要 JSON 可用（不要使用 --raw）
+.venv/bin/python -c "from src.tools.pku3b_assignments import PKU3bAssignmentsTool; r=PKU3bAssignmentsTool().invoke({'include_completed': True}); print(r.success, len(r.data['assignments']) if r.success else r.error)"
+.venv/bin/python -c "from src.tools.pku3b_coursetable import PKU3bCourseTableTool; r=PKU3bCourseTableTool().invoke({}); print(r.success, len(r.data['blocks']) if r.success else r.error)"
 ```
 
-如果第二条命令报 `unknown flag --format`，说明装到了上游版本，重新跑上面的 `cargo install`。
+也可用内嵌库自带的 CLI（主要用于独立调试）：`.venv/bin/pypku3b assignment list --format json | jq .`。
 
-### 首次登录
+### 首次登录 / OTP
 
-`pku3b` 需要交互式登录一次后才能拉数据。按 CLI 提示输入 IAAA 账号即可，凭据缓存在本地。Python 包装层只负责调用 CLI，不驱动登录流程。
+首次在线运行会用 `secrets/pku` 的凭据自动登录，无需交互；登录会话 cookie 缓存在 `secrets/pku/cookies.json`，之后复用。若账号开启了手机令牌（OTP），课表工具可在仪表盘顶部输入 OTP 后刷新（身份/作业同理，凭据正确时多数账号无需 OTP）。
 
-### 已知小坑
+### 升级内嵌库
 
-`pku3b` 的 stdout 在重定向到普通文件时会失败（exit 1，空输出）——这是 compio 轮询后端的已知上游问题。管道是好的（`subprocess.run(capture_output=True)` 用的就是管道），所以 Python 包装层不受影响；如果你想在 shell 里手动调试，用管道（`pku3b ... | jq .`）而不是 `>`。
+`pypku3b` 的**源头**是独立仓库 `~/projects/pypku3b`（不是 `vendor/` 里的副本）。改动流程：在独立仓库里改、跑 `pytest`、`git push`，然后在 pku-captain 里 `git subtree pull --prefix vendor/pypku3b git@github.com:RizzoHou/pypku3b.git main --squash`。独立仓库带一套网络回归测试（`tests/live/`，`PYPKU3B_LIVE=1` 才跑，需真实凭据），可对真实接口验证抓取是否正确。
 
 ## P-Lib（P-Lib 资料检索需要）
 

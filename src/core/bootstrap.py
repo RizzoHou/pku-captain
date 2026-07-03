@@ -8,7 +8,6 @@ into the GUI lane.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -37,7 +36,12 @@ from ..tools import (
     TreeholeUpdatesTool,
 )
 from ..tools.base import ToolRegistry
-from ..tools.pku3b import Pku3bNotFoundError, Pku3bTimeoutError, run_pku3b
+from ..tools.pku3b import (
+    PKU_SECRETS_DIR,
+    Pku3bError,
+    default_client_factory,
+    stored_credentials,
+)
 from ..workflows import HelloWorkflow, MorningBriefingWorkflow, WorkflowTool
 from ..workflows.base import WorkflowRegistry
 from .agent import Agent
@@ -328,31 +332,31 @@ _IDENTITY_MEMORY_FIELDS = {
 }
 
 
-def _sync_pku3b_identity_memory(memory: MemoryStore) -> None:
-    """Best-effort startup sync of pku3b identity into long-term memory.
+def _sync_pku3b_identity_memory(memory: MemoryStore, *, client_factory=None) -> None:
+    """Best-effort startup sync of the student's identity into long-term memory.
 
-    Uses ``identity --format json`` rather than ``--raw`` so the CLI returns the
-    public student identity summary only, not the full portal record. Startup
-    must stay robust: missing pku3b, expired login, OTP/network errors, or
-    schema changes should leave memory unchanged rather than preventing the GUI
-    from opening.
+    Fetches the public identity summary in-process via ``pypku3b`` (the portal's
+    ``getBasicInfo.do``, stripped of 身份证号/住址). Startup must stay robust:
+    missing package, expired login, OTP/network errors, or schema changes should
+    leave memory unchanged rather than preventing the GUI from opening.
 
     Sync-once: ``MemoryStore`` persists to disk, so once any identity field is
-    stored we skip the blocking ``pku3b identity`` subprocess on later launches.
-    This call runs on the GUI main thread inside ``build_agent``; re-authing the
-    portal every launch would freeze startup and risk tripping OTP/rate limits.
+    stored we skip the blocking portal login on later launches. This call runs
+    on the GUI main thread inside ``build_agent``; re-authing the portal every
+    launch would freeze startup and risk tripping OTP/rate limits.
+
+    ``client_factory`` is an injectable seam for tests.
     """
     if any(memory.get(key) is not None for key in _IDENTITY_MEMORY_FIELDS.values()):
         return
+    creds = stored_credentials(PKU_SECRETS_DIR)
+    if creds is None:
+        return  # no credentials on disk -> nothing to sync
+    factory = client_factory or default_client_factory
     try:
-        run = run_pku3b(["identity", "--format", "json"])
-    except (Pku3bNotFoundError, Pku3bTimeoutError, OSError):
-        return
-    if not run.ok:
-        return
-    try:
-        payload = json.loads(run.stdout)
-    except json.JSONDecodeError:
+        client = factory(secrets_dir=PKU_SECRETS_DIR, credentials=creds)
+        payload = client.get_identity().to_dict()
+    except (Pku3bError, OSError):
         return
     if not isinstance(payload, dict):
         return

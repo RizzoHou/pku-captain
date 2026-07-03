@@ -1,113 +1,119 @@
-"""Thin subprocess wrapper around the ``pku3b`` CLI.
+"""In-process pku3b backend, via the vendored :mod:`pypku3b` library.
 
-`pku3b` is an external Rust binary. PKU Captain ships against our fork
-at https://github.com/RizzoHou/pku3b (branch ``master``), which adds
-``--format json`` to
-the relevant subcommands so Python consumers get structured data
-directly. Install with:
-
-    cargo install --git https://github.com/RizzoHou/pku3b \\
-        --branch master
-
-This module isolates the subprocess mechanics — locating the
-executable, building argv, running with a timeout, and stripping ANSI
-colour codes (still useful for ``stderr`` and any legacy text
-subcommands) — so the Tool subclasses stay focused on shaping the
-JSON response.
-
-It is not itself a Tool subclass; it has no JSON schema and is never
-exposed to the LLM. Callers should treat a non-zero return code as a
-failure and surface ``stderr``.
+Replaces the former subprocess wrapper around the external ``pku3b`` Rust
+binary: the four surfaces PKU Captain uses (assignments, announcements,
+coursetable, identity) are now driven **in-process** through
+:class:`pypku3b.Client`, mirroring how plib/dean/treehole are integrated.
+Credentials come from ``secrets/pku/{id,password}`` instead of pku3b's
+``cfg.toml``. This module is deliberately **not** a Tool — it isolates the
+client wiring, credential loading, and error-redaction shared by the three
+pku3b Tool subclasses and ``bootstrap._sync_pku3b_identity_memory``.
 """
 
 from __future__ import annotations
 
-import re
-import shutil
-import subprocess
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
+from urllib.parse import urlencode, urljoin
 
-DEFAULT_EXECUTABLE = "pku3b"
-DEFAULT_TIMEOUT = 60.0
+_WEB_URL = "https://course.pku.edu.cn/"
+
+try:  # graceful degradation when the vendored package is absent (treehole pattern)
+    from pypku3b import Client as _Client
+    from pypku3b import Credentials
+    from pypku3b.errors import Pku3bError
+except ModuleNotFoundError:  # pragma: no cover - exercised only without the vendor pkg
+    _Client = None
+    Credentials = None  # type: ignore[assignment,misc]
+
+    class Pku3bError(Exception):  # type: ignore[no-redef]
+        code = "error"
+
+        def __init__(self, message: str, *, code: str | None = None) -> None:
+            super().__init__(message)
+            self.message = message
+            if code is not None:
+                self.code = code
+
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_LOCAL_EXECUTABLE = _REPO_ROOT / ".local" / "cargo" / "bin" / "pku3b"
+PKU_SECRETS_DIR = _REPO_ROOT / "secrets" / "pku"
+_COOKIE_PATH = PKU_SECRETS_DIR / "cookies.json"
+_CACHE_DIR = _REPO_ROOT / "data" / "pku3b_cache"
 
-_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+DEFAULT_TIMEOUT = 60.0
 
-
-class Pku3bNotFoundError(RuntimeError):
-    """Raised when the pku3b binary cannot be located on PATH."""
-
-
-class Pku3bTimeoutError(RuntimeError):
-    """Raised when a pku3b subprocess exceeds its timeout."""
+# (secrets_dir, timeout, credentials) -> a pypku3b.Client (or a test fake).
+ClientFactory = Callable[..., Any]
 
 
-@dataclass(frozen=True)
-class Pku3bRun:
-    """Outcome of a single ``pku3b`` invocation."""
+class Pku3bUnavailableError(Pku3bError):
+    """The vendored ``pypku3b`` package is not importable."""
 
-    returncode: int
-    stdout: str
-    stderr: str
-
-    @property
-    def ok(self) -> bool:
-        return self.returncode == 0
+    code = "not_installed"
 
 
-def strip_ansi(text: str) -> str:
-    """Remove ANSI escape sequences from ``pku3b``'s coloured output."""
-    return _ANSI_RE.sub("", text)
-
-
-def resolve_executable(executable: str = DEFAULT_EXECUTABLE) -> str:
-    """Locate the pku3b binary; raise :class:`Pku3bNotFoundError` if missing."""
-    found = shutil.which(executable)
-    if found:
-        return found
-    if executable == DEFAULT_EXECUTABLE and _LOCAL_EXECUTABLE.exists():
-        return str(_LOCAL_EXECUTABLE)
-    raise Pku3bNotFoundError(
-        f"could not find {executable!r} on PATH or at {_LOCAL_EXECUTABLE}. "
-        "Install our fork with: cargo install --git "
-        "https://github.com/RizzoHou/pku3b --branch master"
-    )
-
-
-def run_pku3b(
-    args: Sequence[str],
+def default_client_factory(
     *,
-    executable: str = DEFAULT_EXECUTABLE,
+    secrets_dir: Path,
     timeout: float = DEFAULT_TIMEOUT,
-) -> Pku3bRun:
-    """Run ``pku3b`` with the given args and return a :class:`Pku3bRun`.
-
-    ``stdout`` is decoded as UTF-8 and ANSI-stripped before return. A
-    non-zero return code is *not* raised — the caller decides how to
-    surface it.
-    """
-    binary = resolve_executable(executable)
-    argv = [binary, *args]
-    try:
-        proc = subprocess.run(
-            argv,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout,
-            check=False,
+    credentials: Any = None,
+) -> Any:
+    """Build a real :class:`pypku3b.Client` bound to this repo's secrets/cache."""
+    if _Client is None:
+        raise Pku3bUnavailableError(
+            "pypku3b is not installed (vendored package missing); reinstall "
+            "with `pip install -e .`"
         )
-    except subprocess.TimeoutExpired as exc:
-        raise Pku3bTimeoutError(
-            f"pku3b {' '.join(args)} timed out after {timeout}s"
-        ) from exc
-
-    return Pku3bRun(
-        returncode=proc.returncode,
-        stdout=strip_ansi(proc.stdout or ""),
-        stderr=strip_ansi(proc.stderr or ""),
+    return _Client(
+        credentials=credentials,
+        secrets_dir=secrets_dir,
+        timeout=timeout,
+        cookie_path=_COOKIE_PATH,
+        cache_dir=_CACHE_DIR,
     )
+
+
+def _read_secret(path: Path) -> str | None:
+    try:
+        text = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return text or None
+
+
+def stored_credentials(secrets_dir: Path) -> Any:
+    """Return :class:`pypku3b.Credentials` from ``secrets_dir``, or ``None``."""
+    if Credentials is None:
+        return None
+    username = _read_secret(secrets_dir / "id")
+    password = _read_secret(secrets_dir / "password")
+    if username and password:
+        return Credentials(username, password)
+    return None
+
+
+def secret_values(secrets_dir: Path) -> list[str]:
+    """The secret strings to redact from any surfaced error text."""
+    creds = stored_credentials(secrets_dir)
+    return [creds.password] if creds else []
+
+
+def assignment_submit_url(course_id: str, content_id: str) -> str | None:
+    """The Blackboard "view/submit" page URL for one assignment, or ``None``.
+
+    Deterministic from ``(course_id, content_id)`` — the Blackboard "view/
+    submit" page for the assignment, built without any cache probing.
+    """
+    if not (course_id and content_id):
+        return None
+    query = urlencode(
+        {
+            "content_id": content_id,
+            "course_id": course_id,
+            "group_id": "",
+            "mode": "view",
+        }
+    )
+    return urljoin(_WEB_URL, f"/webapps/assignment/uploadAssignment?{query}")

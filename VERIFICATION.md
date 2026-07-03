@@ -8,6 +8,24 @@ Human-executable verification steps. Maintained by the `verification` skill. The
 
 ## Pending verification
 
+### 2026-07-03 — pku3b reimplemented as in-process `pypku3b` (no external binary)
+
+**Proves**: the captain reads 作业/公告/课表/身份 from PKU 教学网 + 门户 entirely in-process via the vendored `pypku3b`, with **no `pku3b` Rust binary** and no behavior change to the dashboard/agent — driven from `secrets/pku/{id,password}`.
+
+**Steps**:
+1. `[agent-run]` `pytest tests/` → **380 passed, 2 skipped** (rewritten `test_pku3b_identity_memory.py` + new `test_pku3b_tools.py` drive the `client_factory` seam).
+2. `[agent-run]` `python scripts/smoke_deepseek.py` → **smoke test passed** (agent kernel + wire format unaffected by the transport swap).
+3. `[agent-run]` Fresh-install check: in the **main** checkout `pip install -e . -q && python -c "import pypku3b; print(pypku3b.__version__)"` → expect `0.1.0` (fifth hatchling `packages` entry exposes it top-level). (Do this in main, not a worktree — worktrees must not `pip install` into the shared venv.)
+4. `[agent-run]` Live end-to-end through the real Tools (needs `secrets/pku/`), fresh cold login (`rm -f secrets/pku/cookies.json data/pku3b_cache/*`): assignments → **success, N records with `deadline_iso`/`submit_url`/`blackboard_content_id`**; coursetable → **success, N blocks**; announcements → **~half carry `posted_date` + `url`**; identity sync sets `identity.name`/`identity.student_id`. (Confirmed: identity matched golden pku3b exactly, assignments 22/22 all fields, announcements 50/106 dated.)
+5. **No binary needed**: `which pku3b || echo "no pku3b binary"` and still run step 4 — expect it works without any `pku3b`/`cargo` on PATH.
+6. **GUI (online, needs `secrets/pku/`)**: `python -m src --online`, watch the dashboard 近期 DDL / 课程通知 / 课表 cards populate; click a 作业 row → opens the Blackboard submit page in the browser; click a 课程通知 row → opens the 通知 page. Expect identical behavior to the pre-migration binary path.
+7. **OTP path**: if the account requires a phone token, the 课表 card shows the Chinese hint `课表接口需要手机令牌 OTP，请在仪表盘顶部输入 OTP 后刷新。`; enter an OTP at the dashboard top and refresh → table loads.
+8. **No-credentials / offline negative**: with `secrets/pku/` absent, `python -m src --online` still opens (identity sync silently skips); a pku3b card refresh shows a Chinese error, not a crash.
+
+**Automated**: `pytest tests/test_pku3b_tools.py tests/test_pku3b_identity_memory.py` (output shapes, client_factory seam, credential redaction, OTP hint, sync-once/skip-without-creds); plus `pypku3b`'s own suite in `~/projects/pypku3b` (`pytest` for parsers/dates/ids/cache; `PYPKU3B_LIVE=1 pytest tests/live` for the network round-trip).
+
+---
+
 ### 2026-07-01 — Vendored plib/dean/treehole in-process (no subprocess)
 
 **Proves**: the three self-crafted CLIs now run in-process from `vendor/` (via `git subtree`) with **no behavior change** — one `pip install -e .` provides everything, no sibling `.venv`s, and search/dean/treehole still work. Also that the macOS treehole notifier daemon uses pku-captain's own venv binary.
