@@ -1,15 +1,26 @@
 # 环境配置
 
-## 密钥与凭据
+## 账号中心（推荐）
 
-所有密钥和账户凭据都放在 `secrets/` 目录下（整个目录已 gitignore），每个文件只存一行内容。当前布局：
+发布版不再要求手动往 `secrets/` 里放文件。启动 GUI 后点击仪表盘右上角 **「账号」** 打开统一的账号中心，三个标签页集中管理全部凭据，写入下方的 `secrets/` 布局：
+
+- **统一身份 · 树洞** —— 北大 IAAA `学号`+密码 登录后完成一次短信验证（需在线模式；写入 `secrets/treehole/{id,password}` 并缓存 `session.json`）。
+- **P-Lib 图书** —— 邮箱+密码，保存即持久化到 `secrets/plib/{email,password}`（旧版登录框只校验、不落盘，重启即失效，现已修复）。
+- **模型配置** —— 对话模型按 **文本模型 / 视觉模型** 两个角色配置，各含 API 密钥、接口地址、模型名称。DeepSeek / Kimi 只是默认值，可改为任意 OpenAI 兼容端点；保存到 `secrets/models.json`，**重启应用后生效**。
+
+离线启动也可打开账号中心录入以上凭据（树洞短信验证与 P-Lib 在线校验除外），下次以 `--online` 启动即生效。
+
+## 密钥与凭据（文件布局）
+
+所有密钥和账户凭据都放在 `secrets/` 目录下（整个目录已 gitignore）。账号中心会写入下列文件；也可手动创建（每个纯文本文件只存一行，`models.json` 为 JSON）：
 
 ```
 secrets/
+  models.json            # 对话模型配置：{"text": {...}, "visual": {...}}，每项含 api_key / base_url / model
   api_keys/
-    deepseek_key.txt     # 在线必需 —— DeepSeek V4 Pro 对话模型（默认 brain）
+    deepseek_key.txt     # 兼容回退 —— 文本模型缺 api_key 时读取（旧布局）
+    kimi_key.txt         # 兼容回退 —— 视觉模型缺 api_key 时读取（旧布局）
     embedding_key.txt    # 已弃用 —— 旧 RAG 嵌入模型（文档库取代后不再使用）
-    kimi_key.txt         # Kimi K2.6 —— 可切换的对话 brain + 文档库视觉阅读
   plib/
     email                # P-Lib（PKUHUB）账号邮箱
     password             # P-Lib 账号密码
@@ -21,15 +32,16 @@ secrets/
     password             # IAAA 门户密码（内嵌 pypku3b 登录用）
 ```
 
-- `api_keys/deepseek_key.txt`（在线必需）—— DeepSeek 对话模型。缺失时 `--online` 会回退到离线模式（`EchoLLMProvider`）。也兼容旧布局 `secrets/deepseek_key.txt`。
-- `api_keys/kimi_key.txt`（Kimi 必需）—— Moonshot Kimi K2.6（`kimi-k2.6`，`https://api.moonshot.cn/v1`，OpenAI 兼容）。两用：(1) 对话表头可把 brain 从 DeepSeek 切到 **Kimi K2.6**（256k 上下文、原生多模态）；(2) 文档库阅读——在 Kimi brain 上 `doc_read` 把 PDF 页面图片直接喂给模型自己看，仪表盘「让 Captain 阅读」用封装式 `DocBaseReader` 直接问 Kimi。缺此 key：对话只剩 DeepSeek，文档库只能浏览 / 打开 PDF。
+- `models.json`（在线必需）—— 两个模型角色的端点/模型/密钥。`text`（默认 DeepSeek V4 Pro，`https://api.deepseek.com/v1`）为默认 brain，`visual`（默认 Kimi K2.6，`https://api.moonshot.cn/v1`，原生多模态）驱动文档库视觉阅读。缺 `text` 的 api_key 时 `--online` 会回退到离线模式（`EchoLLMProvider`）。
+- `api_keys/{deepseek,kimi}_key.txt`（兼容回退）—— 当 `models.json` 里对应角色没有 api_key 时，从这里读取旧布局的单文件密钥（也兼容更旧的扁平路径 `secrets/{deepseek,kimi}_key.txt`），因此老 checkout 无需迁移即可继续工作。
+- **视觉模型的用途**：对话表头可把 brain 从文本模型切到视觉模型（256k 上下文、原生多模态）；文档库阅读时 `doc_read` 把 PDF 页面图片直接喂给视觉模型自己看，仪表盘「让 Captain 阅读」用封装式 `DocBaseReader` 直接问它。缺视觉模型密钥：对话只剩文本模型，文档库只能浏览 / 打开 PDF。
 - `api_keys/embedding_key.txt`（已弃用）—— 旧 RAG 的阿里云百炼嵌入模型。文档库（拆分 PDF + 视觉阅读）取代 RAG 后不再读取此文件，保留仅为历史兼容。
 - `plib/{email,password}`（P-Lib 必需）—— `PLibMaterialsTool` 会在每次调用前把它们作为 `Credentials` 直接传给内嵌的 `plib_cli` 库，所以 search / quota / download 无需手动 `login`（P-Lib 登录是自愈的）。
-- `treehole/{id,password}`（树洞必需）—— `TreeholeUpdatesTool` / `TreeholeAuthService` 从此目录读取登录凭据；首次在线运行会提示“需要短信验证”，在 GUI 树洞面板完成一次短信验证后会缓存 `secrets/treehole/session.json` 并复用。
+- `treehole/{id,password}`（树洞必需）—— `TreeholeUpdatesTool` / `TreeholeAuthService` 从此目录读取登录凭据；首次在线运行会提示“需要短信验证”，在账号中心「统一身份 · 树洞」完成一次短信验证后会缓存 `secrets/treehole/session.json` 并复用。
 - `pku/{id,password}`（作业/公告/课表/身份必需）—— 内嵌的 `pypku3b` 用它登录 PKU IAAA（教学网 Blackboard + 信息门户）。登录成功后会话 cookie 缓存在 `secrets/pku/cookies.json`，后续调用复用会话（免重复登录/OTP）。见下文「pku3b（内嵌 pypku3b）」。
 
 ```bash
-python -m src --online          # DeepSeek + 实时工具；表头可切换到 Kimi K2.6（需 kimi key）
+python -m src --online          # 文本模型 + 实时工具；表头可切换到视觉模型（需视觉模型密钥）
 python -m src.cli               # CLI 走真实 DeepSeek
 ```
 

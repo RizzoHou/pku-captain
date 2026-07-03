@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 from .agent import Agent, AgentEvent
 from .conversation import Conversation
+from .credentials import CredentialStore, ModelConfig
 from .memory_learn import MemoryLearnResult, MemoryLearnService
 from .vision_router import VisionRouter
 
@@ -44,6 +45,8 @@ __all__ = [
     "Agent",
     "AgentEvent",
     "Conversation",
+    "CredentialStore",
+    "ModelConfig",
     "MemoryLearnResult",
     "MemoryLearnService",
     "VisionRouter",

@@ -52,7 +52,7 @@ class ChatPanel(QWidget):
     stop_requested = pyqtSignal()
     new_chat_requested = pyqtSignal()
     history_requested = pyqtSignal()
-    # Emits the selected chat-model key ("deepseek" / "kimi") when the user
+    # Emits the selected chat-model role key ("text" / "visual") when the user
     # picks a different brain from the header switcher.
     model_change_requested = pyqtSignal(str)
 

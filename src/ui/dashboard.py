@@ -38,6 +38,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ..core.credentials import CredentialStore
 from ..tools.base import Tool, ToolRegistry
 from ..tools.dean_updates import DeanInboxStore
 from ..tools.treehole_updates import (
@@ -54,6 +55,7 @@ from .formatters import (
     split_dean_items,
     upcoming_assignments,
 )
+from .login_dialog import LoginDialog
 from .tool_call_worker import run_async
 
 # Dean sources whose items have fetchable full text (notice_show / rules_show);
@@ -176,6 +178,13 @@ class DashboardPanel(QWidget):
         self._knowledge_button = QPushButton("文档库")
         self._knowledge_button.setObjectName("SecondaryButton")
         self._knowledge_button.clicked.connect(self._show_docbase_dialog)
+        # Single entry point to the universal 账号中心 (treehole / P-Lib / models).
+        # Not gated on online mode — credentials (and model endpoints) are
+        # configured here even offline, taking effect on the next launch.
+        self._account_button = QPushButton("账号")
+        self._account_button.setObjectName("SecondaryButton")
+        self._account_button.setToolTip("登录北大统一身份、P-Lib，并配置对话模型")
+        self._account_button.clicked.connect(lambda: self._open_account_dialog())
 
         header = QGridLayout()
         header.addWidget(title, 0, 0)
@@ -190,6 +199,7 @@ class DashboardPanel(QWidget):
         header.addWidget(self._treehole_button, 0, 5, 2, 1, Qt.AlignmentFlag.AlignRight)
         header.addWidget(self._memory_button, 0, 6, 2, 1, Qt.AlignmentFlag.AlignRight)
         header.addWidget(self._knowledge_button, 0, 7, 2, 1, Qt.AlignmentFlag.AlignRight)
+        header.addWidget(self._account_button, 0, 8, 2, 1, Qt.AlignmentFlag.AlignRight)
 
         self._cards = {
             "schedule": ScheduleCard(),
@@ -212,7 +222,7 @@ class DashboardPanel(QWidget):
             dean_card.refresh_requested.connect(self._partial_refresh_emitter("dean_updates"))
         plib_card = self._cards["plib_materials"]
         if isinstance(plib_card, PLibMaterialsCard):
-            plib_card.login_requested.connect(self._show_plib_login_dialog)
+            plib_card.login_requested.connect(lambda: self._open_account_dialog())
             plib_card.search_requested.connect(self._show_plib_dialog)
             plib_card.refresh_requested.connect(
                 self._partial_refresh_emitter("plib_materials")
@@ -449,7 +459,11 @@ class DashboardPanel(QWidget):
         dialog = TreeholeMessagesDialog(
             self._treehole_data, self, history=self._treehole_history
         )
-        dialog.auth_changed.connect(self._partial_refresh_emitter("treehole_updates"))
+        # Login moved to the account center; opening it (nested) then re-checks
+        # this dialog's status so a fresh login reflects without reopening.
+        dialog.login_requested.connect(
+            lambda: self._open_account_dialog(on_close=dialog._refresh_auth_status)
+        )
         # Opening the list marks the accumulated unread as read: empty the inbox
         # (the dialog already captured a snapshot) so the card/badge reset.
         self._treehole_inbox.clear()
@@ -478,13 +492,32 @@ class DashboardPanel(QWidget):
             return
         PLibSearchDialog(tool, self).exec()
 
-    def _show_plib_login_dialog(self) -> None:
-        tool = self._require_tool("plib_materials", "P-Lib 登录")
-        if tool is None:
-            return
-        dialog = PLibLoginDialog(tool, self)
-        dialog.auth_changed.connect(self._partial_refresh_emitter("plib_materials"))
+    def _open_account_dialog(self, on_close: Callable[[], None] | None = None) -> None:
+        """Open the universal 账号中心. Not gated on online mode — model endpoints
+        and credentials are configured here even offline (they take effect on
+        the next launch); only the live treehole SMS + P-Lib validation need the
+        network, which the dialog handles via the injected auth service / tool.
+        """
+        offline = self._online_tool("treehole_updates") is None
+        dialog = LoginDialog(
+            store=CredentialStore(),
+            auth=None if offline else TreeholeAuthService(),
+            plib_tool=self._online_tool("plib_materials"),
+            offline=offline,
+            parent=self,
+        )
+        dialog.credentials_changed.connect(self._on_credentials_changed)
         dialog.exec()
+        if on_close is not None:
+            on_close()
+
+    def _on_credentials_changed(self, keys: list[str]) -> None:
+        """Refresh the cards whose backing credentials the account dialog
+        updated (treehole / P-Lib). Model changes carry no live card — the
+        dialog already tells the user they take effect after a restart."""
+        scoped = [key for key in keys if key in ("treehole_updates", "plib_materials")]
+        if scoped:
+            self.partial_refresh_requested.emit(scoped)
 
     def _show_announcement_detail(self, announcement: dict[str, object] | str) -> None:
         tool = self._require_tool("pku3b_announcements", "课程通知详情")
@@ -1446,9 +1479,14 @@ def _treehole_row(item: dict[str, object]) -> QFrame:
 
 
 class TreeholeMessagesDialog(QDialog):
-    """Modal list of treehole updates opened from the header/card."""
+    """Modal list of treehole updates opened from the header/card.
 
-    auth_changed = pyqtSignal()
+    Login itself now lives in the universal 账号中心 (`LoginDialog`); this dialog
+    only shows the current treehole login status and a button that opens it
+    (emitting `login_requested`).
+    """
+
+    login_requested = pyqtSignal()
 
     # Cap the history tab so a semester of records can't spawn thousands of
     # widgets in one scroll area; the store keeps everything, the view shows the
@@ -1605,71 +1643,30 @@ class TreeholeMessagesDialog(QDialog):
 
         title = QLabel("树洞账户")
         title.setObjectName("TreeholeAuthTitle")
-        subtitle = QLabel("登录后可直接在首页和对话里查看关注树洞的新回复")
-        subtitle.setObjectName("TreeholeAuthSubtitle")
-        subtitle.setWordWrap(True)
         self._auth_status = QLabel("正在检查登录状态...")
         self._auth_status.setObjectName("TreeholeAuthStatus")
         self._auth_status.setWordWrap(True)
 
-        self._uid_input = QLineEdit()
-        self._uid_input.setPlaceholderText("北大账号 / 学号")
-        self._uid_input.setObjectName("TreeholeAuthInput")
-        self._password_input = QLineEdit()
-        self._password_input.setPlaceholderText("密码")
-        self._password_input.setObjectName("TreeholeAuthInput")
-        self._password_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self._sms_input = QLineEdit()
-        self._sms_input.setPlaceholderText("短信验证码")
-        self._sms_input.setObjectName("TreeholeAuthInput")
-
-        login_button = QPushButton("登录")
+        login_button = QPushButton("登录 / 管理")
         login_button.setObjectName("SecondaryButton")
-        login_button.clicked.connect(self._login_treehole)
-        send_button = QPushButton("发送验证码")
-        send_button.setObjectName("SecondaryButton")
-        send_button.clicked.connect(self._send_sms)
-        verify_button = QPushButton("完成验证")
-        verify_button.setObjectName("PrimaryButton")
-        verify_button.clicked.connect(self._verify_sms)
-        self._auth_buttons = [login_button, send_button, verify_button]
+        login_button.setToolTip("在账号中心登录北大统一身份并完成短信验证")
+        login_button.clicked.connect(self.login_requested)
+
+        text_block = QVBoxLayout()
+        text_block.setContentsMargins(0, 0, 0, 0)
+        text_block.setSpacing(2)
+        text_block.addWidget(title)
+        text_block.addWidget(self._auth_status)
 
         header = QHBoxLayout()
         header.setContentsMargins(0, 0, 0, 0)
         header.setSpacing(10)
-        title_block = QVBoxLayout()
-        title_block.setContentsMargins(0, 0, 0, 0)
-        title_block.setSpacing(2)
-        title_block.addWidget(title)
-        title_block.addWidget(subtitle)
-        header.addLayout(title_block, 1)
-        header.addWidget(self._auth_status, 0, Qt.AlignmentFlag.AlignTop)
-
-        account_label = QLabel("1 账号登录")
-        account_label.setObjectName("TreeholeAuthStep")
-        sms_label = QLabel("2 短信验证")
-        sms_label.setObjectName("TreeholeAuthStep")
-
-        form = QGridLayout()
-        form.setContentsMargins(0, 4, 0, 0)
-        form.setHorizontalSpacing(10)
-        form.setVerticalSpacing(8)
-        form.addWidget(account_label, 0, 0)
-        form.addWidget(self._uid_input, 1, 0)
-        form.addWidget(self._password_input, 1, 1)
-        form.addWidget(login_button, 1, 2)
-        form.addWidget(sms_label, 2, 0)
-        form.addWidget(self._sms_input, 3, 0)
-        form.addWidget(send_button, 3, 1)
-        form.addWidget(verify_button, 3, 2)
-        form.setColumnStretch(0, 1)
-        form.setColumnStretch(1, 1)
+        header.addLayout(text_block, 1)
+        header.addWidget(login_button, 0, Qt.AlignmentFlag.AlignVCenter)
 
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(14, 14, 14, 14)
-        layout.setSpacing(12)
+        layout.setContentsMargins(14, 12, 14, 12)
         layout.addLayout(header)
-        layout.addLayout(form)
         return panel
 
     def _refresh_auth_status(self) -> None:
@@ -1697,51 +1694,6 @@ class TreeholeMessagesDialog(QDialog):
         self._auth_status.setProperty("authState", state)
         self._auth_status.style().unpolish(self._auth_status)
         self._auth_status.style().polish(self._auth_status)
-
-    def _login_treehole(self) -> None:
-        self._run_auth_action(
-            lambda: self._auth.login(
-                self._uid_input.text(),
-                self._password_input.text(),
-            )
-        )
-
-    def _send_sms(self) -> None:
-        self._run_auth_action(self._auth.send_sms)
-
-    def _verify_sms(self) -> None:
-        self._run_auth_action(lambda: self._auth.verify_sms(self._sms_input.text()))
-
-    def _run_auth_action(self, action: Callable[[], dict[str, object]]) -> None:
-        self._set_auth_busy(True)
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        self._pending = run_async(
-            action,
-            on_done=self._on_auth_action_done,
-            on_error=self._on_auth_action_error,
-        )
-
-    def _on_auth_action_done(self, result: object) -> None:
-        QApplication.restoreOverrideCursor()
-        self._set_auth_busy(False)
-        data = result if isinstance(result, dict) else {"ok": False, "message": str(result)}
-        self._auth_status.setText(str(data.get("message") or "操作完成"))
-        if data.get("ok"):
-            self.auth_changed.emit()
-            self._refresh_auth_status()
-        else:
-            self._set_auth_status_text(str(data.get("message") or "操作失败"), "error")
-            QMessageBox.warning(self, "树洞登录", str(data.get("message") or "操作失败"))
-
-    def _on_auth_action_error(self, message: str) -> None:
-        QApplication.restoreOverrideCursor()
-        self._set_auth_busy(False)
-        self._set_auth_status_text(message, "error")
-        QMessageBox.warning(self, "树洞登录", message)
-
-    def _set_auth_busy(self, busy: bool) -> None:
-        for button in self._auth_buttons:
-            button.setEnabled(not busy)
 
 
 class TreeholeNotificationDialog(QDialog):
@@ -2162,121 +2114,6 @@ class PLibSearchDialog(QDialog):
             self._result_list,
         ):
             widget.setEnabled(not busy)
-
-
-class PLibLoginDialog(QDialog):
-    """P-Lib login dialog backed by the local plib CLI."""
-
-    auth_changed = pyqtSignal()
-
-    def __init__(self, tool: Tool, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("P-Lib 登录")
-        self.resize(560, 330)
-        self._tool = tool
-        self._pending: object = None
-
-        title = QLabel("P-Lib 登录")
-        title.setObjectName("DialogTitle")
-        subtitle = QLabel("登录后可在 GUI 中搜索、查看详情并下载 PKUHUB 课程资料。")
-        subtitle.setObjectName("DialogSubtitle")
-        subtitle.setWordWrap(True)
-
-        panel = QFrame()
-        panel.setObjectName("PLibAuthPanel")
-        self._status_label = QLabel("请输入 P-Lib 邮箱和密码")
-        self._status_label.setObjectName("PLibAuthStatus")
-        self._status_label.setWordWrap(True)
-
-        self._email_input = QLineEdit()
-        self._email_input.setPlaceholderText("邮箱")
-        self._email_input.setObjectName("TreeholeAuthInput")
-        self._password_input = QLineEdit()
-        self._password_input.setPlaceholderText("密码")
-        self._password_input.setObjectName("TreeholeAuthInput")
-        self._password_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self._password_input.returnPressed.connect(self._login)
-
-        self._login_button = QPushButton("登录")
-        self._login_button.setObjectName("PrimaryButton")
-        self._login_button.clicked.connect(self._login)
-
-        form = QGridLayout()
-        form.setContentsMargins(0, 0, 0, 0)
-        form.setHorizontalSpacing(10)
-        form.setVerticalSpacing(8)
-        form.addWidget(self._email_input, 0, 0, 1, 2)
-        form.addWidget(self._password_input, 1, 0, 1, 2)
-        form.addWidget(self._login_button, 2, 0)
-        form.setColumnStretch(1, 1)
-
-        panel_layout = QVBoxLayout(panel)
-        panel_layout.setContentsMargins(14, 14, 14, 14)
-        panel_layout.setSpacing(12)
-        panel_layout.addWidget(self._status_label)
-        panel_layout.addLayout(form)
-
-        close_button = QPushButton("关闭")
-        close_button.setObjectName("InlineToggleButton")
-        close_button.clicked.connect(self.accept)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
-        layout.addWidget(title)
-        layout.addWidget(subtitle)
-        layout.addWidget(panel)
-        layout.addWidget(close_button, 0, Qt.AlignmentFlag.AlignRight)
-
-    def _login(self) -> None:
-        email = self._email_input.text().strip()
-        password = self._password_input.text()
-        if not email or not password:
-            QMessageBox.warning(self, "P-Lib 登录", "请输入邮箱和密码。")
-            return
-        self._set_busy(True)
-        self._set_status("正在登录 P-Lib...", "pending")
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        self._pending = run_async(
-            lambda: self._tool.invoke(
-                {"action": "login", "email": email, "password": password}
-            ),
-            on_done=self._on_login_result,
-            on_error=self._on_login_error,
-        )
-
-    def _on_login_result(self, result: object) -> None:
-        QApplication.restoreOverrideCursor()
-        self._set_busy(False)
-        if not getattr(result, "success", False):
-            error = str(getattr(result, "error", "") or "登录失败")
-            self._set_status(error, "error")
-            QMessageBox.warning(self, "P-Lib 登录", error)
-            return
-        data = result.data if isinstance(result.data, dict) else {}
-        remaining = data.get("quota_remaining", data.get("download_remaining"))
-        message = "登录成功"
-        if remaining is not None:
-            message += f" · 今日剩余下载次数：{remaining}"
-        self._set_status(message, "ok")
-        self.auth_changed.emit()
-
-    def _on_login_error(self, message: str) -> None:
-        QApplication.restoreOverrideCursor()
-        self._set_busy(False)
-        self._set_status(message, "error")
-        QMessageBox.warning(self, "P-Lib 登录", message)
-
-    def _set_busy(self, busy: bool) -> None:
-        self._email_input.setEnabled(not busy)
-        self._password_input.setEnabled(not busy)
-        self._login_button.setEnabled(not busy)
-
-    def _set_status(self, text: str, state: str) -> None:
-        self._status_label.setText(text)
-        self._status_label.setProperty("authState", state)
-        self._status_label.style().unpolish(self._status_label)
-        self._status_label.style().polish(self._status_label)
 
 
 class AnnouncementDetailDialog(QDialog):

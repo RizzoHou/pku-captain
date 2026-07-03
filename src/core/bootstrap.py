@@ -46,6 +46,7 @@ from ..workflows import HelloWorkflow, MorningBriefingWorkflow, WorkflowTool
 from ..workflows.base import WorkflowRegistry
 from .agent import Agent
 from .conversation import Conversation
+from .credentials import CredentialStore, ModelConfig
 from .dashboard_cache import DashboardCache
 from .memory import MemoryStore
 from .session_store import (
@@ -57,33 +58,40 @@ from .session_titler import SessionTitler
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SECRETS_DIR = _REPO_ROOT / "secrets"
-# Canonical layout: secrets/api_keys/<provider>_key.txt. The flat
-# secrets/<provider>_key.txt paths are kept as a fallback for older checkouts.
-_DEEPSEEK_KEY_PATHS = (
-    _SECRETS_DIR / "api_keys" / "deepseek_key.txt",
-    _SECRETS_DIR / "deepseek_key.txt",
-)
-_KIMI_KEY_PATHS = (
-    _SECRETS_DIR / "api_keys" / "kimi_key.txt",
-    _SECRETS_DIR / "kimi_key.txt",
-)
 
-# Selectable chat brains, in display order. `vision` brains can read the page
-# images doc_read renders directly; text brains cannot (see the model switcher
-# in the chat header + `apply_chat_model`). DeepSeek is the default brain.
-DEFAULT_CHAT_MODEL = "deepseek"
+# Chat brains are now two configurable *roles* rather than two hard-coded
+# brands: `text` (default DeepSeek, thinking wire format) and `visual` (default
+# Kimi, vision-capable — reads doc_read's page images). Each role's endpoint /
+# model / key live in the CredentialStore (`secrets/models.json`, with the
+# legacy `secrets/api_keys/<brand>_key.txt` honoured as an api_key fallback), so
+# a user can point either role at any OpenAI-compatible endpoint; DeepSeek/Kimi
+# are only the defaults. `text` is the default brain. This dict holds only the
+# implementation identity — the label + which provider class + whether it is
+# vision-capable; the credentials live in `CredentialStore.model(role)`.
+DEFAULT_CHAT_MODEL = "text"
 _CHAT_MODELS: dict[str, dict[str, Any]] = {
-    "deepseek": {
-        "label": "DeepSeek V4 Pro",
-        "keys": _DEEPSEEK_KEY_PATHS,
-        "vision": False,
-    },
-    "kimi": {
-        "label": "Kimi K2.6",
-        "keys": _KIMI_KEY_PATHS,
-        "vision": True,
-    },
+    "text": {"label": "文本模型", "provider": "deepseek", "vision": False},
+    "visual": {"label": "视觉模型", "provider": "kimi", "vision": True},
 }
+
+
+def _store() -> CredentialStore:
+    """The credential store the model builders read from.
+
+    A tiny indirection so tests can point the whole model layer at a tmp
+    ``secrets/`` by monkeypatching ``bootstrap._store`` (mirrors the old
+    ``_find_key_path`` monkeypatch pattern).
+    """
+    return CredentialStore()
+
+
+def _build_role_provider(cfg: ModelConfig, provider: str) -> LLMProvider:
+    """Instantiate the provider class for a role from its resolved config."""
+    if provider == "kimi":
+        return KimiProvider(api_key=cfg.api_key, model=cfg.model, base_url=cfg.base_url)
+    return DeepSeekProvider(
+        api_key=cfg.api_key, model=cfg.model, base_url=cfg.base_url
+    )
 
 _SYSTEM_PROMPT = (
     "You are PKU Captain, a desktop AI assistant for Peking University "
@@ -158,19 +166,26 @@ def build_dashboard_cache() -> DashboardCache:
 def build_session_titler(*, offline: bool) -> SessionTitler:
     """Construct the auto-namer for chat sessions.
 
-    Online → a lightweight `deepseek-v4-flash` provider in non-think mode
-    (cheap, fast, no reasoning). Offline, or when the DeepSeek key is
-    missing, → a provider-less titler that falls back to a heuristic title
-    (so it never raises and never routes through `EchoLLMProvider`).
+    Online → a lightweight non-think provider on the *text* role's endpoint /
+    key. On the default DeepSeek endpoint it uses the cheap `deepseek-v4-flash`
+    model; a custom endpoint may not host that model, so it falls back to the
+    role's configured model (still non-think). Offline, or when the text role
+    has no key, → a provider-less titler that returns a heuristic title (so it
+    never raises and never routes through `EchoLLMProvider`).
     """
     if offline:
         return SessionTitler(None)
-    key_path = _find_key_path(_DEEPSEEK_KEY_PATHS)
-    if key_path is None:
+    cfg = _store().model("text")
+    if not cfg.is_configured:
         return SessionTitler(None)
-    api_key = key_path.read_text(encoding="utf-8").strip()
+    titler_model = "deepseek-v4-flash" if "deepseek.com" in cfg.base_url else cfg.model
     return SessionTitler(
-        DeepSeekProvider(api_key=api_key, model="deepseek-v4-flash", thinking=False)
+        DeepSeekProvider(
+            api_key=cfg.api_key,
+            model=titler_model,
+            base_url=cfg.base_url,
+            thinking=False,
+        )
     )
 
 
@@ -201,53 +216,52 @@ def restore_conversation(agent: Agent, raw_messages: list[dict[str, Any]]) -> No
 
 
 def build_chat_llm(model_key: str, *, offline: bool) -> LLMProvider:
-    """Build the named chat brain (DeepSeek / Kimi K2.6), or Echo when offline.
+    """Build the chat brain for a role (`text` / `visual`), or Echo when offline.
 
-    The GUI model switcher swaps brains through here. Reads the brain's own key
-    file; raises if the key is missing (the caller gates the option on
-    `available_chat_models`, so this only fires on a misconfiguration).
+    The GUI model switcher swaps brains through here. Reads the role's endpoint
+    / model / key from the CredentialStore; raises if no key is configured (the
+    caller gates the option on `available_chat_models`, so this only fires on a
+    misconfiguration). DeepSeek/Kimi are the role defaults but the endpoint is
+    whatever the user configured.
     """
     if offline:
         return EchoLLMProvider()
     info = _CHAT_MODELS.get(model_key)
     if info is None:
         raise ValueError(f"unknown chat model: {model_key!r}")
-    key_path = _find_key_path(info["keys"])
-    if key_path is None:
-        expected = " or ".join(str(path) for path in info["keys"])
+    cfg = _store().model(model_key)
+    if not cfg.is_configured:
         raise FileNotFoundError(
-            f"{info['label']} API key not found at {expected}. "
-            "Either provide the key file or call build_agent(offline=True)."
+            f"{info['label']}尚未配置 API 密钥。请在『账号』中配置模型，"
+            "或以离线模式启动。"
         )
-    api_key = key_path.read_text(encoding="utf-8").strip()
-    if model_key == "kimi":
-        return KimiProvider(api_key=api_key, model="kimi-k2.6")
-    return DeepSeekProvider(api_key=api_key)
+    return _build_role_provider(cfg, str(info["provider"]))
 
 
 def available_chat_models(*, offline: bool) -> list[tuple[str, str]]:
-    """`(key, label)` for each chat brain whose key file is present.
+    """`(role, label)` for each model role that has an API key configured.
 
     Offline → empty (Echo only, no switching). The GUI shows the switcher only
-    when at least two brains are available.
+    when at least two roles are available.
     """
     if offline:
         return []
+    store = _store()
     return [
-        (key, info["label"])
-        for key, info in _CHAT_MODELS.items()
-        if _find_key_path(info["keys"]) is not None
+        (role, str(info["label"]))
+        for role, info in _CHAT_MODELS.items()
+        if store.is_model_configured(role)
     ]
 
 
 def apply_chat_model(agent: Agent, model_key: str, *, offline: bool) -> None:
     """Swap the agent's chat brain in place (mutates `agent.llm`).
 
-    Also gates `doc_read` on the new brain: it feeds page images the brain must
-    read itself, so it registers only for a vision-capable brain (Kimi) and is
-    removed on a switch to a text brain (DeepSeek). The caller resets the
-    conversation afterwards (reset-on-switch keeps every conversation
-    single-model, so no history mixes DeepSeek and Kimi formats).
+    Also gates `doc_read` on the new role: it feeds page images the brain must
+    read itself, so it registers only for the vision-capable role (`visual`,
+    default Kimi) and is removed on a switch to the text role. The caller resets
+    the conversation afterwards (reset-on-switch keeps every conversation
+    single-model, so no history mixes the two wire formats).
     """
     agent.llm = build_chat_llm(model_key, offline=offline)
     vision_capable = (not offline) and bool(
@@ -295,18 +309,17 @@ def _build_tools(
 
 
 def build_vision_llm() -> KimiProvider | None:
-    """Build a Kimi K2.6 vision provider, or None if no key is set.
+    """Build the visual-role vision provider, or None if it has no key.
 
     Powers the dashboard's standalone `DocBaseReader` (the chat path instead
-    swaps the whole brain to Kimi). Returns None when no Kimi key is present.
+    swaps the whole brain to the visual role). Reads the `visual` role's
+    endpoint / model / key from the CredentialStore; returns None when it has
+    no key configured.
     """
-    key_path = _find_key_path(_KIMI_KEY_PATHS)
-    if key_path is None:
+    cfg = _store().model("visual")
+    if not cfg.is_configured:
         return None
-    api_key = key_path.read_text(encoding="utf-8").strip()
-    if not api_key:
-        return None
-    return KimiProvider(api_key=api_key, model="kimi-k2.6")
+    return KimiProvider(api_key=cfg.api_key, model=cfg.model, base_url=cfg.base_url)
 
 
 def build_doc_reader() -> DocBaseReader | None:
@@ -367,14 +380,6 @@ def _sync_pku3b_identity_memory(memory: MemoryStore, *, client_factory=None) -> 
         text = str(value).strip()
         if text:
             memory.set(key, text)
-
-
-def _find_key_path(paths: tuple[Path, ...]) -> Path | None:
-    """Return the first existing path in a fallback tuple, else None."""
-    for path in paths:
-        if path.exists():
-            return path
-    return None
 
 
 def _build_workflows(tools: ToolRegistry) -> WorkflowRegistry:
