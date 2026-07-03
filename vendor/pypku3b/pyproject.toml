@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pypku3b"
+version = "0.1.0"
+description = "Pure-Python reimplementation of the used subset of pku3b (PKU 教学网 Blackboard + portal client)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+    "requests>=2.31",
+    "beautifulsoup4>=4.12",
+    "lxml>=5.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff", "mypy", "types-requests"]
+
+[project.scripts]
+pypku3b = "pypku3b.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pypku3b"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
