@@ -6,6 +6,14 @@ The **development decision log** — why changes were made, not what shipped. Ma
 
 ---
 
+## 2026-07-03 — ARCHITECTURE.md → self-contained ARCHITECTURE.html
+
+- **What**: replaced `ARCHITECTURE.md` with a single self-contained `ARCHITECTURE.html` (inline CSS, no external assets) — layered CSS diagram for the two-lanes-and-seam view, styled tables, PKU-red theme mirroring `src/ui/styles.py`, `prefers-color-scheme` dark variant. Content is a faithful 1:1 port; only the format changed. Updated the `architecture` skill to maintain HTML and repointed every live cross-reference (CLAUDE.md ×5, `devchangelog`/`tastes` skills, `TASTES/{README,code-structure,process}`); left historical `DEVCHANGELOG`/`VERIFICATION` mentions of the old `.md` name intact.
+- **Decision**: chose HTML over Markdown for the richer rendered view the captain asked for, accepting the tradeoff that GitHub renders `.md` natively but shows `.html` as raw source — the visual payoff lands only in a local browser / GitHub Pages, not the repo file view.
+- **Decision**: kept it **one self-contained file** (inline `<style>`, no JS/CDN/fonts) so it opens from `file://` with no build step, matching the app's offline-first posture; the skill now enforces "reuse existing classes, escape `<`/`>`/`&`, stay valid HTML, visual-audit the render."
+- **Files**: `ARCHITECTURE.html` (new), `ARCHITECTURE.md` (removed), `.claude/skills/architecture/SKILL.md`, `.claude/skills/{devchangelog,tastes}/SKILL.md`, `CLAUDE.md`, `TASTES/{README,code-structure,process}.md`.
+- **Verify**: rendered both light + dark mode via headless Chromium and visually audited (fixed a low-contrast code chip in the red table header); n/a for VERIFICATION.md (doc-format change, not app behavior).
+
 ## 2026-07-01 — Vendor plib/dean/treehole in-process (git subtree), drop subprocess transport
 
 - **What**: pulled the three self-crafted Python CLIs into `vendor/` via `git subtree`, exposed them as top-level packages (`plib_cli`/`dean`/`treehole`) through the pyproject hatchling `packages` mapping, and rewired the `plib`/`dean*`/`treehole*` Tool wrappers to drive the libraries **in-process** instead of shelling out to sibling `.venv`s / a `sys.path` shim. `pku3b` (Rust) left untouched.

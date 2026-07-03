@@ -25,4 +25,4 @@ Favour a small interface over a large one for a given amount of functionality (O
 
 Each hierarchy ships exactly one dependency-free reference implementation — `EchoLLMProvider`, `ClockTool`, `StaticSource`, `HelloWorkflow` — so the loop and tests run with no API keys or live endpoints. When you add a hierarchy, add its one offline reference; leave the rest for teammates.
 
-See also: `ARCHITECTURE.md` (the actual map), `docs/integration_contract_zh.md` (the GUI↔backend seam).
+See also: `ARCHITECTURE.html` (the actual map), `docs/integration_contract_zh.md` (the GUI↔backend seam).

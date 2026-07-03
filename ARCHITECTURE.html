@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PKU Captain — Architecture</title>
+<style>
+  :root {
+    --red: #8c0000;
+    --red-dark: #650000;
+    --gold: #b78b36;
+    --ink: #1f2328;
+    --muted: #667085;
+    --surface: #ffffff;
+    --bg: #f7f3f0;
+    --border: #e2d8d4;
+    --code-bg: #fbf3ef;
+    --seam-bg: #fde8e8;
+    --band-gui: #e6eefb;
+    --band-backend: #e6f4ea;
+    --band-external: #efe8fb;
+    --shadow: 0 1px 3px rgba(31, 35, 40, .08), 0 6px 20px rgba(140, 0, 0, .05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --red: #ff6b6b;
+      --red-dark: #ff9a9a;
+      --gold: #d8b878;
+      --ink: #e6e1de;
+      --muted: #9aa4b2;
+      --surface: #1c1a19;
+      --bg: #141210;
+      --border: #3a3330;
+      --code-bg: #241f1d;
+      --seam-bg: #3a1f1f;
+      --band-gui: #1d2740;
+      --band-backend: #17301f;
+      --band-external: #241a38;
+      --shadow: 0 1px 3px rgba(0, 0, 0, .4), 0 6px 20px rgba(0, 0, 0, .3);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 2.5rem 1.25rem 5rem; }
+
+  header.page {
+    border-left: 5px solid var(--red);
+    padding: .25rem 0 .25rem 1.1rem;
+    margin-bottom: 1.5rem;
+  }
+  header.page h1 {
+    margin: 0;
+    font-size: 1.9rem;
+    letter-spacing: -.01em;
+    color: var(--red);
+  }
+  header.page .sub { color: var(--muted); margin-top: .35rem; }
+
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--gold);
+    border-radius: 8px;
+    padding: 1rem 1.15rem;
+    margin: 1.5rem 0;
+    box-shadow: var(--shadow);
+  }
+  .callout p { margin: 0; }
+
+  nav.toc {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    margin: 1.5rem 0 2.5rem;
+  }
+  nav.toc a {
+    text-decoration: none;
+    font-size: .85rem;
+    color: var(--red-dark);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: .3rem .85rem;
+    transition: background .15s, border-color .15s;
+  }
+  nav.toc a:hover { background: var(--seam-bg); border-color: var(--red); }
+
+  section { margin: 2.75rem 0; scroll-margin-top: 1rem; }
+  section > h2 {
+    font-size: 1.35rem;
+    color: var(--ink);
+    border-bottom: 2px solid var(--border);
+    padding-bottom: .4rem;
+    margin-bottom: 1.1rem;
+  }
+  section > h2 .num {
+    color: var(--red);
+    font-variant-numeric: tabular-nums;
+    margin-right: .45rem;
+  }
+  h3 { font-size: 1.02rem; margin: 1.6rem 0 .5rem; color: var(--red-dark); }
+
+  p { margin: .7rem 0; }
+  a { color: var(--red); }
+  code, .mono {
+    font-family: "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace, Menlo,
+                 Consolas, monospace;
+    font-size: .88em;
+  }
+  :not(pre) > code {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: .05em .35em;
+    white-space: nowrap;
+  }
+
+  /* ---- Layered architecture diagram ---- */
+  .stack { margin: 1.25rem 0 .5rem; }
+  .band {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: .9rem 1rem 1rem;
+    margin: 0;
+    box-shadow: var(--shadow);
+    position: relative;
+  }
+  .band.gui { background: var(--band-gui); }
+  .band.seam { background: var(--seam-bg); border: 2px solid var(--red); }
+  .band.backend { background: var(--band-backend); }
+  .band.external { background: var(--band-external); }
+  .band .band-label {
+    display: inline-block;
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--red-dark);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: .15rem .55rem;
+    margin-bottom: .7rem;
+  }
+  .band .band-note {
+    float: right;
+    font-size: .74rem;
+    color: var(--muted);
+    margin-top: .2rem;
+  }
+  .band .band-note a { color: var(--muted); }
+
+  .boxrow { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: .5rem .7rem;
+    font-size: .82rem;
+    line-height: 1.45;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .box b { color: var(--red-dark); }
+  .box.full { flex-basis: 100%; }
+  .box .mono { font-size: .82rem; }
+  .thread-row .box { flex: 1 1 200px; }
+
+  .flowdown {
+    text-align: center;
+    color: var(--red);
+    font-size: 1.1rem;
+    line-height: 1;
+    padding: .45rem 0;
+  }
+  .flowdown span {
+    display: inline-block;
+    font-size: .72rem;
+    color: var(--muted);
+    vertical-align: middle;
+    margin-left: .5rem;
+  }
+
+  .backend-grid { display: grid; gap: .5rem; }
+  .backend-grid .box { display: flex; gap: .6rem; align-items: baseline; }
+  .backend-grid .box .tag {
+    flex: 0 0 4.3rem;
+    font-weight: 700;
+    color: var(--red);
+    font-family: "SF Mono", ui-monospace, Menlo, monospace;
+    font-size: .8rem;
+  }
+
+  /* ---- Tables ---- */
+  .tablewrap { overflow-x: auto; margin: 1rem 0; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 560px;
+    font-size: .87rem;
+    background: var(--surface);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  th, td {
+    text-align: left;
+    padding: .55rem .75rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  thead th {
+    background: var(--red);
+    color: #fff;
+    font-weight: 600;
+    font-size: .8rem;
+    letter-spacing: .02em;
+  }
+  thead th code {
+    background: rgba(255, 255, 255, .16);
+    border-color: rgba(255, 255, 255, .38);
+    color: #fff;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) td { background: var(--code-bg); }
+  td code { white-space: normal; }
+
+  /* ---- Flow (turn loop) ---- */
+  pre.flow {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--red);
+    border-radius: 8px;
+    padding: 1rem 1.15rem;
+    overflow-x: auto;
+    font-family: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: .82rem;
+    line-height: 1.6;
+    margin: .9rem 0;
+    box-shadow: var(--shadow);
+  }
+  pre.flow .kw { color: var(--red); font-weight: 600; }
+  pre.flow .dim { color: var(--muted); }
+
+  .flowlist { list-style: none; padding: 0; margin: 1rem 0; }
+  .flowlist > li {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--gold);
+    border-radius: 7px;
+    padding: .65rem .9rem;
+    margin-bottom: .6rem;
+    box-shadow: var(--shadow);
+  }
+  .flowlist > li b { color: var(--red-dark); }
+
+  ul.xref { list-style: none; padding: 0; }
+  ul.xref li {
+    padding: .4rem 0 .4rem 1.4rem;
+    position: relative;
+    border-bottom: 1px dashed var(--border);
+  }
+  ul.xref li:last-child { border-bottom: none; }
+  ul.xref li::before {
+    content: "→";
+    position: absolute;
+    left: 0;
+    color: var(--red);
+    font-weight: 700;
+  }
+
+  footer.page {
+    margin-top: 3.5rem;
+    padding-top: 1.25rem;
+    border-top: 2px solid var(--border);
+    color: var(--muted);
+    font-size: .82rem;
+  }
+
+  @media (max-width: 620px) {
+    .band .band-note { float: none; display: block; margin-bottom: .5rem; }
+    .backend-grid .box { flex-wrap: wrap; }
+    .backend-grid .box .tag { flex-basis: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="page">
+    <h1>PKU Captain — Architecture</h1>
+    <div class="sub">The <strong>structural map</strong>: the box-and-arrow view of what talks to what and where the boundaries are. Maintained by the <code>architecture</code> skill on structural changes only.</div>
+  </header>
+
+  <div class="callout">
+    <p><strong>What this file is / isn't.</strong> This is <em>shape</em>: components, boundaries, the seam, runtime data flows, external dependencies. It is <strong>not</strong> the rules — those invariants ("keep the memory store shared", "don't revert accumulation to replace") live in <code>CLAUDE.md</code> "Repo status". It is <strong>not</strong> the seam contract — that binding API surface is <code>docs/integration_contract_zh.md</code>. When this file and CLAUDE.md would say the same thing, this file links rather than restates.</p>
+  </div>
+
+  <nav class="toc">
+    <a href="#lanes">1 · Two lanes &amp; the seam</a>
+    <a href="#oop">2 · Four OOP hierarchies</a>
+    <a href="#flows">3 · Runtime data flows</a>
+    <a href="#deps">4 · External dependencies</a>
+    <a href="#xref">5 · Cross-references</a>
+  </nav>
+
+  <!-- ===================== SECTION 1 ===================== -->
+  <section id="lanes">
+    <h2><span class="num">1.</span>The two lanes and the seam</h2>
+    <p>PKU Captain is a PyQt6 desktop app split into a <strong>GUI lane</strong> and a <strong>backend lane</strong>, joined by a single factory seam. The GUI never constructs concrete providers/tools/sources — it calls factories in <code>src/core/bootstrap.py</code> and talks to the backend only through the abstractions those factories return.</p>
+
+    <div class="stack">
+      <!-- GUI band -->
+      <div class="band gui">
+        <span class="band-label">GUI lane · src/ui/</span>
+        <div class="boxrow">
+          <div class="box full"><b>MainWindow</b> ── DashboardPanel ── ChatPanel ── dialogs <span class="mono">(treehole / P-Lib / dean / memory / 文档库 / calendar)</span></div>
+        </div>
+        <div class="boxrow thread-row" style="margin-top:.5rem;">
+          <div class="box"><b>QThreads</b> · AgentWorker · DashboardWorker · WorkflowWorker</div>
+          <div class="box"><b>QThreadPool</b> · <code>tool_call_worker.run_async</code> (dialog blocking calls)</div>
+        </div>
+      </div>
+
+      <div class="flowdown">↓<span>calls factories</span></div>
+
+      <!-- Seam band -->
+      <div class="band seam">
+        <span class="band-label">Seam · src/core/bootstrap.py</span>
+        <span class="band-note">→ <a href="docs/integration_contract_zh.md">docs/integration_contract_zh.md</a></span>
+        <div class="boxrow">
+          <div class="box full">Lazy re-export via <code>src/core/__init__.py</code> PEP&nbsp;562 <code>__getattr__</code></div>
+        </div>
+        <div class="boxrow" style="margin-top:.5rem;">
+          <div class="box"><code>build_agent</code> · <code>build_source_registry</code></div>
+          <div class="box"><code>build_session_store</code> · <code>build_session_titler</code></div>
+          <div class="box"><code>build_dashboard_cache</code> · <code>build_doc_reader</code></div>
+          <div class="box"><code>build_chat_llm</code> · <code>available_chat_models</code></div>
+          <div class="box"><code>apply_chat_model</code> · <code>reset/restore_conversation</code></div>
+        </div>
+      </div>
+
+      <div class="flowdown">↓<span>returns Agent / SourceRegistry / stores — abstractions only</span></div>
+
+      <!-- Backend band -->
+      <div class="band backend">
+        <span class="band-label">Backend lane</span>
+        <div class="backend-grid">
+          <div class="box"><span class="tag">core/</span><span><b>Agent</b> (kernel + turn loop) · Conversation · MemoryStore · MemoryLearnService · SessionStore · SessionTitler · DashboardCache · VisionRouter</span></div>
+          <div class="box"><span class="tag">llm/</span><span><b>LLMProvider</b> (ABC) → DeepSeekProvider · KimiProvider · EchoLLMProvider</span></div>
+          <div class="box"><span class="tag">tools/</span><span><b>Tool</b> (ABC) + ToolRegistry → clock · memory · doc_base · pku3b* · plib · dean* · treehole* · calendar_reminder</span></div>
+          <div class="box"><span class="tag">workflows/</span><span><b>Workflow</b> (ABC) + WorkflowRegistry → MorningBriefing · Hello (+ WorkflowTool)</span></div>
+          <div class="box"><span class="tag">rag/</span><span><b>Source</b> (ABC) + SourceRegistry → DeanSource · CalendarSource <span class="mono">(Embedder/KB retired)</span></span></div>
+        </div>
+      </div>
+
+      <div class="flowdown">↓<span>subprocess (pku3b / pdftoppm / osascript) · in-process vendored clients · HTTPS</span></div>
+
+      <!-- External band -->
+      <div class="band external">
+        <span class="band-label">External processes &amp; endpoints</span>
+        <div class="boxrow">
+          <div class="box"><b>pku3b</b> — Rust CLI, our fork; the one external process among the PKU tools</div>
+          <div class="box"><b>vendored clients</b> (plib_cli · dean · treehole, in <code>vendor/</code>) → pkuhub.cn / dean.pku.edu.cn / treehole + IAAA over HTTPS</div>
+          <div class="box"><b>DeepSeek API</b> · <b>Kimi/Moonshot API</b></div>
+          <div class="box"><b>pdftoppm</b> (doc render) · <b>osascript + launchctl</b> (macOS Calendar / treehole notifier)</div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Vendored siblings</h3>
+    <p><code>vendor/plib-cli</code>, <code>vendor/pku-dean-cli</code>, <code>vendor/pku-treehole-cli</code> are the captain's own Python CLIs pulled in via <code>git subtree</code> and exposed as top-level packages (<code>plib_cli</code> / <code>dean</code> / <code>treehole</code>) through the pyproject hatchling <code>packages</code> mapping. The <code>plib</code>/<code>dean*</code>/<code>treehole*</code> Tool wrappers drive these libraries <strong>in-process</strong> (no subprocess, no sibling <code>.venv</code>). Only <code>pku3b</code> (Rust) remains an external binary.</p>
+
+    <h3>Entry points</h3>
+    <p><code>python -m src</code> (<code>src/__main__.py</code> → <code>ui.main_window</code>, defaults offline); <code>python -m src --online</code>; <code>python -m src.cli</code> (REPL on the same <code>build_agent</code> loop — the GUI-seam conformance probe); <code>scripts/smoke_deepseek.py</code> (real DeepSeek round-trip).</p>
+  </section>
+
+  <!-- ===================== SECTION 2 ===================== -->
+  <section id="oop">
+    <h2><span class="num">2.</span>The four OOP hierarchies <span style="font-weight:400;color:var(--muted);font-size:.85rem;">(the course rubric)</span></h2>
+    <p>Every extension is a <strong>subclass + register against a <code>*Registry</code></strong> — no ad-hoc dispatch. Modules stay side-effect-free; registration happens at the call site (<code>bootstrap.py</code>).</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Hierarchy</th><th>Base (<code>src/…/base.py</code>)</th><th>Registry</th><th>Reference offline subclass</th><th>Real subclasses</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Tool</td>
+            <td><code>tools/base.py</code> <code>Tool</code> / <code>ToolResult</code></td>
+            <td><code>ToolRegistry</code></td>
+            <td><code>ClockTool</code></td>
+            <td>memory, doc_base search/read, pku3b assignments/announcements/coursetable, plib, dean resources/updates, treehole, calendar_reminder</td>
+          </tr>
+          <tr>
+            <td>Workflow</td>
+            <td><code>workflows/base.py</code> <code>Workflow</code></td>
+            <td><code>WorkflowRegistry</code></td>
+            <td><code>HelloWorkflow</code> (<code>agent_callable=False</code>)</td>
+            <td><code>MorningBriefingWorkflow</code></td>
+          </tr>
+          <tr>
+            <td>LLM</td>
+            <td><code>llm/base.py</code> <code>LLMProvider</code></td>
+            <td><em>none — factory-selected</em></td>
+            <td><code>EchoLLMProvider</code></td>
+            <td><code>DeepSeekProvider</code>, <code>KimiProvider</code></td>
+          </tr>
+          <tr>
+            <td>Source</td>
+            <td><code>rag/source.py</code> <code>Source</code></td>
+            <td><code>SourceRegistry</code></td>
+            <td><code>StaticSource</code></td>
+            <td><code>DeanSource</code>, <code>CalendarSource</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p><code>LLMProvider</code> has no registry: the chat brain is <strong>switchable at runtime</strong> (DeepSeek ⇄ Kimi) via <code>build_chat_llm</code> / <code>apply_chat_model</code>. A switch resets the conversation (single-model history) and gates <code>doc_read</code> on vision capability.</p>
+  </section>
+
+  <!-- ===================== SECTION 3 ===================== -->
+  <section id="flows">
+    <h2><span class="num">3.</span>Runtime data flows</h2>
+
+    <h3>Chat turn — <code>ChatPanel</code> → <code>AgentWorker</code> (QThread) → <code>Agent.turn()</code></h3>
+<pre class="flow"><span class="kw">user msg</span> → Conversation.add_user → <span class="kw">loop</span> (≤8 iters):
+   _messages_for_llm()  <span class="dim">[snapshot + memory folded into the leading system msg, per-iteration]</span>
+   → llm.stream_chat → <span class="kw">events:</span> reasoning_delta · assistant_delta · llm_response
+   → <span class="kw">if</span> tool_calls: tool_call → tool.invoke → tool_result <span class="dim">(per call)</span>
+       └ ToolResult.images? → injected as one multimodal user msg AFTER all results <span class="dim">(Kimi reads pages)</span>
+   → context_usage → <span class="kw">(no tool_calls)</span> → final
+→ MainWindow._on_agent_event dispatches each event to ChatPanel</pre>
+    <p>Memory is folded per-iteration into a <em>snapshot copy</em> only — never written into <code>Conversation</code>. One bubble per assistant segment (finalized on each <code>tool_call</code>). Tool error strings are credential-redacted at the tool boundary (<code>src/tools/redact.py</code>) before entering the conversation, so injected/held secrets (P-Lib env, treehole IAAA) never reach the LLM request or <code>data/sessions/*.json</code>.</p>
+
+    <ul class="flowlist">
+      <li><b>Dashboard refresh</b> — <code>DashboardPanel</code> → <code>DashboardWorker</code> (QThread) → <code>ThreadPoolExecutor</code> fan-out over selected tool keys → <code>as_completed</code> emits <code>item_result</code>/<code>item_error</code> per card (error-isolated). <code>DashboardCache</code> (<code>data/dashboard_cache/&lt;key&gt;.json</code>, raw payloads) seeds paint at startup; a silent refresh repaints only cards whose <code>_signature</code> changed. Scoped refresh: per-card buttons emit <code>partial_refresh_requested([key])</code>, header 刷新 reloads all.</li>
+      <li><b>Dialog actions</b> — dashboard dialogs get tools from the injected <code>ToolRegistry</code> (<code>tools.find(name)</code>), gate online-only entries on membership, and run every blocking call through <code>tool_call_worker.run_async</code> onto a <code>QThreadPool</code>.</li>
+      <li><b>Workflows</b> — GUI button path: <code>WorkflowWorker</code> (QThread) → <code>workflow.run</code>. Agent path: each <code>agent_callable</code> workflow is wrapped in a <code>WorkflowTool</code> registered into the <code>ToolRegistry</code>, so the model starts it through the normal tool-call loop.</li>
+      <li><b>Session persistence</b> — <code>SessionStore</code> writes <code>data/sessions/&lt;id&gt;.json</code> per turn-finish/close (after the first real turn); <code>SessionTitler</code> (deepseek-v4-flash, non-think) names it async; <code>restore_conversation</code> reloads, re-seeding today's system prompt and dropping incomplete tool-call tails.</li>
+    </ul>
+  </section>
+
+  <!-- ===================== SECTION 4 ===================== -->
+  <section id="deps">
+    <h2><span class="num">4.</span>External dependencies</h2>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Dependency</th><th>Used by</th><th>Transport</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>pku3b</code> (Rust CLI, fork)</td>
+            <td><code>tools/pku3b.py</code> + pku3b_* tools</td>
+            <td>subprocess (<code>--format json</code>)</td>
+            <td>PATH then <code>.local/cargo/bin/pku3b</code> fallback; stdout breaks on <code>&gt;</code> redirect</td>
+          </tr>
+          <tr>
+            <td><code>plib_cli</code> (vendored <code>vendor/plib-cli</code>)</td>
+            <td><code>PLibMaterialsTool</code></td>
+            <td>in-process (<code>import plib_cli</code>) → HTTPS pkuhub.cn</td>
+            <td>injects <code>secrets/plib</code> as <code>Credentials</code>; HTML scrape (bs4+lxml)</td>
+          </tr>
+          <tr>
+            <td><code>dean</code> (vendored <code>vendor/pku-dean-cli</code>)</td>
+            <td><code>DeanResourcesTool</code> / <code>DeanUpdatesTool</code></td>
+            <td>in-process (<code>import dean</code>) → HTTPS dean.pku.edu.cn</td>
+            <td>public, no creds; HTML scrape (bs4+lxml)</td>
+          </tr>
+          <tr>
+            <td><code>treehole</code> (vendored <code>vendor/pku-treehole-cli</code>)</td>
+            <td><code>treehole_updates.py</code></td>
+            <td>in-process (<code>import treehole</code>) → HTTPS treehole + IAAA</td>
+            <td>IAAA creds from <code>secrets/treehole/</code>; macOS notifier runs own-venv <code>treehole</code> console script via <code>launchctl</code></td>
+          </tr>
+          <tr>
+            <td>DeepSeek API</td>
+            <td><code>DeepSeekProvider</code></td>
+            <td>HTTPS SSE</td>
+            <td><code>deepseek-v4-pro</code>, <code>reasoning_effort=max</code>, thinking replay required</td>
+          </tr>
+          <tr>
+            <td>Kimi/Moonshot API</td>
+            <td><code>KimiProvider</code></td>
+            <td>HTTPS SSE</td>
+            <td><code>kimi-k2.6</code>, vision (doc_read page images)</td>
+          </tr>
+          <tr>
+            <td><code>pdftoppm</code></td>
+            <td><code>doc_base.py</code> doc_read</td>
+            <td>subprocess</td>
+            <td>renders PDF pages to images</td>
+          </tr>
+          <tr>
+            <td><code>osascript</code></td>
+            <td><code>CalendarReminderTool</code></td>
+            <td>subprocess (macOS)</td>
+            <td>writes Calendar.app events</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Runtime pip deps: <code>PyQt6</code>, <code>requests</code>, <code>numpy</code>, plus <code>beautifulsoup4</code> + <code>lxml</code> (the vendored plib/dean HTML scrapers).</p>
+
+    <div class="callout">
+      <p><strong>Data layout.</strong> <code>secrets/</code> (gitignored — API keys, P-Lib/treehole creds, sessions), <code>data/</code> (gitignored — memory, sessions, inboxes, caches), <code>doc_base/</code> (committed — split PDFs + <code>manifest.json</code>), <code>downloads/</code> (gitignored), <code>vendor/</code> (committed — git-subtree'd Python siblings, imported in-process).</p>
+    </div>
+  </section>
+
+  <!-- ===================== SECTION 5 ===================== -->
+  <section id="xref">
+    <h2><span class="num">5.</span>Cross-references</h2>
+    <ul class="xref">
+      <li>Invariants &amp; "don't break this" rules → <code>CLAUDE.md</code> "Repo status".</li>
+      <li>The binding GUI↔backend API/threading/event/error contract → <code>docs/integration_contract_zh.md</code>.</li>
+      <li>Why decisions were made → <code>DEVCHANGELOG.md</code>.</li>
+      <li>How to confirm behavior by hand → <code>VERIFICATION.md</code>.</li>
+    </ul>
+  </section>
+
+  <footer class="page">
+    Structural map only — <em>shape</em>, not <em>rules</em>. Maintained by the <code>architecture</code> skill on structural changes. Open in a browser for the rendered view.
+  </footer>
+
+</div>
+</body>
+</html>

@@ -14,7 +14,7 @@ description: Maintain the TASTES/ directory — the project's prescriptive codin
 | **TASTES/** | How should code look and feel? | Timeless principle |
 | `CLAUDE.md` | Live rules and invariants | Operational rule |
 | `DEVCHANGELOG.md` | Why decided X on date D | Dated decision |
-| `ARCHITECTURE.md` | System layout | Structure map |
+| `ARCHITECTURE.html` | System layout | Structure map |
 
 If it's a general taste principle, it's TASTES. If it's a specific live invariant or a dated one-off, it's not — cross-reference those files, never restate them.
 

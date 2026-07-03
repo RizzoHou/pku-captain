@@ -14,7 +14,7 @@ TASTES is the *aesthetic / pattern* layer: timeless "prefer X over Y, because Z"
 |---|---|---|
 | **TASTES/** | How should code look and feel? | Timeless principle |
 | `CLAUDE.md` | What are the live rules and invariants? | Operational rule |
-| `ARCHITECTURE.md` | How is the system laid out? | Structure map |
+| `ARCHITECTURE.html` | How is the system laid out? | Structure map |
 | `DEVCHANGELOG.md` | Why did we decide X on date D? | Dated decision |
 | `CHANGELOG.md` | What shipped? | Release note |
 

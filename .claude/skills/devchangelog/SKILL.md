@@ -40,7 +40,7 @@ Keep each bullet to one line. Empiricality over prose: state the decision and th
 1. Read the current top of `DEVCHANGELOG.md` to match style and avoid duplicating an entry.
 2. Compose the entry from the change you just made — pull the *why* from your actual reasoning this session, not a reconstruction.
 3. Insert it directly below the file header, above the previous newest entry.
-4. If the change also altered structure (new module, boundary, registry, data flow, external dep), the **architecture** skill should run too — flag it; this skill does not touch ARCHITECTURE.md.
+4. If the change also altered structure (new module, boundary, registry, data flow, external dep), the **architecture** skill should run too — flag it; this skill does not touch ARCHITECTURE.html.
 
 ## Do not
 

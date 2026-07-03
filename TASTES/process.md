@@ -12,7 +12,7 @@ Conventional Commits format. Commit after completing a task. Report outcomes fai
 
 ## Keep the auditing artifacts true
 
-This repo is auditable by a non-coding architect through prose + observable behavior. Fire the right artifact by change type, not every task: `ARCHITECTURE.md` (structure changed), `DEVCHANGELOG.md` (a decision/tradeoff — nearly every change), `VERIFICATION.md` (user-visible / release-critical / beyond-pytest), `CHANGELOG.md` (per merge). Cross-reference; never restate.
+This repo is auditable by a non-coding architect through prose + observable behavior. Fire the right artifact by change type, not every task: `ARCHITECTURE.html` (structure changed), `DEVCHANGELOG.md` (a decision/tradeoff — nearly every change), `VERIFICATION.md` (user-visible / release-critical / beyond-pytest), `CHANGELOG.md` (per merge). Cross-reference; never restate.
 
 ## Worktrees commit but don't push
 
