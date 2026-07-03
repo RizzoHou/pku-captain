@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
 from ..core import (
     DEFAULT_CHAT_MODEL,
     AgentEvent,
+    CredentialStore,
     MemoryLearnService,
     VisionRouter,
     apply_chat_model,
@@ -273,27 +274,27 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"{mode_label} · 就绪")
 
     def _maybe_auto_switch_for_vision(self, text: str) -> None:
-        """Route a doc/培养方案 question into a fresh Kimi chat before the turn.
+        """Route a doc/培养方案 question into a fresh visual-model chat before the turn.
 
-        Only fires while on DeepSeek (text-only) with a Kimi brain available.
-        Like a manual switch it resets the chat (reset-on-switch); the typed
-        message then runs in the fresh Kimi chat where doc_read can feed it
-        page images. No-op on Kimi/offline or for non-doc questions.
+        Only fires while on the text role with a visual role available. Like a
+        manual switch it resets the chat (reset-on-switch); the typed message
+        then runs in the fresh visual chat where doc_read can feed it page
+        images. No-op on the visual role / offline or for non-doc questions.
         """
-        if self._model_key != "deepseek" or "kimi" not in self._model_labels:
+        if self._model_key != "text" or "visual" not in self._model_labels:
             return
         if not self._vision_router.needs_doc_base(text):
             return
         try:
-            apply_chat_model(self._agent, "kimi", offline=self._effective_offline)
-        except Exception as exc:  # noqa: BLE001 - stay on DeepSeek on failure
-            self._chat_panel.add_system_message(f"自动切换 Kimi 失败：{exc}")
+            apply_chat_model(self._agent, "visual", offline=self._effective_offline)
+        except Exception as exc:  # noqa: BLE001 - stay on the text model on failure
+            self._chat_panel.add_system_message(f"自动切换视觉模型失败：{exc}")
             return
-        self._model_key = "kimi"
-        self._chat_panel.set_active_model("kimi")
+        self._model_key = "visual"
+        self._chat_panel.set_active_model("visual")
         self._begin_new_session()
         self._chat_panel.add_system_message(
-            "检测到培养方案 / 文档相关问题，已自动切换到 Kimi K2.6 视觉模型并开启新对话。"
+            "检测到培养方案 / 文档相关问题，已自动切换到视觉模型并开启新对话。"
         )
 
     def _send_message(self, text: str) -> None:
@@ -873,12 +874,8 @@ def _format_dashboard_data(key: str, data: object) -> str:
 
 def _startup_diagnostics(*, offline: bool) -> str:
     missing: list[str] = []
-    deepseek_key_paths = (
-        _REPO_ROOT / "secrets" / "api_keys" / "deepseek_key.txt",
-        _REPO_ROOT / "secrets" / "deepseek_key.txt",
-    )
-    if not any(path.exists() for path in deepseek_key_paths):
-        missing.append("DeepSeek key：缺少 secrets/api_keys/deepseek_key.txt")
+    if not CredentialStore().is_model_configured("text"):
+        missing.append("文本模型：尚未配置 API 密钥（点击右上角『账号』→ 模型配置）")
     if shutil.which("pku3b") is None and not _LOCAL_PKU3B.exists():
         missing.append("pku3b：未在 PATH 中找到")
     elif not _pku3b_configured():
@@ -889,7 +886,11 @@ def _startup_diagnostics(*, offline: bool) -> str:
     if not missing:
         return ""
 
-    prefix = "当前以离线模式运行。" if offline else "在线依赖未完全就绪。"
+    prefix = (
+        "当前以离线模式运行。点击右上角『账号』即可登录北大统一身份、P-Lib 并配置对话模型。"
+        if offline
+        else "在线依赖未完全就绪。"
+    )
     return prefix + "\n" + "\n".join(f"- {item}" for item in missing)
 
 

@@ -322,7 +322,7 @@
       <div class="band gui">
         <span class="band-label">GUI lane · src/ui/</span>
         <div class="boxrow">
-          <div class="box full"><b>MainWindow</b> ── DashboardPanel ── ChatPanel ── dialogs <span class="mono">(treehole / P-Lib / dean / memory / 文档库 / calendar)</span></div>
+          <div class="box full"><b>MainWindow</b> ── DashboardPanel ── ChatPanel ── dialogs <span class="mono">(账号/LoginDialog · treehole / P-Lib / dean / memory / 文档库 / calendar)</span></div>
         </div>
         <div class="boxrow thread-row" style="margin-top:.5rem;">
           <div class="box"><b>QThreads</b> · AgentWorker · DashboardWorker · WorkflowWorker</div>
@@ -354,7 +354,7 @@
       <div class="band backend">
         <span class="band-label">Backend lane</span>
         <div class="backend-grid">
-          <div class="box"><span class="tag">core/</span><span><b>Agent</b> (kernel + turn loop) · Conversation · MemoryStore · MemoryLearnService · SessionStore · SessionTitler · DashboardCache · VisionRouter</span></div>
+          <div class="box"><span class="tag">core/</span><span><b>Agent</b> (kernel + turn loop) · Conversation · MemoryStore · MemoryLearnService · SessionStore · SessionTitler · DashboardCache · VisionRouter · <b>CredentialStore</b> <span class="mono">(secrets/ writer + status)</span></span></div>
           <div class="box"><span class="tag">llm/</span><span><b>LLMProvider</b> (ABC) → DeepSeekProvider · KimiProvider · EchoLLMProvider</span></div>
           <div class="box"><span class="tag">tools/</span><span><b>Tool</b> (ABC) + ToolRegistry → clock · memory · doc_base · pku3b* · plib · dean* · treehole* · calendar_reminder</span></div>
           <div class="box"><span class="tag">workflows/</span><span><b>Workflow</b> (ABC) + WorkflowRegistry → MorningBriefing · Hello (+ WorkflowTool)</span></div>
@@ -426,7 +426,7 @@
       </table>
     </div>
 
-    <p><code>LLMProvider</code> has no registry: the chat brain is <strong>switchable at runtime</strong> (DeepSeek ⇄ Kimi) via <code>build_chat_llm</code> / <code>apply_chat_model</code>. A switch resets the conversation (single-model history) and gates <code>doc_read</code> on vision capability.</p>
+    <p><code>LLMProvider</code> has no registry: the chat brain is <strong>switchable at runtime</strong> between two configurable <em>roles</em> — <code>text</code> (文本模型, default DeepSeek) and <code>visual</code> (视觉模型, default Kimi) — via <code>build_chat_llm</code> / <code>apply_chat_model</code>. Each role's endpoint/model/key come from <code>CredentialStore</code> (<code>secrets/models.json</code>, legacy key files as fallback), so DeepSeek/Kimi are only defaults. A switch resets the conversation (single-model history) and gates <code>doc_read</code> on the visual role's vision capability.</p>
   </section>
 
   <!-- ===================== SECTION 3 ===================== -->
@@ -516,7 +516,7 @@
     <p>Runtime pip deps: <code>PyQt6</code>, <code>requests</code>, <code>numpy</code>, plus <code>beautifulsoup4</code> + <code>lxml</code> (the vendored plib/dean HTML scrapers).</p>
 
     <div class="callout">
-      <p><strong>Data layout.</strong> <code>secrets/</code> (gitignored — API keys, P-Lib/treehole creds, sessions), <code>data/</code> (gitignored — memory, sessions, inboxes, caches), <code>doc_base/</code> (committed — split PDFs + <code>manifest.json</code>), <code>downloads/</code> (gitignored), <code>vendor/</code> (committed — git-subtree'd Python siblings, imported in-process).</p>
+      <p><strong>Data layout.</strong> <code>secrets/</code> (gitignored — <code>models.json</code> model-role endpoints/keys, P-Lib/treehole creds, sessions; written by <code>CredentialStore</code> via the 账号中心), <code>data/</code> (gitignored — memory, sessions, inboxes, caches), <code>doc_base/</code> (committed — split PDFs + <code>manifest.json</code>), <code>downloads/</code> (gitignored), <code>vendor/</code> (committed — git-subtree'd Python siblings, imported in-process).</p>
     </div>
   </section>
 

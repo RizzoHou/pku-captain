@@ -64,7 +64,6 @@ def test_all_dialogs_construct_with_injected_tool(
     tool = FakeTool()
     # Constructors that take a tool — a signature/import error raises here.
     dashboard.PLibSearchDialog(tool)
-    dashboard.PLibLoginDialog(tool)
     dashboard.AnnouncementDetailDialog(tool, "id-1")
     dashboard.CalendarReminderDialog(tool, [])
     dashboard.MemoryDialog(tool)

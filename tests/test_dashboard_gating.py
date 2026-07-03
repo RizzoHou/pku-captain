@@ -50,11 +50,47 @@ def test_offline_dashboard_refuses_network_dialogs(
     # dialog that would invoke the missing network/subprocess tool.
     panel._show_treehole_dialog()
     panel._show_plib_dialog()
-    panel._show_plib_login_dialog()
     panel._show_announcement_detail("anything")
     # _show_docbase_dialog is deliberately omitted: doc_search registers
     # offline, so the 文档库 dialog opens rather than bailing at the gate.
-    assert len(shown) == 4
+    assert len(shown) == 3
+
+
+def test_account_dialog_opens_offline(
+    app: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The universal login page is NOT gated on online mode — credentials and
+    # model endpoints are configured here even offline. It must construct with
+    # offline=True (no treehole tool) and never bail at an info box.
+    import src.ui.dashboard as dashboard
+
+    captured: dict[str, object] = {}
+
+    class _Signal:
+        def connect(self, *_a: object, **_k: object) -> None:
+            pass
+
+    class FakeLoginDialog:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+            self.credentials_changed = _Signal()
+
+        def exec(self) -> int:
+            captured["execed"] = True
+            return 0
+
+    monkeypatch.setattr(dashboard, "LoginDialog", FakeLoginDialog)
+    shown: list[str] = []
+    monkeypatch.setattr(
+        QMessageBox, "information", lambda *a, **k: shown.append(a[1])
+    )
+    panel = DashboardPanel(mode_label="离线模式", tools=build_agent(offline=True).tools)
+    panel._open_account_dialog()
+
+    assert captured.get("execed") is True
+    assert captured.get("offline") is True  # derived from the missing treehole tool
+    assert captured.get("auth") is None  # no live auth service offline
+    assert shown == []  # opened, not gated
 
 
 def test_require_tool_returns_registered_tool(
