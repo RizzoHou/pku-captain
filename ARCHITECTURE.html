@@ -362,14 +362,13 @@
         </div>
       </div>
 
-      <div class="flowdown">↓<span>subprocess (pku3b / pdftoppm / osascript) · in-process vendored clients · HTTPS</span></div>
+      <div class="flowdown">↓<span>subprocess (pdftoppm / osascript) · in-process vendored clients (incl. pypku3b) · HTTPS</span></div>
 
       <!-- External band -->
       <div class="band external">
         <span class="band-label">External processes &amp; endpoints</span>
         <div class="boxrow">
-          <div class="box"><b>pku3b</b> — Rust CLI, our fork; the one external process among the PKU tools</div>
-          <div class="box"><b>vendored clients</b> (plib_cli · dean · treehole, in <code>vendor/</code>) → pkuhub.cn / dean.pku.edu.cn / treehole + IAAA over HTTPS</div>
+          <div class="box"><b>vendored clients</b> (pypku3b · plib_cli · dean · treehole, in <code>vendor/</code>) → course.pku.edu.cn / portal.pku.edu.cn / pkuhub.cn / dean.pku.edu.cn / treehole + IAAA over HTTPS</div>
           <div class="box"><b>DeepSeek API</b> · <b>Kimi/Moonshot API</b></div>
           <div class="box"><b>pdftoppm</b> (doc render) · <b>osascript + launchctl</b> (macOS Calendar / treehole notifier)</div>
         </div>
@@ -377,7 +376,7 @@
     </div>
 
     <h3>Vendored siblings</h3>
-    <p><code>vendor/plib-cli</code>, <code>vendor/pku-dean-cli</code>, <code>vendor/pku-treehole-cli</code> are the captain's own Python CLIs pulled in via <code>git subtree</code> and exposed as top-level packages (<code>plib_cli</code> / <code>dean</code> / <code>treehole</code>) through the pyproject hatchling <code>packages</code> mapping. The <code>plib</code>/<code>dean*</code>/<code>treehole*</code> Tool wrappers drive these libraries <strong>in-process</strong> (no subprocess, no sibling <code>.venv</code>). Only <code>pku3b</code> (Rust) remains an external binary.</p>
+    <p><code>vendor/pypku3b</code>, <code>vendor/plib-cli</code>, <code>vendor/pku-dean-cli</code>, <code>vendor/pku-treehole-cli</code> are the captain's own Python libraries pulled in via <code>git subtree</code> and exposed as top-level packages (<code>pypku3b</code> / <code>plib_cli</code> / <code>dean</code> / <code>treehole</code>) through the pyproject hatchling <code>packages</code> mapping. Their Tool wrappers drive them <strong>in-process</strong> (no subprocess, no sibling <code>.venv</code>). <code>pypku3b</code> reimplements the used subset of the former <code>pku3b</code> Rust CLI (教学网 Blackboard + 信息门户 over IAAA SSO), so <strong>the captain now has no external binary</strong>.</p>
 
     <h3>Entry points</h3>
     <p><code>python -m src</code> (<code>src/__main__.py</code> → <code>ui.main_window</code>, defaults offline); <code>python -m src --online</code>; <code>python -m src.cli</code> (REPL on the same <code>build_agent</code> loop — the GUI-seam conformance probe); <code>scripts/smoke_deepseek.py</code> (real DeepSeek round-trip).</p>
@@ -462,10 +461,10 @@
         </thead>
         <tbody>
           <tr>
-            <td><code>pku3b</code> (Rust CLI, fork)</td>
+            <td><code>pypku3b</code> (vendored <code>vendor/pypku3b</code>)</td>
             <td><code>tools/pku3b.py</code> + pku3b_* tools</td>
-            <td>subprocess (<code>--format json</code>)</td>
-            <td>PATH then <code>.local/cargo/bin/pku3b</code> fallback; stdout breaks on <code>&gt;</code> redirect</td>
+            <td>in-process (<code>import pypku3b</code>) → HTTPS course/portal.pku.edu.cn + IAAA</td>
+            <td>IAAA creds from <code>secrets/pku/</code>; cookie jar <code>secrets/pku/cookies.json</code>, crawl cache <code>data/pku3b_cache/</code>; HTML scrape (bs4+lxml); OS trust store (certifi fails course.pku.edu.cn)</td>
           </tr>
           <tr>
             <td><code>plib_cli</code> (vendored <code>vendor/plib-cli</code>)</td>
@@ -513,10 +512,10 @@
       </table>
     </div>
 
-    <p>Runtime pip deps: <code>PyQt6</code>, <code>requests</code>, <code>numpy</code>, plus <code>beautifulsoup4</code> + <code>lxml</code> (the vendored plib/dean HTML scrapers).</p>
+    <p>Runtime pip deps: <code>PyQt6</code>, <code>requests</code>, <code>numpy</code>, plus <code>beautifulsoup4</code> + <code>lxml</code> (the vendored pypku3b/plib/dean HTML scrapers). No Rust toolchain or external binary.</p>
 
     <div class="callout">
-      <p><strong>Data layout.</strong> <code>secrets/</code> (gitignored — API keys, P-Lib/treehole creds, sessions), <code>data/</code> (gitignored — memory, sessions, inboxes, caches), <code>doc_base/</code> (committed — split PDFs + <code>manifest.json</code>), <code>downloads/</code> (gitignored), <code>vendor/</code> (committed — git-subtree'd Python siblings, imported in-process).</p>
+      <p><strong>Data layout.</strong> <code>secrets/</code> (gitignored — API keys, P-Lib/treehole/pku creds, sessions + cookies), <code>data/</code> (gitignored — memory, sessions, inboxes, caches incl. <code>pku3b_cache/</code>), <code>doc_base/</code> (committed — split PDFs + <code>manifest.json</code>), <code>downloads/</code> (gitignored), <code>vendor/</code> (committed — git-subtree'd Python siblings, imported in-process).</p>
     </div>
   </section>
 
