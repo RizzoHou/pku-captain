@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -56,9 +57,12 @@ class Cache:
         if path is not None:
             try:
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(
-                    json.dumps(value, ensure_ascii=False), encoding="utf-8"
-                )
+                # Atomic write: two dashboard cards may compute the same key
+                # concurrently (assignments + announcements share Blackboard
+                # keys); os.replace avoids a torn read that would look corrupt.
+                tmp = path.with_suffix(path.suffix + f".tmp-{os.getpid()}-{id(value)}")
+                tmp.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
+                os.replace(tmp, path)
             except OSError:
                 pass  # cache write failures are non-fatal
         return value
