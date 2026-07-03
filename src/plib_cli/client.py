@@ -132,6 +132,10 @@ class PlibClient:
                     "password": creds.password,
                     "csrf_token": token,
                     "remember": "y",
+                    # pkuhub added a required "agree to terms" checkbox to the
+                    # login form; omitting it re-renders /login with the flash
+                    # "请先同意用户协议和隐私政策" and login fails.
+                    "agree_terms": "y",
                     "submit": "登录",
                 },
                 timeout=self.timeout,
