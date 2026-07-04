@@ -117,6 +117,21 @@ def test_plib_save_read_clear(tmp_path) -> None:
     assert store.plib() is None
 
 
+# -- PKU (pku3b / IAAA) ---------------------------------------------------
+def test_pku_save_read_clear(tmp_path) -> None:
+    store = _store(tmp_path)
+    assert store.pku() is None
+    assert not store.has_pku()
+    store.save_pku(" 2500013225 ", "pw")
+    assert store.pku() == ("2500013225", "pw")  # id trimmed
+    assert store.has_pku()
+    # A cached portal cookie jar is dropped on clear so the next login re-auths.
+    (store.pku_dir / "cookies.json").write_text("{}", encoding="utf-8")
+    store.clear_pku()
+    assert store.pku() is None
+    assert not (store.pku_dir / "cookies.json").exists()
+
+
 # -- treehole -------------------------------------------------------------
 def test_treehole_presence_and_clear(tmp_path) -> None:
     store = _store(tmp_path)

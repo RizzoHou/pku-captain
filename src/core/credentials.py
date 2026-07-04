@@ -12,9 +12,11 @@ deliberately dumb file I/O — no network, no SMS (that stays in
 
 Two credential kinds live here:
 
-* **Accounts** — P-Lib ``email``/``password`` (now persisted) and treehole
+* **Accounts** — P-Lib ``email``/``password`` (now persisted), treehole
   presence/clear (the SMS *login* itself stays in ``TreeholeAuthService``, but
-  logout/status route through here).
+  logout/status route through here), and PKU ``id``/``password`` (the IAAA
+  identity the pku3b client reads; mirrored from the treehole login since it is
+  the same identity).
 * **Models** — the chat brains, reframed as two configurable *roles* rather
   than two hard-coded brands. ``text`` (default DeepSeek) and ``visual``
   (default Kimi, vision-capable) each carry an ``api_key`` + ``base_url`` +
@@ -90,6 +92,7 @@ class CredentialStore:
         )
         self.treehole_dir = self.secrets_dir / "treehole"
         self.plib_dir = self.secrets_dir / "plib"
+        self.pku_dir = self.secrets_dir / "pku"
         self.models_path = self.secrets_dir / "models.json"
 
     # -- small helpers ----------------------------------------------------
@@ -148,6 +151,37 @@ class CredentialStore:
     def clear_plib(self) -> None:
         for name in ("email", "password", "id"):
             path = self.plib_dir / name
+            if path.exists():
+                path.unlink()
+
+    # -- PKU (pku3b / IAAA) -----------------------------------------------
+    def pku(self) -> tuple[str, str] | None:
+        """Stored IAAA ``(id, password)`` for the pku3b client, or None."""
+        uid = self._read(self.pku_dir / "id")
+        password = self._read(self.pku_dir / "password")
+        if uid and password:
+            return uid, password
+        return None
+
+    def has_pku(self) -> bool:
+        return self.pku() is not None
+
+    def save_pku(self, uid: str, password: str) -> None:
+        """Persist IAAA credentials for the in-process ``pypku3b`` client.
+
+        This is the *same* IAAA identity (学号 + 门户密码) the treehole tab logs
+        in with, so the 统一身份 tab mirrors it here on a successful login — one
+        login then provisions the pku3b tools (作业/公告/课表/身份), which read
+        ``secrets/pku/{id,password}`` via ``stored_credentials``. Before this,
+        those files had to be hand-placed per ``docs/setup_zh.md``.
+        """
+        self._write(self.pku_dir / "id", uid.strip())
+        self._write(self.pku_dir / "password", password)
+
+    def clear_pku(self) -> None:
+        """Forget IAAA creds + the cached portal cookie jar (force re-login)."""
+        for name in ("id", "password", "cookies.json"):
+            path = self.pku_dir / name
             if path.exists():
                 path.unlink()
 

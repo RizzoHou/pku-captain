@@ -513,9 +513,11 @@ class DashboardPanel(QWidget):
 
     def _on_credentials_changed(self, keys: list[str]) -> None:
         """Refresh the cards whose backing credentials the account dialog
-        updated (treehole / P-Lib). Model changes carry no live card — the
-        dialog already tells the user they take effect after a restart."""
-        scoped = [key for key in keys if key in ("treehole_updates", "plib_materials")]
+        updated (treehole / P-Lib / the pku3b cards a 统一身份 login provisions).
+        Model changes carry no live card — the dialog already tells the user
+        they take effect after a restart."""
+        live = ("treehole_updates", "plib_materials", "pku3b_assignments", "pku3b_announcements")
+        scoped = [key for key in keys if key in live]
         if scoped:
             self.partial_refresh_requested.emit(scoped)
 
