@@ -389,6 +389,35 @@ def test_announcement_detail_dialog_opens_external_page(
     assert opened == ["https://course.pku.edu.cn/notice/a1"]
 
 
+def test_announcement_detail_dialog_falls_back_to_stored_fields_on_failure(
+    app: QApplication,
+) -> None:
+    # A history row's announcement can vanish from 教学网 entirely; the dialog
+    # must degrade to the row's own stored fields, not a bare not-found error.
+    class NotFoundTool(FakeTool):
+        def invoke(self, args: dict[str, Any]) -> ToolResult:
+            return ToolResult(
+                success=False, error="announcement with id a9 not found"
+            )
+
+    dialog = dashboard.AnnouncementDetailDialog(
+        NotFoundTool(),
+        {
+            "id": "a9",
+            "course": "程序设计实习",
+            "title": "已下线的通知",
+            "posted_at": "2026-03-01",
+        },
+    )
+    _drain()
+
+    body = dialog._body_label.text()
+    assert "已下线的通知" in body
+    assert "程序设计实习" in body
+    assert "2026-03-01" in body
+    assert "not found" in body  # failure reason stays visible
+
+
 def test_announcements_history_shows_full_returned_list(app: QApplication) -> None:
     # 历史通知 keeps every announcement; 最近 windows to those posted within the
     # last month (by posted_date). Give 3 items recent dates and the rest an
