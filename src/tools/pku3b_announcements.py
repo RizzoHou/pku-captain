@@ -9,6 +9,8 @@ inline, so a date needs no extra fetch and there is no on-disk date cache:
   posted_date, posted_at}`` per announcement.
 * ``announcement_id`` given — detail mode: one announcement's full title,
   posted time, and body (resolved by filtering the list, no extra request).
+  An id missing from the current-term list is retried across all terms, so
+  history entries that outlived the term still resolve.
 """
 
 from __future__ import annotations
@@ -108,16 +110,21 @@ class PKU3bAnnouncementsTool(Tool):
 
     def invoke(self, args: dict[str, Any]) -> ToolResult:
         announcement_id = args.get("announcement_id")
+        all_term = bool(args.get("all_term", False))
+        force = bool(args.get("force", False))
         try:
             client = self._client_factory(
                 secrets_dir=self.secrets_dir,
                 timeout=self.timeout,
                 credentials=stored_credentials(self.secrets_dir),
             )
-            announcements = client.list_announcements(
-                all_term=bool(args.get("all_term", False)),
-                force=bool(args.get("force", False)),
-            )
+            announcements = client.list_announcements(all_term=all_term, force=force)
+            if announcement_id is not None:
+                wanted = str(announcement_id).strip()
+                # History entries outlive the current-term list (term rotation),
+                # so a miss there is retried across all terms before failing.
+                if wanted and not all_term and all(a.id != wanted for a in announcements):
+                    announcements = client.list_announcements(all_term=True, force=force)
         except Pku3bError as exc:
             message = getattr(exc, "message", str(exc))
             return ToolResult(

@@ -6,6 +6,14 @@ The **development decision log** — why changes were made, not what shipped. Ma
 
 ---
 
+## 2026-07-04 — Fix 历史通知 detail "not found" (retry across all terms, degrade to stored fields)
+
+- **What**: clicking a 历史通知 row opened `AnnouncementDetailDialog` showing `announcement with id … not found`; panel 最近 rows worked. Root cause: the tool's detail mode resolves the id by filtering `list_announcements(all_term=False)` — the live current-term list — while 历史通知 persists every announcement ever seen (`data/announcement_history.json`), so any entry that rotated out of the term can never resolve (with spring term just over, that's essentially all of them).
+- **Decision — tool-side `all_term=True` retry, not dialog-side `all_term: true`**: the dialog could pass `all_term` on every detail call, but that forces the slow all-term crawl for every click including the fast panel path. Retrying inside the tool only on a current-term miss keeps the hot path fast and fixes every caller at once (the agent's detail mode benefits identically).
+- **Decision — dialog degrades to stored fields on residual failure**: an announcement truly deleted from Blackboard has no fetchable body anywhere, so `AnnouncementDetailDialog` now falls back to the row's own persisted fields (title/course/date) with the failure reason appended, instead of a bare red error. Rejected persisting bodies into history (would require list mode to carry `body`, bloating every agent list call's context).
+- **Files**: `src/tools/pku3b_announcements.py`, `src/ui/dashboard.py`, `tests/test_pku3b_tools.py`, `tests/test_dashboard_dialogs.py`, `CHANGELOG.md`. 406 tests pass, ruff clean; no `core`/`llm`/wire-format change, so no smoke run.
+- **Verify**: VERIFICATION.md "历史通知 detail resolves across terms".
+
 ## 2026-07-04 — Mirror the 统一身份 login into `secrets/pku/` so one IAAA login provisions pku3b
 
 - **What**: the 账号中心's 统一身份·树洞 tab now writes `secrets/pku/{id,password}` (via new `CredentialStore.save_pku`) on a successful treehole login, in addition to `secrets/treehole/`; 退出登录 clears both areas (+ `secrets/pku/cookies.json`). Added `pku`/`has_pku`/`clear_pku` to the store, a `_pending_iaaa` capture + `_mirror_iaaa_to_pku` in the dialog, and extended the dashboard's post-login refresh scope to the two pku3b cards.

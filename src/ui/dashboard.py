@@ -2219,14 +2219,30 @@ class AnnouncementDetailDialog(QDialog):
 
     def _on_detail_error(self, message: str) -> None:
         QApplication.restoreOverrideCursor()
-        self._body_label.setStyleSheet("color: #b42318;")
-        self._body_label.setText(f"公告详情加载失败：{message}")
+        self._show_detail_failure(message)
+
+    def _show_detail_failure(self, message: str) -> None:
+        """Degrade to the stored row fields when the live fetch fails.
+
+        历史通知 rows can outlive the 教学网 announcement list entirely (course
+        removed), so render what the row recorded plus the failure reason
+        instead of a bare error.
+        """
+        if not self._item:
+            self._body_label.setStyleSheet("color: #b42318;")
+            self._body_label.setText(f"公告详情加载失败：{message}")
+            return
+        self._show_item_fallback()
+        self._body_label.setText(
+            f"{self._body_label.text()}\n\n（教学网详情获取失败：{message}）"
+        )
 
     def _on_detail_loaded(self, result: object) -> None:
         QApplication.restoreOverrideCursor()
         if not getattr(result, "success", False):
-            self._body_label.setText(str(getattr(result, "error", "") or "公告详情加载失败"))
-            self._body_label.setStyleSheet("color: #b42318;")
+            self._show_detail_failure(
+                str(getattr(result, "error", "") or "公告详情加载失败")
+            )
             return
         data = result.data if isinstance(result.data, dict) else {}
         announcement = data.get("announcement")

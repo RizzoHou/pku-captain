@@ -205,6 +205,41 @@ def test_announcement_detail_not_found(tmp_path):
     assert "not found" in result.error
 
 
+def test_announcement_detail_retries_all_term_for_history_ids(tmp_path):
+    # 历史通知 ids outlive the current-term list after a term rotation; detail
+    # mode must retry across all terms before reporting not-found.
+    old = _ann(1, "程设", "上学期通知", "old-id", body="老通知正文")
+
+    class TermFakeClient(FakeClient):
+        def list_announcements(self, *, all_term=False, force=False):
+            self.calls.setdefault("all_term_seq", []).append(all_term)
+            return [old] if all_term else []
+
+    client = TermFakeClient()
+    tool = PKU3bAnnouncementsTool(secrets_dir=tmp_path, client_factory=_factory(client))
+
+    result = tool.invoke({"announcement_id": "old-id"})
+
+    assert result.success
+    assert result.data["announcement"]["body"] == "老通知正文"
+    assert client.calls["all_term_seq"] == [False, True]
+
+
+def test_announcement_list_mode_never_retries_all_term(tmp_path):
+    class CountingClient(FakeClient):
+        def list_announcements(self, *, all_term=False, force=False):
+            self.calls.setdefault("all_term_seq", []).append(all_term)
+            return []
+
+    client = CountingClient()
+    tool = PKU3bAnnouncementsTool(secrets_dir=tmp_path, client_factory=_factory(client))
+
+    result = tool.invoke({})
+
+    assert result.success
+    assert client.calls["all_term_seq"] == [False]
+
+
 # -- coursetable ------------------------------------------------------------
 
 

@@ -8,6 +8,18 @@ Human-executable verification steps. Maintained by the `verification` skill. The
 
 ## Pending verification
 
+### 2026-07-04 — 历史通知 detail resolves across terms
+
+**Proves**: clicking a course notice in 历史通知 now shows its full content instead of `announcement with id … not found` — the detail lookup retries across all terms when the notice is no longer in the current-term list, and a notice deleted from 教学网 entirely degrades to the stored row fields (title/course/date + failure reason) instead of a bare red error.
+
+**Steps**:
+1. `[agent-run]` `pytest tests/` → **406 passed, 2 skipped** (adds the all-term retry + dialog fallback tests).
+2. **History detail (online, needs `secrets/pku/`)**: `python -m src --online`, wait for the 课程通知 card, click 历史通知 → pick a notice from **last term** (an old date, ideally one whose course is no longer this term's) → expect the detail window to load the notice's **full body text** (first such click may take noticeably longer — it crawls all terms once; later clicks are cached).
+3. **Panel rows unchanged**: click a notice directly on the 课程通知 card (最近 list) → detail loads fast, full body, as before.
+4. **Negative (residual failure)**: with the network cut (or for a notice removed from 教学网), open a 历史通知 detail → expect the window to show 标题/课程/发布时间 from the stored history plus a parenthesized `（教学网详情获取失败：…）` note — **not** a bare red "not found" error.
+
+**Automated**: `pytest tests/test_pku3b_tools.py tests/test_dashboard_dialogs.py` (detail mode retries `all_term=True` on a current-term miss and never double-fetches in list mode; the dialog degrades to stored fields on a failed fetch).
+
 ### 2026-07-03 — pku3b reimplemented as in-process `pypku3b` (no external binary)
 
 **Proves**: the captain reads 作业/公告/课表/身份 from PKU 教学网 + 门户 entirely in-process via the vendored `pypku3b`, with **no `pku3b` Rust binary** and no behavior change to the dashboard/agent — driven from `secrets/pku/{id,password}`.
