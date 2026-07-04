@@ -45,3 +45,9 @@ docs/code_audit_panel.html
 
 # Temporary files
 tmp/
+
+# "Chain of Focuses" files
+cof.md
+
+# Claude tasks
+claude_tasks/
