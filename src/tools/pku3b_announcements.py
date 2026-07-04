@@ -33,6 +33,7 @@ from .pku3b import (
 from .redact import redact
 
 _POSTED_PREFIX = re.compile(r"^\s*发布时间[:：]\s*")
+_WHITESPACE = re.compile(r"\s+")
 
 
 class PKU3bAnnouncementsTool(Tool):
@@ -206,17 +207,29 @@ def _stable_id(a: Any) -> str:
     deletion, or reorder). The dashboard accumulates ids across scrapes into
     ``data/announcement_history.json``; once the set drifts, a stored positional
     id matches nothing on re-list and detail fails with "announcement with id …
-    not found". Derive the id from the announcement's own content instead —
-    ``(course_id, title, date)`` — so a re-listed announcement re-derives the
-    *same* id it had when stored. Undated rows (the body-snippet fallbacks
-    pypku3b emits) drop the date component. 16 hex chars, matching pypku3b's
-    ``content_hash`` width.
+    not found". Derive the id from the announcement's own content instead.
+
+    The id is built from ``(course_id, normalized_title)`` **only** —
+    deliberately *not* ``posted_date``. pypku3b's ``posted_date`` is intermittent
+    across scrapes: it parses the 发布时间 from the page render, which drops for
+    roughly half of announcements depending on how the page lays out at scrape
+    time (older items fall into the body-snippet fallback, and the newest-first
+    sort even keys on time presence). Per-course scrape is TTL-cached ~1h, so the
+    store-time scrape and a later show-time re-scrape are independent and can
+    observe different dates. Folding the date into the hash therefore made a mere
+    date flip a *total* id mismatch — the exact defect that broke 历史通知 detail.
+    Dropping the date makes the store-time and show-time ids identical regardless
+    of whether either scrape captured a date. The title is whitespace-normalized
+    (strip + collapse runs) so trivial render differences don't flip the hash. 16
+    hex chars, matching pypku3b's ``content_hash`` width.
+
+    Residual: two distinct announcements sharing the same title within one course
+    now collide — rare, and the old date-bearing scheme didn't reliably
+    distinguish them either (see Follow-ups in the task brief).
     """
     course_id = str(a.course_id or "").strip()
-    title = str(a.title or "").strip()
-    date = str(a.posted_date or "").strip()
-    parts = [course_id, title, date] if date else [course_id, title]
-    payload = "\x00".join(parts).encode("utf-8")
+    title = _WHITESPACE.sub(" ", str(a.title or "")).strip()
+    payload = "\x00".join([course_id, title]).encode("utf-8")
     return hashlib.blake2b(payload, digest_size=8).hexdigest()
 
 
