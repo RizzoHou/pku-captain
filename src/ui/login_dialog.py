@@ -7,7 +7,9 @@ API-key entry at all) into a single tabbed dialog opened from the dashboard's
 
 * **统一身份 · 树洞** — IAAA ``学号``+密码 login then SMS verify, via the existing
   ``TreeholeAuthService`` (writes ``secrets/treehole/{id,password}`` + caches
-  ``session.json``). Needs online mode (it hits the network).
+  ``session.json``). On success it also mirrors the same IAAA identity into
+  ``secrets/pku/{id,password}`` (via ``CredentialStore.save_pku``) so one login
+  provisions the pku3b tools too. Needs online mode (it hits the network).
 * **P-Lib** — email+password, now *persisted* through ``CredentialStore`` (the
   old dialog only validated), so login survives a restart. Optionally validated
   live when the plib tool is registered (online).
@@ -53,6 +55,9 @@ from .tool_call_worker import run_async
 _TREEHOLE_KEY = "treehole_updates"
 _PLIB_KEY = "plib_materials"
 _MODELS_KEY = "models"
+# The pku3b cards a treehole login (which mirrors the shared IAAA identity into
+# secrets/pku/) newly provisions — refresh them once creds land.
+_PKU_KEYS = ("pku3b_assignments", "pku3b_announcements")
 
 # The two model roles the 模型配置 tab exposes, in display order.
 _MODEL_ROLE_LABELS = (("text", "文本模型"), ("visual", "视觉模型"))
@@ -137,6 +142,10 @@ class LoginDialog(QDialog):
         # dialog is destroyed, by which point its tasks have run.
         self._pending: list[object] = []
         self._changed: set[str] = set()
+        # (uid, password) of an in-flight treehole *login*, mirrored into
+        # secrets/pku/ only once IAAA accepts it (so a wrong password is never
+        # persisted for pku3b). Set by `_treehole_login`, consumed on success.
+        self._pending_iaaa: tuple[str, str] | None = None
 
         title = QLabel("账号中心")
         title.setObjectName("DialogTitle")
@@ -258,9 +267,11 @@ class LoginDialog(QDialog):
         self._set_status(self._th_status, f"无法检查登录状态：{message}", "error")
 
     def _treehole_login(self) -> None:
-        self._run_treehole(
-            lambda: self._auth.login(self._th_uid.text(), self._th_password.text())
-        )
+        uid, password = self._th_uid.text(), self._th_password.text()
+        # Remember the identity so it can be mirrored into secrets/pku/ if the
+        # login succeeds (same IAAA account the pku3b tools need).
+        self._pending_iaaa = (uid, password)
+        self._run_treehole(lambda: self._auth.login(uid, password))
 
     def _treehole_send_sms(self) -> None:
         self._run_treehole(self._auth.send_sms)
@@ -269,9 +280,15 @@ class LoginDialog(QDialog):
         self._run_treehole(lambda: self._auth.verify_sms(self._th_sms.text()))
 
     def _treehole_logout(self) -> None:
+        # 统一身份 covers both treehole and pku3b, so logging out drops the
+        # mirrored pku creds + cookie jar as well.
         self._store.clear_treehole()
-        self._set_status(self._th_status, "已退出树洞登录。", "error")
+        self._store.clear_pku()
+        self._pending_iaaa = None
+        self._set_status(self._th_status, "已退出统一身份登录。", "error")
         self._mark_changed(_TREEHOLE_KEY)
+        for key in _PKU_KEYS:
+            self._mark_changed(key)
 
     def _run_treehole(self, action: Callable[[], dict[str, object]]) -> None:
         self._set_treehole_busy(True)
@@ -291,8 +308,10 @@ class LoginDialog(QDialog):
         if data.get("ok"):
             self._set_status(self._th_status, str(data.get("message") or "操作完成"), "ok")
             self._mark_changed(_TREEHOLE_KEY)
+            self._mirror_iaaa_to_pku()
             self._refresh_treehole_status()
         else:
+            self._pending_iaaa = None
             message = str(data.get("message") or "操作失败")
             self._set_status(self._th_status, message, "error")
             QMessageBox.warning(self, "树洞登录", message)
@@ -300,8 +319,26 @@ class LoginDialog(QDialog):
     def _on_treehole_error(self, message: str) -> None:
         QApplication.restoreOverrideCursor()
         self._set_treehole_busy(False)
+        self._pending_iaaa = None
         self._set_status(self._th_status, message, "error")
         QMessageBox.warning(self, "树洞登录", message)
+
+    def _mirror_iaaa_to_pku(self) -> None:
+        """After a successful treehole login, provision the pku3b tools too.
+
+        Treehole and pku3b share one IAAA identity, so a single 统一身份 login
+        writes secrets/pku/{id,password} as well — no separate hand-placed file.
+        Only fires for a login (send/verify-SMS leave `_pending_iaaa` unset).
+        """
+        pending, self._pending_iaaa = self._pending_iaaa, None
+        if pending is None:
+            return
+        uid, password = pending
+        if not uid.strip() or not password:
+            return
+        self._store.save_pku(uid, password)
+        for key in _PKU_KEYS:
+            self._mark_changed(key)
 
     def _set_treehole_busy(self, busy: bool) -> None:
         for button in self._th_buttons:
