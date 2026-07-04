@@ -249,6 +249,7 @@ class MainWindow(QMainWindow):
             self._open_auto_refresh_settings
         )
         self._dashboard.treehole_settings_changed.connect(self._reconfigure_treehole_sync)
+        self._dashboard.model_config_changed.connect(self._on_model_config_changed)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._dashboard)
@@ -489,6 +490,60 @@ class MainWindow(QMainWindow):
         self._begin_new_session()
         self._chat_panel.add_system_message(f"已切换到 {label}，并开启新对话。")
         self.statusBar().showMessage(f"已切换到 {label}")
+
+    def _on_model_config_changed(self) -> None:
+        """Apply a 账号中心 → 模型配置 edit to the running chat brain, no restart.
+
+        The account dialog persists the new per-role endpoint / model / key and
+        emits the `models` sentinel; this rebuilds the *active* role's brain from
+        that on-disk config so the next turn uses it, and refreshes the switcher
+        + context meter. Unlike a manual switch it keeps the conversation — a
+        config edit on the same role is not a role swap. The exception is when
+        the active role just lost its key: it then falls back to a configured
+        role, which (like `_on_model_change`) resets the chat.
+        """
+        if self._effective_offline:
+            # Offline runs the Echo brain; there is no live model to rebuild.
+            # The edit is saved and takes effect on the next online launch.
+            self.statusBar().showMessage("模型配置已保存，将在联网启动后生效")
+            return
+        if self._busy:
+            # Never swap the brain under an in-flight turn (mirrors
+            # `_on_model_change`). The saved edit applies on the next switch /
+            # restart instead.
+            self.statusBar().showMessage("正在回答，模型配置将在切换模型或重启后生效")
+            return
+        new_labels = dict(available_chat_models(offline=False))
+        # Keep the active role if it still has a key, else fall back to a
+        # configured one so the chat always has a usable brain.
+        if self._model_key in new_labels:
+            target = self._model_key
+        elif DEFAULT_CHAT_MODEL in new_labels:
+            target = DEFAULT_CHAT_MODEL
+        else:
+            target = next(iter(new_labels), DEFAULT_CHAT_MODEL)
+        switched = target != self._model_key
+        try:
+            apply_chat_model(self._agent, target, offline=False)
+        except Exception as exc:  # noqa: BLE001 - keep the current brain, surface it
+            self._chat_panel.add_system_message(f"应用模型配置失败：{exc}")
+            return
+        self._model_labels = new_labels
+        self._model_key = target
+        self._chat_panel.set_models(list(new_labels.items()), target)
+        if switched:
+            # The previously-active role lost its key; a different brain resets.
+            self._begin_new_session()
+            label = new_labels.get(target, target)
+            self._chat_panel.add_system_message(
+                f"原模型配置已失效，已切换到 {label} 并开启新对话。"
+            )
+            self.statusBar().showMessage(f"已切换到 {label}")
+        else:
+            # Same role, new endpoint / model / key: keep history, refresh meter.
+            self._refresh_context_meter()
+            self._chat_panel.add_system_message("已更新模型配置并即时生效。")
+            self.statusBar().showMessage("模型配置已更新")
 
     def _on_open_history(self) -> None:
         if self._busy:

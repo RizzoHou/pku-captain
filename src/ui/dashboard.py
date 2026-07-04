@@ -110,6 +110,10 @@ class DashboardPanel(QWidget):
     # Emitted after the treehole dialog closes so the window can reconfigure the
     # auto-sync timer (notification enable/disable/interval may have changed).
     treehole_settings_changed = pyqtSignal()
+    # Emitted after the account dialog closes with model-role edits (the
+    # `models` sentinel) so the window can rebuild + apply the chat brain live,
+    # without a restart. The model roles carry no dashboard card of their own.
+    model_config_changed = pyqtSignal()
 
     def __init__(
         self,
@@ -512,11 +516,16 @@ class DashboardPanel(QWidget):
             on_close()
 
     def _on_credentials_changed(self, keys: list[str]) -> None:
-        """Refresh the cards whose backing credentials the account dialog
-        updated (treehole / P-Lib / the pku3b cards a 统一身份 login provisions).
-        Model changes carry no live card — the dialog already tells the user
-        they take effect after a restart. A proxy change (`network` sentinel)
-        affects every network card at once, so it re-polls all of them."""
+        """Route an account-dialog save to the right live refresh.
+
+        Credential cards (treehole / P-Lib / the pku3b cards a 统一身份 login
+        provisions) re-poll via `partial_refresh_requested`; a proxy change
+        (`network` sentinel) affects every network card at once, so it re-polls
+        all of them. A model-role edit (`models` sentinel) has no dashboard
+        card — it routes up via `model_config_changed` so the window rebuilds
+        and applies the chat brain immediately (no restart)."""
+        if "models" in keys:
+            self.model_config_changed.emit()
         live = ("treehole_updates", "plib_materials", "pku3b_assignments", "pku3b_announcements")
         scoped = list(live) if "network" in keys else [key for key in keys if key in live]
         if scoped:
