@@ -207,7 +207,12 @@ class CredentialStore:
         mode = str(raw.get("mode") or "")
         if mode not in PROXY_MODES:
             return ProxyConfig()
-        return ProxyConfig(mode=mode, url=str(raw.get("url") or "").strip())
+        url = str(raw.get("url") or "").strip()
+        if mode == "manual" and not url:
+            # A hand-edited manual entry with no URL would make apply_proxy
+            # raise inside build_agent; degrade like any other corrupt state.
+            return ProxyConfig()
+        return ProxyConfig(mode=mode, url=url)
 
     def save_proxy(self, config: ProxyConfig) -> None:
         """Persist the 网络代理 tab's choice into ``secrets/network.json``."""

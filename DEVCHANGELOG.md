@@ -6,7 +6,12 @@ The **development decision log** — why changes were made, not what shipped. Ma
 
 ---
 
-## 2026-07-04 — Fix 历史通知 detail "not found" (retry across all terms, degrade to stored fields)
+## 2026-07-04 — Merge review: worktree integration + proxy config hardening
+
+- **What**: reviewed and merged worktrees `fix-dean-history-notfound` + `network-proxy` into main (both green in isolation; merged main 422 tests + ruff + DeepSeek smoke green); review surfaced one gap, fixed in a follow-up commit — `CredentialStore.proxy()` returned a manual-mode config with an empty URL from a hand-edited `secrets/network.json`, which `apply_proxy` raises on inside `build_agent` → crash on launch.
+- **Decision — degrade in `proxy()`, not guard in `build_agent`**: the store's own contract is "any unreadable/unknown state → system default"; an empty-URL manual entry is such a state, so the guard belongs at the read (fixes every caller), not at one call site. The GUI already blocks saving it; only hand-edits hit this.
+- **Files**: `src/core/credentials.py`, `tests/test_network_config.py` (`test_manual_without_url_falls_back_to_system`).
+- **Verify**: n/a (hand-edited-file edge; pinned by the unit test).
 
 - **What**: clicking a 历史通知 row opened `AnnouncementDetailDialog` showing `announcement with id … not found`; panel 最近 rows worked. Root cause: the tool's detail mode resolves the id by filtering `list_announcements(all_term=False)` — the live current-term list — while 历史通知 persists every announcement ever seen (`data/announcement_history.json`), so any entry that rotated out of the term can never resolve (with spring term just over, that's essentially all of them).
 - **Decision — tool-side `all_term=True` retry, not dialog-side `all_term: true`**: the dialog could pass `all_term` on every detail call, but that forces the slow all-term crawl for every click including the fast panel path. Retrying inside the tool only on a current-term miss keeps the hot path fast and fixes every caller at once (the agent's detail mode benefits identically).

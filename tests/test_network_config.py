@@ -71,6 +71,15 @@ def test_save_rejects_unknown_mode(tmp_path) -> None:
         store.save_proxy(ProxyConfig(mode="socks-rocket"))
 
 
+def test_manual_without_url_falls_back_to_system(tmp_path) -> None:
+    # A hand-edited manual entry with no URL must degrade like corrupt state,
+    # not surface as a config apply_proxy would raise on inside build_agent.
+    store = CredentialStore(tmp_path / "secrets")
+    store.network_path.parent.mkdir(parents=True)
+    store.network_path.write_text('{"mode": "manual", "url": "  "}', encoding="utf-8")
+    assert store.proxy() == ProxyConfig()
+
+
 # -- URL normalisation --------------------------------------------------------
 
 
