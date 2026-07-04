@@ -10,7 +10,7 @@ governs *everything* — vendor included — is the process environment
 next call with no restart and no session rebuild.
 
 Three modes (persisted by ``CredentialStore.save_proxy`` in
-``secrets/network.json``, edited in the 账号中心 网络代理 tab):
+``secrets/network.json``, edited in the 设置 网络代理 tab):
 
 * ``system`` — leave the environment alone (whatever the shell / OS provides).
   This is today's behavior and the default.
@@ -88,7 +88,7 @@ def apply_proxy(config: ProxyConfig) -> None:
     """Point the process environment at the configured proxy mode.
 
     Idempotent and cheap; callers re-apply freely (bootstrap at startup, the
-    账号中心 tab on save). Requests made after this call follow the new mode.
+    设置 网络代理 tab on save). Requests made after this call follow the new mode.
     """
     global _original_env
     if _original_env is None:
