@@ -12,6 +12,7 @@ from pypku3b.errors import AuthError, NeedOTP
 
 from src.tools.pku3b_announcements import (
     PKU3bAnnouncementsTool,
+    _posted_at,
     _stable_id,
     _to_record,
 )
@@ -197,6 +198,53 @@ def test_announcement_detail_mode(tmp_path):
     assert ann["title"] == "期末通知"
     assert ann["posted_at"].startswith("2026年6月25日")
     assert ann["body"] == "第一行\n第二行"
+
+
+# The captain saw a 历史通知 whose 标题 was a body snippet and whose 发布时间 was
+# the *entire body* — pypku3b's no-h3 fallback branch puts the announcement body
+# in the time slot. _posted_at must reject that so the body never masquerades as
+# a posted time (the UI already omits 发布时间 when posted_at is falsy).
+_BODY_AS_TIME = (
+    "请组长以小组为单位，6月6日(周六)23:59前将下述大作业项目阶段性进展材料邮件"
+    "(录屏视频如过大，可以发送网盘链接)发送各自程设大作业小组负责助教:"
+)
+
+
+def test_posted_at_rejects_body_masquerading_as_time():
+    # Marker-less long free-text blob (the mis-parsed body) -> dropped.
+    assert _posted_at(_BODY_AS_TIME) is None
+    # Genuine 发布时间-marked line -> kept, label stripped.
+    assert _posted_at("发布时间: 2026年6月25日 星期四 下午10时12分24秒 CST").startswith(
+        "2026年6月25日"
+    )
+    # A short bare date line (no label) is a plausible time -> kept.
+    assert _posted_at("2026年6月1日") == "2026年6月1日"
+    # Empty / whitespace / None -> None.
+    assert _posted_at(None) is None
+    assert _posted_at("   ") is None
+
+
+def test_announcement_detail_drops_body_posted_time(tmp_path):
+    # A fallback-parsed announcement: 20-char snippet title, body dumped into
+    # posted_time, no real posted_date. Detail must NOT surface the body as time.
+    snippet_title = _BODY_AS_TIME[:20] + "..."
+    anns = [
+        _ann(1, "程序设计实习", snippet_title, "aaa",
+             posted=_BODY_AS_TIME, date=None, body=_BODY_AS_TIME),
+    ]
+    tool = PKU3bAnnouncementsTool(
+        secrets_dir=tmp_path, client_factory=_factory(FakeClient(announcements=anns))
+    )
+
+    detail = tool.invoke({"announcement_id": _stable_id(anns[0])})
+    assert detail.success
+    ann = detail.data["announcement"]
+    assert ann["posted_at"] is None  # body no longer leaks into 发布时间
+    assert ann["body"] == _BODY_AS_TIME  # body still available
+
+    listing = tool.invoke({})
+    assert listing.success
+    assert listing.data["announcements"][0]["posted_at"] is None
 
 
 def test_announcement_detail_not_found(tmp_path):

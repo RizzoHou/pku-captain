@@ -8,6 +8,19 @@ Human-executable verification steps. Maintained by the `verification` skill. The
 
 ## Pending verification
 
+### 2026-07-04 — 历史通知 detail no longer shows the body under 发布时间
+
+**Proves**: opening a history course notice whose body was leaking into its 发布时间 (the 标题/发布时间 "swap") now renders cleanly — no time line rather than the whole body under 发布时间.
+
+**Repro / steps (entry-mac, online)**:
+1. `python -m src --online` → 课程通知 card → 刷新 once → open **历史通知** → click **"【2026程设】大作业阶段性提交通知"** (or any notice that previously showed the body twice).
+2. **Expected**: the detail shows 标题 + 课程 + the body, and **no** `发布时间：<body>` line (a genuine dated notice still shows its real 发布时间). The body is no longer duplicated into the time field.
+3. Sanity: dated notices (e.g. ones that did show `发布时间：2026年…`) still show their real posted time — the fix only drops marker-less body blobs.
+
+**No data reset needed** — detail recomputes `posted_at` live from `posted_time`, so pulling the fix is sufficient.
+
+**Automated**: `pytest tests/test_pku3b_tools.py` (`test_posted_at_rejects_body_masquerading_as_time`, `test_announcement_detail_drops_body_posted_time`).
+
 ### 2026-07-04 — 今日简报 (morning briefing) removed
 
 **Proves**: the feature is gone from both the dashboard and the agent toolset, without breaking the dashboard header or the generic workflow mechanism.

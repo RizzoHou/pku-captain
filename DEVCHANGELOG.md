@@ -6,6 +6,15 @@ The **development decision log** — why changes were made, not what shipped. Ma
 
 ---
 
+## 2026-07-04 — 历史通知 detail: body leaking into 发布时间 (the "标题/发布时间 swap")
+
+- **What**: the captain saw a 历史通知 whose 发布时间 was the *entire body* and whose 标题 was a 20-char body snippet. Fixed by sanitizing `_posted_at` in `src/tools/pku3b_announcements.py`.
+- **Root cause (investigated, not assumed)**: pypku3b's `parse_announcements` (vendored `blackboard.py`) has two branches. The good one keys off `<h3>` and only lifts `time` from a sibling whose text contains `发布时间`. The **no-h3 fallback** branch instead sets `title = body[:20]+"…"` and `time = <first <p>>` — and for these title-less notices the first `<p>` *is the body*, so `posted_time` becomes the whole body. Our `_posted_at` only stripped a `发布时间:` prefix (absent here), so it surfaced the body verbatim as 发布时间.
+- **Decision — fix in the tool layer, not upstream**: the true root is pypku3b's fallback branch, but `vendor/` is a git subtree (editing it is clobbered on the next `subtree pull`, and the CLAUDE.md rule forbids it). An upstream fix + subtree-pull would also block the captain's entry-mac testing on a push to `RizzoHou/pypku3b`. The tool layer is exactly where we already normalize `posted_time`, so it's the natural seam. If pypku3b is ever revised, the upstream one-liner (`time = p_text if "发布时间" in p_text else ""`) is the deeper fix — noted for a future subtree pull.
+- **Decision — discriminate on the `发布时间` marker, not a length/heuristic pile**: genuine posted times *always* carry the `发布时间` marker (it's the exact condition under which the h3 branch assigns `time`), so requiring the marker is a necessary-and-sufficient test for a real pypku3b time given the current parser — no fragile length cutoffs. Kept one cheap bonus branch (accept a short, marker-less **bare date line** ≤40 chars matching `\d+年\d+月\d+日`) as insurance in case pypku3b ever emits a labelled-stripped date, without letting a long body blob through.
+- **Why no data reset**: the detail dialog calls the tool live and recomputes `posted_at` from `posted_time` each open, and `posted_date` was already correctly `None` for these rows — so pulling the fix is sufficient (unlike the id-stability fix, which needed `rm data/announcement_history.json`).
+- **Files**: `src/tools/pku3b_announcements.py` (`_posted_at` + a `_POSTED_DATE` regex), `tests/test_pku3b_tools.py` (unit + list/detail regression). 460 pass / 3 skip, ruff clean.
+
 ## 2026-07-04 — Five-request parallel worktree team (announcement date-drift fix · settings/dashboard chrome · chat copy · GUI test framework)
 
 - **What**: four Agent-Teams teammates in isolated worktrees with disjoint file ownership delivered five captain requests; integrated by merging the four branches onto `integration/dashboard-fixes` off `main` (458 tests + ruff green). Left as a branch for the captain to land (worktree session — no push to `main`).

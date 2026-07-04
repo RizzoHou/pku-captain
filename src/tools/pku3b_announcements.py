@@ -34,6 +34,9 @@ from .redact import redact
 
 _POSTED_PREFIX = re.compile(r"^\s*发布时间[:：]\s*")
 _WHITESPACE = re.compile(r"\s+")
+# pypku3b's day-granular 发布时间 shape (mirrors dates._DATE_RE): a bare posted
+# line without the 发布时间 label still looks like this.
+_POSTED_DATE = re.compile(r"\d+年\d+月\d+日")
 
 
 class PKU3bAnnouncementsTool(Tool):
@@ -192,10 +195,29 @@ class PKU3bAnnouncementsTool(Tool):
 
 
 def _posted_at(posted_time: str | None) -> str | None:
-    """Strip the leading ``发布时间:`` label from the raw posted-time string."""
+    """Cleaned 发布时间 display string, or ``None`` when the value isn't a time.
+
+    A genuine posted time always carries the ``发布时间`` marker — pypku3b's
+    h3-block parser only lifts a time from a ``发布时间``-bearing sibling. Its
+    *no-h3 fallback* branch, though, drops the announcement's first ``<p>`` (i.e.
+    the **body**) into the time slot, so a title-less/older announcement would
+    otherwise render its whole body as 发布时间 — the 标题/发布时间 "swap" the
+    captain reported (the title becomes a 20-char body snippet, the time becomes
+    the full body). Accept a value only when it carries the ``发布时间`` marker,
+    or is a short bare date line; never a marker-less free-text blob.
+    """
     if not posted_time:
         return None
-    return _POSTED_PREFIX.sub("", posted_time).strip() or None
+    cleaned = _POSTED_PREFIX.sub("", posted_time).strip()
+    if not cleaned:
+        return None
+    if "发布时间" in posted_time:
+        return cleaned
+    # Marker-less: only a short, date-shaped line is a plausible posted time; a
+    # long free-text blob is pypku3b's mis-parsed body — drop it.
+    if len(cleaned) <= 40 and _POSTED_DATE.search(cleaned):
+        return cleaned
+    return None
 
 
 def _stable_id(a: Any) -> str:
