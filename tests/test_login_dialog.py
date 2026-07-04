@@ -71,6 +71,36 @@ def test_models_tab_persists_both_roles_and_emits(app: QApplication, tmp_path) -
     assert emitted == [["models"]]
 
 
+def test_models_tab_context_window_unit_multiplies(app: QApplication, tmp_path) -> None:
+    # The 上下文长度 unit combo is input sugar: "256" on the 千 (k) unit persists
+    # a raw 256_000 token count. Storage stays token-based end to end.
+    store = CredentialStore(tmp_path / "secrets")
+    dialog = LoginDialog(store=store, auth=None, plib_tool=None, offline=True)
+
+    form = dialog._model_forms[0]  # text role
+    form._key_input.setText("text-key")
+    form._window_input.setText("256")
+    form._window_unit.setCurrentIndex(1)  # 千 (k)
+    dialog._save_models()
+
+    assert store.model("text").context_window == 256_000
+
+
+def test_models_tab_context_window_prefills_largest_unit(
+    app: QApplication, tmp_path
+) -> None:
+    # A stored 1_000_000 tokens round-trips as value=1 on the 百万 (m) unit, so
+    # a load->save cycle is stable rather than drifting to a bigger raw number.
+    store = CredentialStore(tmp_path / "secrets")
+    store.save_model("text", api_key="k", base_url="", model="", context_window=1_000_000)
+    dialog = LoginDialog(store=store, auth=None, plib_tool=None, offline=True)
+
+    form = dialog._model_forms[0]
+    assert form._window_input.text() == "1"
+    assert form._window_unit.currentData() == 1_000_000  # 百万 (m)
+    assert form._parsed_window() == 1_000_000
+
+
 def test_plib_tab_persists_and_validates(app: QApplication, tmp_path) -> None:
     store = CredentialStore(tmp_path / "secrets")
     tool = FakePlibTool()
