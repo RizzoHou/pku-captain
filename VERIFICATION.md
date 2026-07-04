@@ -8,13 +8,58 @@ Human-executable verification steps. Maintained by the `verification` skill. The
 
 ## Pending verification
 
+### 2026-07-04 — 今日简报 (morning briefing) removed
+
+**Proves**: the feature is gone from both the dashboard and the agent toolset, without breaking the dashboard header or the generic workflow mechanism.
+
+**Steps**:
+1. `[agent-run]` `pytest tests/` → **458 passed, 3 skipped**; `agent.workflows.all()` is now `{"hello"}` (asserted by `test_workflow_tool.py`).
+2. **Dashboard (offline or online)**: `python -m src` → the header has **no** 今日简报 button; the remaining header buttons (树洞 / 记忆 / 文档库 / 设置 …) are intact (grid reflowed, no gap); no console error on launch.
+3. **Agent**: ask Captain "给我今天的简报" → it answers by calling the underlying tools directly (there is no `morning_briefing` tool anymore) and does not crash.
+
+**Automated**: `pytest tests/test_workflow_tool.py` (registered workflows = `{"hello"}`; generic workflow-tool mechanism still covered).
+
+### 2026-07-04 — 账号中心 renamed to 设置 + context-length unit selector (token / k / m)
+
+**Proves**: the settings dialog is renamed 设置 (button + window title), and 上下文长度 now accepts a value in tokens / thousands / millions while still storing raw tokens.
+
+**Steps**:
+1. **Rename (offline GUI fine)**: `python -m src` → the dashboard header button reads **设置** (not 账号); clicking it opens a dialog titled **设置** with the four tabs (统一身份·树洞 / P-Lib / 模型配置 / 网络代理). The P-Lib/树洞 login *field* labels that say "账号" are unchanged (correct — those are field names).
+2. **Unit selector**: 设置 → 模型配置 → the 上下文长度 field has a unit dropdown → enter `256` + **千 (k)** → 保存模型配置 → confirm `secrets/models.json` `text` entry has `"context_window": 256000`. Enter `1` + **百万 (m)** → `1000000`.
+3. **Prefill round-trips**: reopen 设置 → a stored `1000000` shows unit **百万** / value **1** (load→save stable); a stored `500000` shows **千** / `500`.
+4. **Blank ⇒ default** still works (key omitted from `models.json`).
+
+**Automated**: `pytest tests/test_login_dialog.py` (`256` + k ⇒ `context_window=256000`; prefill picks the natural unit).
+
+### 2026-07-04 — chat model output is selectable and copyable
+
+**Proves**: users can select and copy Captain's chat answers (previously the bubble text was not selectable).
+
+**Steps**:
+1. **Select + copy (online or offline)**: send a message → drag-select the assistant reply text → right-click → **复制** (or Ctrl+C) → paste into another app → text matches. A link inside the reply still opens on click (selection didn't break links).
+2. **Streaming bubble**: text is selectable while/after it streams.
+3. **(optional, `math` extra installed)**: a LaTeX answer renders in the WebEngine view and its right-click menu now offers Copy.
+
+**Automated**: `pytest tests/test_chat_panel_copy.py` (finalized/streaming/user body carries `TextSelectableByMouse`; links stay accessible).
+
+### 2026-07-04 — headless GUI test framework (drive the real app like a person)
+
+**Proves**: the whole app is now drivable end-to-end headlessly — a real `MainWindow` with the three worker `QThread`s pumped — offline by default, with an opt-in online mode against real `secrets/`.
+
+**Steps**:
+1. `[agent-run]` `pytest tests/gui/` → the offline smoke test builds a full `MainWindow(offline=True)`, drives a real chat turn through the `AgentWorker` thread and a real dashboard refresh through `DashboardWorker`, asserting the rendered result; the online test auto-skips.
+2. **Opt-in online (real network + `secrets/`, entry-mac)**: `PKU_CAPTAIN_GUI_ONLINE=1 .venv/bin/pytest tests/gui/test_gui_online.py -s` → builds `MainWindow(offline=False)`, asserts it did **not** silently fall back to offline, drives a live turn + dashboard refresh. Costs tokens / hits the network (like the smoke scripts).
+3. **Extending**: `tests/gui/README.md` documents the drive→wait→assert recipe for adding a GUI test when a new feature ships.
+
+**Automated**: `pytest tests/gui/` (offline smoke; the online file is env-gated).
+
 ### 2026-07-04 — 模型配置 changes apply live on save (no restart)
 
-**Proves**: editing a model role in 账号中心 → 模型配置 and saving takes effect on the running chat immediately — no app restart (previously model edits only applied next launch).
+**Proves**: editing a model role in 设置 → 模型配置 and saving takes effect on the running chat immediately — no app restart (previously model edits only applied next launch).
 
 **Steps**:
 1. `[agent-run]` `pytest tests/` → **448 passed, 2 skipped** (new `test_model_live_apply.py`, 10 offscreen-Qt cases); `[agent-run]` `python scripts/smoke_deepseek.py` → **passed**.
-2. **Live apply (online)**: `python -m src --online`, send a chat message to confirm the current brain works → 账号 → 模型配置 → change 文本模型 模型名称 (or point 接口地址 at another OpenAI-compatible endpoint) → 保存模型配置 → close the dialog → expect a chat system note ("已更新模型配置…即时生效") and the header switcher + context meter refreshed. Send another message → expect it to use the new config **without restarting**.
+2. **Live apply (online)**: `python -m src --online`, send a chat message to confirm the current brain works → 设置 → 模型配置 → change 文本模型 模型名称 (or point 接口地址 at another OpenAI-compatible endpoint) → 保存模型配置 → close the dialog → expect a chat system note ("已更新模型配置…即时生效") and the header switcher + context meter refreshed. Send another message → expect it to use the new config **without restarting**.
 3. **Same-role edit keeps history**: after step 2's save, the prior conversation is still present (config swap, not a new session).
 4. **Newly-configured role appears**: with only 文本模型 configured, add a 视觉模型 key → save → expect 视觉模型 to appear in the header switcher without restart.
 5. **Lost-key fallback**: clear the *active* role's key → save → expect a clean fallback to a configured role (new session, mirroring a manual switch), not a crash.
@@ -29,7 +74,7 @@ Human-executable verification steps. Maintained by the `verification` skill. The
 
 **Steps**:
 1. `[agent-run]` `pytest tests/` → **448 passed, 2 skipped** (new `test_model_context_window.py`, 10 cases + credentials round-trip/back-compat); `[agent-run]` smoke → **passed** (context_usage window `1000000` = DeepSeek default when unset).
-2. **Set a window (offline GUI is fine)**: `python -m src` → 账号 → 模型配置 → set 文本模型 上下文长度 to `500000` → 保存模型配置 → confirm `secrets/models.json` `text` entry now has `"context_window": 500000`.
+2. **Set a window (offline GUI is fine)**: `python -m src` → 设置 → 模型配置 → set 文本模型 上下文长度 to `500000` → 保存模型配置 → confirm `secrets/models.json` `text` entry now has `"context_window": 500000`.
 3. **Meter reflects it (online)**: with 500000 saved, the header context meter denominator reads the configured window, not 1M. (`python -m src --online`; observe the context-usage meter — takes effect immediately thanks to the sibling live-apply change, else after restart.)
 4. **Blank ⇒ default**: clear the 上下文长度 field → save → confirm the key is omitted from `models.json` and the meter returns to the provider default (DeepSeek 1M / Kimi 256k).
 5. **Back-compat**: an existing `secrets/models.json` with only `{api_key,base_url,model}` (no `context_window`) still loads and uses the provider default (no crash, no migration).
@@ -37,18 +82,18 @@ Human-executable verification steps. Maintained by the `verification` skill. The
 
 **Automated**: `pytest tests/test_model_context_window.py tests/test_credentials.py` (`model()` round-trips a set window; blank/absent/invalid ⇒ None ⇒ ClassVar default; `_build_role_provider` threads it so a provider built with 500000 reports 500000; old 3-field JSON loads).
 
-### 2026-07-04 — 历史通知 detail via content-stable ids (supersedes the all-term-retry attempt)
+### 2026-07-04 — 历史通知 detail via date-free content-stable ids (supersedes the date-inclusive attempt)
 
-**Proves**: clicking a course notice in 历史通知 now shows its content instead of `announcement with id … not found`. The earlier all-term-retry fix could not work because the announcement id was **positional** (`content_hash(course_id, "{course_id}_{idx}")`) — any new/deleted/reordered notice shifted later ids, so the stored 历史通知 id matched nothing on re-list and no retry could recover a positional id. Fixed by deriving a **content-stable** id (course_id + title + date) in the tool layer, so a re-listed notice re-derives the same id.
+**Proves**: clicking a course notice in 历史通知 now shows its content instead of `announcement with id … not found`. Two earlier attempts failed: the all-term retry (the id was pypku3b's **positional** value, which shifts on any add/delete/reorder) and then a content hash over `(course_id, title, posted_date)` — which **still** failed in real use because pypku3b emits the 发布时间 for only ~half of announcements and the per-course scrape is TTL-cached ~1h, so store-time and show-time are different scrapes; the dated↔undated flip became a total hash mismatch (`announcement with id 7b1f39f01a937eb3 not found` — the captain's live repro). Fixed by deriving the id from **`(course_id, normalized_title)` only — no date** — so a re-listed notice always re-derives the same id.
 
 **Steps**:
-1. `[agent-run]` `pytest tests/` → **448 passed, 2 skipped** (adds reorder-then-resolve, content-determinism, undated-fallback, legacy dual-match cases).
-2. **One-time migration (do this first on entry-mac)**: `rm -f data/announcement_history.json` → drops rows carrying the old positional ids; they re-accumulate with stable ids on the next 课程通知 refresh. Without this, previously-seen rows keep the stale id and still miss.
+1. `[agent-run]` `pytest tests/` → **458 passed, 3 skipped** (adds the date-flip regression: list-with-date, then re-list undated / with a different date, still resolves — the case both prior fixes lacked; plus content-determinism, legacy dual-match, genuine-miss still errors).
+2. **One-time migration (do this first on entry-mac)**: `rm -f data/announcement_history.json` → drops rows carrying the old date-inclusive / positional ids; they re-accumulate with the new date-free id on the next 课程通知 refresh. Without this, previously-seen rows keep the stale id and still miss.
 3. **History detail (online, needs `secrets/pku/`)**: `python -m src --online`, wait for the 课程通知 card → refresh once so rows re-accumulate → click 历史通知 → pick the notice the bug reproduced on (【2026程设】大作业阶段性提交通知) → expect the detail window to load its body, with **no** `教学网详情获取失败` note.
 4. **Recent-card rows unchanged**: click a notice directly on the 课程通知 最近 list → detail loads, full body, as before.
-5. **Negative (residual, expected)**: a notice whose course rotated fully out of both current-term and all-term lists (教学网 no longer serves it) still shows the stored fields + a `（教学网详情获取失败：…）` note — not tool-layer-fixable.
+5. **Negative (residual, expected)**: a notice whose course rotated fully out of both current-term and all-term lists (教学网 no longer serves it) still shows the stored fields + a `（教学网详情获取失败：…）` note — not tool-layer-fixable. Also: two notices with the *same title in one course* now share an id (rare; the intermittent date didn't reliably distinguish them either).
 
-**Automated**: `pytest tests/test_pku3b_tools.py` (stable id is a pure function of content; a reordered notice resolves by stable id; a genuine miss still errors; a legacy positional id dual-matches when it hasn't drifted).
+**Automated**: `pytest tests/test_pku3b_tools.py` (stable id is a pure function of `(course_id, title)`; a notice re-listed with a *different or absent* date still resolves; a genuine miss still errors; a legacy positional id dual-matches when it hasn't drifted).
 
 ### 2026-07-04 — 网络代理 (proxy modes) in the 账号中心
 
@@ -57,11 +102,11 @@ Human-executable verification steps. Maintained by the `verification` skill. The
 **Steps**:
 1. `[agent-run]` `pytest tests/` → **419 passed, 2 skipped** (new `test_network_config.py` + 2 dialog tests); `ruff` clean; `python scripts/smoke_deepseek.py` → **passed** (proxy apply sits at the top of `build_agent`).
 2. `[agent-run]` Live mechanism probe on entry-mac (off-intranet, mihomo up): through `apply_proxy`, **manual** mode fetched intranet-only `https://pkuhub.cn` via `127.0.0.1:7890` → **HTTP 200**; **direct** mode → **ConnectTimeout** (correctly no proxy). Known upstream quirk: `course.pku.edu.cn` through this mihomo tunnel currently dies mid-TLS-handshake **even from `curl`** (`SSL_ERROR_SYSCALL`) — that's the proxy's routing, not the app; retest when the tunnel is healthy.
-3. **GUI tab**: `python -m src` (offline is fine) → 账号 → 网络代理 tab. Expect three radios (跟随系统代理 default-checked on first run), the 代理地址 field greyed out until 自定义代理 is selected. Select 自定义代理, enter `127.0.0.1:7890`, 保存代理设置 → expect status "已保存代理设置，立即生效。" and the field normalised to `http://127.0.0.1:7890`. Confirm `secrets/network.json` now holds `{"mode": "manual", "url": "http://127.0.0.1:7890"}`.
+3. **GUI tab**: `python -m src` (offline is fine) → 设置 → 网络代理 tab. Expect three radios (跟随系统代理 default-checked on first run), the 代理地址 field greyed out until 自定义代理 is selected. Select 自定义代理, enter `127.0.0.1:7890`, 保存代理设置 → expect status "已保存代理设置，立即生效。" and the field normalised to `http://127.0.0.1:7890`. Confirm `secrets/network.json` now holds `{"mode": "manual", "url": "http://127.0.0.1:7890"}`.
 4. **Manual mode end-to-end (entry-mac, off-intranet, hotspot + mihomo)**: `python -m src --online` with 自定义代理 `http://127.0.0.1:7890` saved → expect the P-Lib card (pkuhub.cn is intranet-only) to load real data, which is impossible without the proxy. Cards whose upstreams the tunnel currently breaks (see step 2) may still error — with a Chinese message, not a crash.
 5. **Immediate effect, no restart**: with the app running and P-Lib erroring under 直连, switch to 自定义代理 → save → the dashboard re-polls its network cards automatically (the `network` sentinel) → P-Lib card recovers without relaunching.
 6. **Direct mode isolation (the "SSL errors" scenario)**: turn the *system-level* proxy ON (mihomo global), then in-app select 直连（忽略系统代理） → save → on-intranet PKU cards must behave exactly like the proxy-less WiFi runs (the app no longer inherits the system proxy); off-intranet, intranet cards must fail with a clean Chinese error.
-7. **Persistence**: quit and relaunch → 账号 → 网络代理 still shows the saved mode + URL (the mode applies from startup via `build_agent`).
+7. **Persistence**: quit and relaunch → 设置 → 网络代理 still shows the saved mode + URL (the mode applies from startup via `build_agent`).
 8. **Known limit (expected, not a bug)**: the macOS 树洞消息通知 LaunchAgent daemon is a separate process and does **not** follow this setting.
 
 **Automated**: `pytest tests/test_network_config.py tests/test_login_dialog.py` (store round-trip + corrupt-file fallback, per-mode env application, system-mode snapshot restore, the pinned `requests` env-proxy behavior, `build_agent` wiring, tab persist/apply/emit + URL gating).
@@ -89,13 +134,13 @@ Human-executable verification steps. Maintained by the `verification` skill. The
 **Steps**:
 1. `[agent-run]` `pytest tests/` → **396 passed, 2 skipped** (adds `test_credentials.py`, `test_login_dialog.py`; updates bootstrap/gating/dialog suites).
 2. `[agent-run]` Real DeepSeek round-trip through the *new* construction path: `.venv/bin/python -c "from src.core import build_agent; a=build_agent(offline=False); print([e.payload.get('text') for e in a.turn('Reply with exactly: pong') if e.kind=='final'])"` → expect `['pong']` (proves `build_chat_llm` reads endpoint/model/key from `CredentialStore`, legacy `secrets/api_keys/deepseek_key.txt` honoured). Also `[agent-run]` `python scripts/smoke_deepseek.py` → **passed**.
-3. **First-run / offline (no `secrets/models.json`, no keys)**: `python -m src` → the chat shows a startup notice pointing to 账号 (「点击右上角『账号』…」) and does **not** crash. Click 账号 → the dialog opens (offline) with the 模型配置 tab editable.
-4. **Configure a model endpoint**: in 账号 → 模型配置, set the 文本模型 API 密钥 (leave 接口地址/模型名称 at their DeepSeek defaults) → 保存模型配置 → expect "已保存模型配置，重启应用后生效". Confirm `secrets/models.json` now exists with a `text` entry. Restart `python -m src --online` → chat works, header model switcher shows 文本模型 / 视觉模型 (not DeepSeek/Kimi).
+3. **First-run / offline (no `secrets/models.json`, no keys)**: `python -m src` → the chat shows a startup notice pointing to 账号 (「点击右上角『账号』…」) and does **not** crash. Click 设置 → the dialog opens (offline) with the 模型配置 tab editable.
+4. **Configure a model endpoint**: in 设置 → 模型配置, set the 文本模型 API 密钥 (leave 接口地址/模型名称 at their DeepSeek defaults) → 保存模型配置 → expect "已保存模型配置，重启应用后生效". Confirm `secrets/models.json` now exists with a `text` entry. Restart `python -m src --online` → chat works, header model switcher shows 文本模型 / 视觉模型 (not DeepSeek/Kimi).
 5. **Custom endpoint (optional)**: set 文本模型 接口地址 to an OpenAI-compatible proxy + its model name → save, restart → chat routes to that endpoint (DeepSeek/Kimi are only defaults).
-6. **P-Lib persistence fix**: 账号 → P-Lib, enter email+password → 保存并登录 → expect "登录成功并已保存凭据". **Quit and relaunch** `python -m src --online`, ask "P-Lib 今天还能下载几次？" → expect a quota number *without* re-entering credentials (old dialog lost them on restart; this is the fix). Confirm `secrets/plib/{email,password}` exist.
-7. **Treehole via account center (online)**: 账号 → 统一身份·树洞, enter 学号+密码 → 登录 → 发送验证码 → enter SMS → 完成验证 → expect "短信验证完成…". Then the dashboard 树洞 card populates. The 树洞新消息 dialog's 登录/管理 button opens the same account center (no inline login form remains).
+6. **P-Lib persistence fix**: 设置 → P-Lib, enter email+password → 保存并登录 → expect "登录成功并已保存凭据". **Quit and relaunch** `python -m src --online`, ask "P-Lib 今天还能下载几次？" → expect a quota number *without* re-entering credentials (old dialog lost them on restart; this is the fix). Confirm `secrets/plib/{email,password}` exist.
+7. **Treehole via account center (online)**: 设置 → 统一身份·树洞, enter 学号+密码 → 登录 → 发送验证码 → enter SMS → 完成验证 → expect "短信验证完成…". Then the dashboard 树洞 card populates. The 树洞新消息 dialog's 登录/管理 button opens the same account center (no inline login form remains).
 8. **Vision auto-switch still works**: on 文本模型, ask a 培养方案 question → expect "已自动切换到视觉模型并开启新对话" and a correct doc-read answer (role rename didn't break `VisionRouter`).
-9. **Negative**: offline, click 账号 → 统一身份 tab is disabled with a "需要在线模式" note; P-Lib save still writes creds (no crash, no validation).
+9. **Negative**: offline, click 设置 → 统一身份 tab is disabled with a "需要在线模式" note; P-Lib save still writes creds (no crash, no validation).
 
 **Automated**: `pytest tests/test_credentials.py tests/test_login_dialog.py tests/test_bootstrap_docbase.py tests/test_dashboard_gating.py` (store read/write/legacy-fallback/clear; dialog persist + emit + offline-disabled treehole; role-keyed model builders; account dialog opens offline un-gated).
 

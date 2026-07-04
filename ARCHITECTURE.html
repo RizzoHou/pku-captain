@@ -357,7 +357,7 @@
           <div class="box"><span class="tag">core/</span><span><b>Agent</b> (kernel + turn loop) · Conversation · MemoryStore · MemoryLearnService · SessionStore · SessionTitler · DashboardCache · VisionRouter · <b>CredentialStore</b> <span class="mono">(secrets/ writer + status)</span> · <b>network</b> <span class="mono">(ProxyConfig + apply_proxy — process-wide proxy env)</span></span></div>
           <div class="box"><span class="tag">llm/</span><span><b>LLMProvider</b> (ABC) → DeepSeekProvider · KimiProvider · EchoLLMProvider</span></div>
           <div class="box"><span class="tag">tools/</span><span><b>Tool</b> (ABC) + ToolRegistry → clock · memory · doc_base · pku3b* · plib · dean* · treehole* · calendar_reminder</span></div>
-          <div class="box"><span class="tag">workflows/</span><span><b>Workflow</b> (ABC) + WorkflowRegistry → MorningBriefing · Hello (+ WorkflowTool)</span></div>
+          <div class="box"><span class="tag">workflows/</span><span><b>Workflow</b> (ABC) + WorkflowRegistry → Hello (+ WorkflowTool)</span></div>
           <div class="box"><span class="tag">rag/</span><span><b>Source</b> (ABC) + SourceRegistry → DeanSource · CalendarSource <span class="mono">(Embedder/KB retired)</span></span></div>
         </div>
       </div>
@@ -405,7 +405,7 @@
             <td><code>workflows/base.py</code> <code>Workflow</code></td>
             <td><code>WorkflowRegistry</code></td>
             <td><code>HelloWorkflow</code> (<code>agent_callable=False</code>)</td>
-            <td><code>MorningBriefingWorkflow</code></td>
+            <td><em>none — MorningBriefing removed</em></td>
           </tr>
           <tr>
             <td>LLM</td>
