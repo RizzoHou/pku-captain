@@ -812,7 +812,9 @@ if _WEBENGINE_IMPORTED:
             self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             self.setMinimumHeight(self._MIN_HEIGHT)
             self.setFixedHeight(self._MIN_HEIGHT)
-            self.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
+            # DefaultContextMenu restores WebEngine's right-click "Copy" so the
+            # rendered LaTeX answer's text is selectable and copyable.
+            self.setContextMenuPolicy(Qt.ContextMenuPolicy.DefaultContextMenu)
             self.settings().setAttribute(
                 QWebEngineSettings.WebAttribute.ShowScrollBars,
                 False,
@@ -924,6 +926,13 @@ def _message_body_widget(
     label.setWordWrap(True)
     label.setOpenExternalLinks(False)
     label.linkActivated.connect(_open_external_url)
+    # Let the user drag-select and copy (right-click / Ctrl+C) the message text.
+    # OR-ing the flags in preserves link activation alongside text selection.
+    label.setTextInteractionFlags(
+        label.textInteractionFlags()
+        | Qt.TextInteractionFlag.TextSelectableByMouse
+        | Qt.TextInteractionFlag.TextSelectableByKeyboard
+    )
     label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
     return label
 
