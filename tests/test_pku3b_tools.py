@@ -247,24 +247,33 @@ def test_announcement_list_mode_never_retries_all_term(tmp_path):
 
 
 def test_announcement_stable_id_is_content_determined(tmp_path):
-    # Equal content (course_id/title/date) → equal id regardless of scrape
-    # position or pypku3b's positional a.id; different content → different id.
+    # Equal (course_id, title) → equal id regardless of scrape position or
+    # pypku3b's positional a.id; a different title → a different id.
     a1 = _ann(1, "程设", "期末通知", "pos-1", date="2026-06-25")
     a2 = _ann(7, "程设", "期末通知", "pos-2", date="2026-06-25")
     assert _to_record(a1)["id"] == _to_record(a2)["id"]
 
     other_title = _ann(1, "程设", "别的通知", "pos-3", date="2026-06-25")
-    other_date = _ann(1, "程设", "期末通知", "pos-4", date="2026-06-26")
     assert _to_record(a1)["id"] != _to_record(other_title)["id"]
-    assert _to_record(a1)["id"] != _to_record(other_date)["id"]
 
 
-def test_announcement_stable_id_undated_falls_back_to_course_title(tmp_path):
-    # Undated rows (body-snippet fallbacks) drop the date component but stay
-    # deterministic across scrapes.
-    u1 = _ann(1, "高数", "习题课调整通知", "pos-1")
-    u2 = _ann(5, "高数", "习题课调整通知", "pos-2")
-    assert _stable_id(u1) == _stable_id(u2)
+def test_announcement_stable_id_ignores_date_and_normalizes_title(tmp_path):
+    # posted_date is intermittent across scrapes, so it is NOT part of the id:
+    # the same (course_id, title) yields the same id whether the date is present,
+    # absent, or different between scrapes.
+    dated = _ann(1, "程设", "期末通知", "pos-1", date="2026-06-25")
+    other_date = _ann(1, "程设", "期末通知", "pos-2", date="2026-06-26")
+    no_date = _ann(1, "程设", "期末通知", "pos-3")
+    assert _stable_id(dated) == _stable_id(other_date) == _stable_id(no_date)
+
+    # Title whitespace is normalized (strip ends, collapse internal runs to one
+    # space) so trivial render differences don't flip the hash.
+    padded = _ann(1, "程设", "  期末通知 ", "pos-4")  # leading/trailing stripped
+    assert _stable_id(padded) == _stable_id(no_date)
+
+    one_space = _ann(1, "程设", "assignment 3 通知", "pos-5")
+    many_space = _ann(1, "程设", " assignment   3\t通知 ", "pos-6")  # runs collapse
+    assert _stable_id(one_space) == _stable_id(many_space)
 
 
 def test_announcement_detail_resolves_by_stable_id_after_reorder(tmp_path):
@@ -290,6 +299,37 @@ def test_announcement_detail_resolves_by_stable_id_after_reorder(tmp_path):
     assert ann["body"] == "考场安排如下"
     # detail echoes the same stable id the caller queried
     assert ann["id"] == stored_id
+
+
+def test_announcement_detail_resolves_across_date_drift(tmp_path):
+    # THE live bug this task fixes: pypku3b drops posted_date for ~half of
+    # announcements depending on how the page renders, and per-course scrape is
+    # TTL-cached, so the store-time scrape and a later show-time re-scrape are
+    # independent and can observe different dates. The id the dashboard stored
+    # (captured WITH a date) must still resolve to detail when the same
+    # announcement is re-listed WITHOUT a date, or with a different one. This
+    # fails under the old (course_id, title, date) hash and passes under the
+    # date-free hash.
+    dated = _ann(1, "程设", "期末考试地点通知", "pos-a",
+                 posted="发布时间: 2026年6月25日 星期四 下午10时12分24秒 CST",
+                 date="2026-06-25", body="考场安排如下")
+    stored_id = _to_record(dated)["id"]  # what the dashboard persisted earlier
+
+    drifts = [
+        _ann(3, "程设", "期末考试地点通知", "pos-b", body="考场安排如下"),  # date dropped
+        _ann(2, "程设", "期末考试地点通知", "pos-c",  # different date on re-scrape
+             date="2026-06-26", body="考场安排如下"),
+    ]
+    for variant in drifts:
+        tool = PKU3bAnnouncementsTool(
+            secrets_dir=tmp_path,
+            client_factory=_factory(FakeClient(announcements=[variant])),
+        )
+        result = tool.invoke({"announcement_id": stored_id})
+        assert result.success, f"date-drift variant {variant.posted_date!r} failed"
+        assert result.data["announcement"]["body"] == "考场安排如下"
+        # detail echoes the same stable id the caller queried
+        assert result.data["announcement"]["id"] == stored_id
 
 
 def test_announcement_detail_resolves_legacy_positional_id(tmp_path):
