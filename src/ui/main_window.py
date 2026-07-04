@@ -242,7 +242,6 @@ class MainWindow(QMainWindow):
         # Auto-switch to Kimi for doc/培养方案 questions asked while on DeepSeek
         # (it reads the page images DeepSeek can't). Heuristic, network-free.
         self._vision_router = VisionRouter()
-        self._dashboard.morning_briefing_requested.connect(self._run_morning_briefing)
         self._dashboard.refresh_requested.connect(self._refresh_dashboard)
         self._dashboard.partial_refresh_requested.connect(self._refresh_dashboard_subset)
         self._dashboard.auto_refresh_settings_requested.connect(
@@ -492,7 +491,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"已切换到 {label}")
 
     def _on_model_config_changed(self) -> None:
-        """Apply a 账号中心 → 模型配置 edit to the running chat brain, no restart.
+        """Apply a 设置 → 模型配置 edit to the running chat brain, no restart.
 
         The account dialog persists the new per-role endpoint / model / key and
         emits the `models` sentinel; this rebuilds the *active* role's brain from
@@ -844,32 +843,19 @@ class MainWindow(QMainWindow):
     def _on_treehole_sync_error(self, message: str) -> None:
         self._treehole_sync_busy = False
 
-    def _run_morning_briefing(self) -> None:
-        QMetaObject.invokeMethod(
-            self._workflow_worker,
-            "run_workflow",
-            Qt.ConnectionType.QueuedConnection,
-            Q_ARG(str, "morning_briefing"),
-            Q_ARG(dict, {}),
-        )
-
+    # Generic GUI workflow-launch handlers, wired to the retained WorkflowWorker.
+    # No workflow is launched via the button today (the morning briefing was
+    # removed), but the path stays functional for any future GUI workflow.
     def _on_workflow_started(self, name: str) -> None:
-        if name == "morning_briefing":
-            self._dashboard.set_briefing_busy(True)
-            self.statusBar().showMessage("正在生成今日简报...")
-            self._chat_panel.add_system_message("正在生成今日简报...")
+        self.statusBar().showMessage(f"正在运行 {name}...")
 
     def _on_workflow_finished(self, name: str, result: object) -> None:
-        if name == "morning_briefing":
-            self._dashboard.set_briefing_busy(False)
-            self._chat_panel.add_assistant_message(workflow_summary(result))
-            self.statusBar().showMessage("今日简报已生成")
+        self._chat_panel.add_assistant_message(workflow_summary(result))
+        self.statusBar().showMessage(f"{name} 已完成")
 
     def _on_workflow_error(self, name: str, message: str) -> None:
-        if name == "morning_briefing":
-            self._dashboard.set_briefing_busy(False)
-            self._chat_panel.add_system_message(f"今日简报失败：{message}")
-            self.statusBar().showMessage("今日简报失败")
+        self._chat_panel.add_system_message(f"{name} 失败：{message}")
+        self.statusBar().showMessage(f"{name} 失败")
 
     def closeEvent(self, event: object) -> None:  # noqa: N802 - Qt override name.
         self._auto_refresh_timer.stop()
@@ -930,7 +916,7 @@ def _format_dashboard_data(key: str, data: object) -> str:
 def _startup_diagnostics(*, offline: bool) -> str:
     missing: list[str] = []
     if not CredentialStore().is_model_configured("text"):
-        missing.append("文本模型：尚未配置 API 密钥（点击右上角『账号』→ 模型配置）")
+        missing.append("文本模型：尚未配置 API 密钥（点击右上角『设置』→ 模型配置）")
     if shutil.which("pku3b") is None and not _LOCAL_PKU3B.exists():
         missing.append("pku3b：未在 PATH 中找到")
     elif not _pku3b_configured():
@@ -942,7 +928,7 @@ def _startup_diagnostics(*, offline: bool) -> str:
         return ""
 
     prefix = (
-        "当前以离线模式运行。点击右上角『账号』即可登录北大统一身份、P-Lib 并配置对话模型。"
+        "当前以离线模式运行。点击右上角『设置』即可登录北大统一身份、P-Lib 并配置对话模型。"
         if offline
         else "在线依赖未完全就绪。"
     )

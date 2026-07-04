@@ -3,7 +3,7 @@
 Consolidates what used to be three scattered entry points (treehole IAAA+SMS
 buried in the messages dialog, a P-Lib dialog that never persisted, and no
 API-key entry at all) into a single tabbed dialog opened from the dashboard's
-『账号』button:
+『设置』button:
 
 * **统一身份 · 树洞** — IAAA ``学号``+密码 login then SMS verify, via the existing
   ``TreeholeAuthService`` (writes ``secrets/treehole/{id,password}`` + caches
@@ -35,6 +35,7 @@ from typing import Any
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QApplication,
+    QComboBox,
     QDialog,
     QFrame,
     QGridLayout,
@@ -78,6 +79,9 @@ _MODEL_ROLE_LABELS = (("text", "文本模型"), ("visual", "视觉模型"))
 class _ModelRoleForm(QGroupBox):
     """One role's editable API key / endpoint / model, prefilled from the store."""
 
+    # 上下文长度 input units: display label -> raw-token multiplier.
+    _WINDOW_UNITS = (("令牌", 1), ("千 (k)", 1_000), ("百万 (m)", 1_000_000))
+
     def __init__(self, role: str, label: str, store: CredentialStore) -> None:
         super().__init__(label)
         self._role = role
@@ -93,11 +97,16 @@ class _ModelRoleForm(QGroupBox):
         self._model_input = QLineEdit(cfg.model)
         self._model_input.setObjectName("TreeholeAuthInput")
         self._model_input.setPlaceholderText(model_default(role, "model"))
-        self._window_input = QLineEdit(
-            "" if cfg.context_window is None else str(cfg.context_window)
-        )
+        window_text, window_unit_index = self._display_window(cfg.context_window)
+        self._window_input = QLineEdit(window_text)
         self._window_input.setObjectName("TreeholeAuthInput")
         self._window_input.setPlaceholderText("留空使用默认")
+        # Unit multiplier for the raw token count (令牌 ×1 / 千 ×1k / 百万 ×1M).
+        # Storage stays raw tokens; the unit is input/display sugar only.
+        self._window_unit = QComboBox()
+        for label_text, factor in self._WINDOW_UNITS:
+            self._window_unit.addItem(label_text, factor)
+        self._window_unit.setCurrentIndex(window_unit_index)
 
         form = QGridLayout()
         form.setContentsMargins(0, 0, 0, 0)
@@ -110,7 +119,12 @@ class _ModelRoleForm(QGroupBox):
         form.addWidget(QLabel("模型名称"), 2, 0)
         form.addWidget(self._model_input, 2, 1)
         form.addWidget(QLabel("上下文长度"), 3, 0)
-        form.addWidget(self._window_input, 3, 1)
+        window_row = QHBoxLayout()
+        window_row.setContentsMargins(0, 0, 0, 0)
+        window_row.setSpacing(6)
+        window_row.addWidget(self._window_input, 1)
+        window_row.addWidget(self._window_unit)
+        form.addLayout(window_row, 3, 1)
         form.setColumnStretch(1, 1)
 
         layout = QVBoxLayout(self)
@@ -131,7 +145,11 @@ class _ModelRoleForm(QGroupBox):
         }
 
     def _parsed_window(self) -> int | None:
-        """The 上下文长度 field as a positive int, or None (blank/non-numeric)."""
+        """The 上下文长度 field as a positive raw-token count, or None.
+
+        Multiplies the entered number by the selected unit (令牌 ×1 / 千 ×1 000
+        / 百万 ×1 000 000); blank / non-numeric / <=0 -> None ("use default").
+        """
         text = self._window_input.text().strip()
         if not text:
             return None
@@ -139,7 +157,26 @@ class _ModelRoleForm(QGroupBox):
             value = int(text)
         except ValueError:
             return None
-        return value if value > 0 else None
+        if value <= 0:
+            return None
+        tokens = value * int(self._window_unit.currentData())
+        return tokens if tokens > 0 else None
+
+    @staticmethod
+    def _display_window(tokens: int | None) -> tuple[str, int]:
+        """Split a stored token count into (line-edit text, unit combo index).
+
+        Picks the largest exact unit so a load->save round-trip is stable:
+        exact multiple of 1 000 000 -> 百万, of 1 000 -> 千, else 令牌. Blank
+        (None) shows an empty field on the 令牌 unit.
+        """
+        if tokens is None or tokens <= 0:
+            return "", 0
+        if tokens % 1_000_000 == 0:
+            return str(tokens // 1_000_000), 2
+        if tokens % 1_000 == 0:
+            return str(tokens // 1_000), 1
+        return str(tokens), 0
 
     def has_key(self) -> bool:
         return bool(self._key_input.text().strip())
@@ -161,7 +198,7 @@ class LoginDialog(QDialog):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("账号中心")
+        self.setWindowTitle("设置")
         self.resize(600, 480)
         self._store = store or CredentialStore()
         self._auth = auth
@@ -178,7 +215,7 @@ class LoginDialog(QDialog):
         # persisted for pku3b). Set by `_treehole_login`, consumed on success.
         self._pending_iaaa: tuple[str, str] | None = None
 
-        title = QLabel("账号中心")
+        title = QLabel("设置")
         title.setObjectName("DialogTitle")
         subtitle = QLabel(
             "在这里集中管理北大统一身份（树洞）、P-Lib 图书账号、对话模型与网络代理。"
