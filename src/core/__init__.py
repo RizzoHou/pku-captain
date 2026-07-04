@@ -22,6 +22,7 @@ from .agent import Agent, AgentEvent
 from .conversation import Conversation
 from .credentials import CredentialStore, ModelConfig
 from .memory_learn import MemoryLearnResult, MemoryLearnService
+from .network import ProxyConfig, apply_proxy
 from .vision_router import VisionRouter
 
 if TYPE_CHECKING:
@@ -49,8 +50,10 @@ __all__ = [
     "ModelConfig",
     "MemoryLearnResult",
     "MemoryLearnService",
+    "ProxyConfig",
     "VisionRouter",
     "apply_chat_model",
+    "apply_proxy",
     "available_chat_models",
     "build_agent",
     "build_chat_llm",

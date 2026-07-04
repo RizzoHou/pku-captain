@@ -24,6 +24,10 @@ Two credential kinds live here:
   at any OpenAI-compatible endpoint; DeepSeek/Kimi are only the defaults. The
   legacy ``secrets/api_keys/<brand>_key.txt`` files are honoured as an
   ``api_key`` fallback so existing checkouts keep working with no migration.
+
+Plus one piece of per-machine network config in the same tree (not a
+credential, but the store stays the single ``secrets/`` writer): the proxy
+mode + URL for ``src.core.network.apply_proxy``, in ``secrets/network.json``.
 """
 
 from __future__ import annotations
@@ -31,6 +35,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+
+from .network import PROXY_MODES, ProxyConfig
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -94,6 +100,7 @@ class CredentialStore:
         self.plib_dir = self.secrets_dir / "plib"
         self.pku_dir = self.secrets_dir / "pku"
         self.models_path = self.secrets_dir / "models.json"
+        self.network_path = self.secrets_dir / "network.json"
 
     # -- small helpers ----------------------------------------------------
     @staticmethod
@@ -184,6 +191,37 @@ class CredentialStore:
             path = self.pku_dir / name
             if path.exists():
                 path.unlink()
+
+    # -- network proxy ------------------------------------------------------
+    def proxy(self) -> ProxyConfig:
+        """The saved proxy setting; any unreadable/unknown state → default
+        (`system`), so a corrupt file degrades to today's behavior."""
+        if not self.network_path.exists():
+            return ProxyConfig()
+        try:
+            raw = json.loads(self.network_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return ProxyConfig()
+        if not isinstance(raw, dict):
+            return ProxyConfig()
+        mode = str(raw.get("mode") or "")
+        if mode not in PROXY_MODES:
+            return ProxyConfig()
+        return ProxyConfig(mode=mode, url=str(raw.get("url") or "").strip())
+
+    def save_proxy(self, config: ProxyConfig) -> None:
+        """Persist the 网络代理 tab's choice into ``secrets/network.json``."""
+        if config.mode not in PROXY_MODES:
+            raise ValueError(f"unknown proxy mode: {config.mode!r}")
+        self.network_path.parent.mkdir(parents=True, exist_ok=True)
+        self.network_path.write_text(
+            json.dumps(
+                {"mode": config.mode, "url": config.url.strip()},
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
 
     # -- models -----------------------------------------------------------
     def _load_models(self) -> dict[str, dict[str, str]]:

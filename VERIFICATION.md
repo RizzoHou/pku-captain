@@ -20,6 +20,22 @@ Human-executable verification steps. Maintained by the `verification` skill. The
 
 **Automated**: `pytest tests/test_pku3b_tools.py tests/test_dashboard_dialogs.py` (detail mode retries `all_term=True` on a current-term miss and never double-fetches in list mode; the dialog degrades to stored fields on a failed fetch).
 
+### 2026-07-04 — 网络代理 (proxy modes) in the 账号中心
+
+**Proves**: the app's *entire* network path (教学网 / 树洞 / P-Lib / 教务 / 模型接口 — vendored libs included) follows one user-set proxy mode from the new 账号中心 fourth tab, immediately on save, independent of the macOS system proxy. Best exercised on entry-mac (mihomo on `127.0.0.1:7890`, off-intranet).
+
+**Steps**:
+1. `[agent-run]` `pytest tests/` → **419 passed, 2 skipped** (new `test_network_config.py` + 2 dialog tests); `ruff` clean; `python scripts/smoke_deepseek.py` → **passed** (proxy apply sits at the top of `build_agent`).
+2. `[agent-run]` Live mechanism probe on entry-mac (off-intranet, mihomo up): through `apply_proxy`, **manual** mode fetched intranet-only `https://pkuhub.cn` via `127.0.0.1:7890` → **HTTP 200**; **direct** mode → **ConnectTimeout** (correctly no proxy). Known upstream quirk: `course.pku.edu.cn` through this mihomo tunnel currently dies mid-TLS-handshake **even from `curl`** (`SSL_ERROR_SYSCALL`) — that's the proxy's routing, not the app; retest when the tunnel is healthy.
+3. **GUI tab**: `python -m src` (offline is fine) → 账号 → 网络代理 tab. Expect three radios (跟随系统代理 default-checked on first run), the 代理地址 field greyed out until 自定义代理 is selected. Select 自定义代理, enter `127.0.0.1:7890`, 保存代理设置 → expect status "已保存代理设置，立即生效。" and the field normalised to `http://127.0.0.1:7890`. Confirm `secrets/network.json` now holds `{"mode": "manual", "url": "http://127.0.0.1:7890"}`.
+4. **Manual mode end-to-end (entry-mac, off-intranet, hotspot + mihomo)**: `python -m src --online` with 自定义代理 `http://127.0.0.1:7890` saved → expect the P-Lib card (pkuhub.cn is intranet-only) to load real data, which is impossible without the proxy. Cards whose upstreams the tunnel currently breaks (see step 2) may still error — with a Chinese message, not a crash.
+5. **Immediate effect, no restart**: with the app running and P-Lib erroring under 直连, switch to 自定义代理 → save → the dashboard re-polls its network cards automatically (the `network` sentinel) → P-Lib card recovers without relaunching.
+6. **Direct mode isolation (the "SSL errors" scenario)**: turn the *system-level* proxy ON (mihomo global), then in-app select 直连（忽略系统代理） → save → on-intranet PKU cards must behave exactly like the proxy-less WiFi runs (the app no longer inherits the system proxy); off-intranet, intranet cards must fail with a clean Chinese error.
+7. **Persistence**: quit and relaunch → 账号 → 网络代理 still shows the saved mode + URL (the mode applies from startup via `build_agent`).
+8. **Known limit (expected, not a bug)**: the macOS 树洞消息通知 LaunchAgent daemon is a separate process and does **not** follow this setting.
+
+**Automated**: `pytest tests/test_network_config.py tests/test_login_dialog.py` (store round-trip + corrupt-file fallback, per-mode env application, system-mode snapshot restore, the pinned `requests` env-proxy behavior, `build_agent` wiring, tab persist/apply/emit + URL gating).
+
 ### 2026-07-03 — pku3b reimplemented as in-process `pypku3b` (no external binary)
 
 **Proves**: the captain reads 作业/公告/课表/身份 from PKU 教学网 + 门户 entirely in-process via the vendored `pypku3b`, with **no `pku3b` Rust binary** and no behavior change to the dashboard/agent — driven from `secrets/pku/{id,password}`.

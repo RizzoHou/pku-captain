@@ -515,9 +515,10 @@ class DashboardPanel(QWidget):
         """Refresh the cards whose backing credentials the account dialog
         updated (treehole / P-Lib / the pku3b cards a 统一身份 login provisions).
         Model changes carry no live card — the dialog already tells the user
-        they take effect after a restart."""
+        they take effect after a restart. A proxy change (`network` sentinel)
+        affects every network card at once, so it re-polls all of them."""
         live = ("treehole_updates", "plib_materials", "pku3b_assignments", "pku3b_announcements")
-        scoped = [key for key in keys if key in live]
+        scoped = list(live) if "network" in keys else [key for key in keys if key in live]
         if scoped:
             self.partial_refresh_requested.emit(scoped)
 

@@ -2,11 +2,12 @@
 
 ## 账号中心（推荐）
 
-发布版不再要求手动往 `secrets/` 里放文件。启动 GUI 后点击仪表盘右上角 **「账号」** 打开统一的账号中心，三个标签页集中管理全部凭据，写入下方的 `secrets/` 布局：
+发布版不再要求手动往 `secrets/` 里放文件。启动 GUI 后点击仪表盘右上角 **「账号」** 打开统一的账号中心，四个标签页集中管理全部凭据与网络设置，写入下方的 `secrets/` 布局：
 
 - **统一身份 · 树洞** —— 北大 IAAA `学号`+密码 登录后完成一次短信验证（需在线模式；写入 `secrets/treehole/{id,password}` 并缓存 `session.json`）。登录成功后会**顺带把同一 IAAA 身份写入 `secrets/pku/{id,password}`**，因此这一次登录同时打通了 pku3b（作业/公告/课表/身份）——无需再手动放 `secrets/pku/` 文件。退出登录会同时清除树洞与 pku 两处凭据（含 `secrets/pku/cookies.json`）。
 - **P-Lib 图书** —— 邮箱+密码，保存即持久化到 `secrets/plib/{email,password}`（旧版登录框只校验、不落盘，重启即失效，现已修复）。
 - **模型配置** —— 对话模型按 **文本模型 / 视觉模型** 两个角色配置，各含 API 密钥、接口地址、模型名称。DeepSeek / Kimi 只是默认值，可改为任意 OpenAI 兼容端点；保存到 `secrets/models.json`，**重启应用后生效**。
+- **网络代理** —— 应用级代理开关，作用于全部网络访问（教学网 / 树洞 / P-Lib / 教务 / 模型接口）：**跟随系统代理**（默认）、**直连**（忽略系统代理）、**自定义代理**（如校外经本机 Clash / mihomo 访问校内资源时填 `http://127.0.0.1:7890`）。保存到 `secrets/network.json`，**保存后立即生效**，无需重启。注意：macOS 树洞通知的 LaunchAgent 守护进程是独立进程，不跟随此设置。
 
 离线启动也可打开账号中心录入以上凭据（树洞短信验证与 P-Lib 在线校验除外），下次以 `--online` 启动即生效。
 
@@ -17,6 +18,7 @@
 ```
 secrets/
   models.json            # 对话模型配置：{"text": {...}, "visual": {...}}，每项含 api_key / base_url / model
+  network.json           # 网络代理设置：{"mode": "system|direct|manual", "url": "http://127.0.0.1:7890"}（可选，缺省=跟随系统）
   api_keys/
     deepseek_key.txt     # 兼容回退 —— 文本模型缺 api_key 时读取（旧布局）
     kimi_key.txt         # 兼容回退 —— 视觉模型缺 api_key 时读取（旧布局）

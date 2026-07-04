@@ -14,6 +14,17 @@ The **development decision log** — why changes were made, not what shipped. Ma
 - **Files**: `src/tools/pku3b_announcements.py`, `src/ui/dashboard.py`, `tests/test_pku3b_tools.py`, `tests/test_dashboard_dialogs.py`, `CHANGELOG.md`. 406 tests pass, ruff clean; no `core`/`llm`/wire-format change, so no smoke run.
 - **Verify**: VERIFICATION.md "历史通知 detail resolves across terms".
 
+## 2026-07-04 — GUI-configurable network proxy (账号中心 网络代理 tab)
+
+- **What**: new `src/core/network.py` (`ProxyConfig` + `apply_proxy()`), `CredentialStore.proxy()/save_proxy()` over `secrets/network.json`, a fourth 账号中心 tab (跟随系统 / 直连 / 自定义 URL), `apply_proxy` at the top of `build_agent()` and on tab save, and a `network` sentinel that re-polls all live dashboard cards. Requested by the captain after proxied entry-mac runs kept failing with SSL errors while direct intranet runs worked.
+- **Decision — process env vars over per-session `proxies=`**: all network I/O (vendored `pypku3b`/`plib_cli`/`treehole`/`dean` + both LLM providers) is `requests` with default `trust_env` and no own proxy handling, so the env is the only lever that reaches vendored sessions without editing `vendor/`; `requests` re-reads it per request, so a GUI save takes effect immediately with no restart and no session rebuild.
+- **Decision — tri-state over an on/off checkbox**: the captain's failure matrix is exactly the macOS system-proxy interplay (system Clash on/off × hotspot/intranet), so `direct` (ignore even the OS proxy) is a distinct, needed state, and `system` keeps today's behavior as the default (no migration).
+- **Decision — `gopher_proxy` decoy for direct mode**: with an empty proxy env, macOS urllib falls back to SystemConfiguration proxies (`getproxies_macosx_sysconf`), so deleting vars can't isolate the app; a decoy entry makes `getproxies_environment()` non-empty (authoritative, http/https absent) and routes `proxy_bypass` through the env path where `no_proxy="*"` is honoured. Pinned by a test on `requests.utils.get_environ_proxies`.
+- **Decision — config lives in `CredentialStore`**: not a credential, but the store must stay the single `secrets/` writer (CLAUDE.md invariant); a second writer for one JSON file wasn't worth breaking that.
+- **Diagnosis note**: the historical proxied SSL errors reproduce with `curl` through the same mihomo tunnel for `course.pku.edu.cn` (`SSL_ERROR_SYSCALL`) — an upstream/routing problem in the proxy, not an app defect; `pkuhub.cn` works through the same tunnel from both curl and the app path.
+- **Files**: `src/core/network.py` (new), `src/core/{credentials,bootstrap,__init__}.py`, `src/ui/{login_dialog,dashboard}.py`, `tests/test_network_config.py` (new), `tests/test_login_dialog.py`, `docs/setup_zh.md`, `CHANGELOG.md`.
+- **Verify**: VERIFICATION.md "网络代理 (proxy modes)"; 419 pytest + ruff + DeepSeek smoke green; live entry-mac probe — manual→`pkuhub.cn` HTTP 200 through `127.0.0.1:7890`, direct→correctly unreachable off-intranet.
+
 ## 2026-07-04 — Mirror the 统一身份 login into `secrets/pku/` so one IAAA login provisions pku3b
 
 - **What**: the 账号中心's 统一身份·树洞 tab now writes `secrets/pku/{id,password}` (via new `CredentialStore.save_pku`) on a successful treehole login, in addition to `secrets/treehole/`; 退出登录 clears both areas (+ `secrets/pku/cookies.json`). Added `pku`/`has_pku`/`clear_pku` to the store, a `_pending_iaaa` capture + `_mirror_iaaa_to_pku` in the dialog, and extended the dashboard's post-login refresh scope to the two pku3b cards.
