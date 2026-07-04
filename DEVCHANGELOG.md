@@ -6,6 +6,22 @@ The **development decision log** — why changes were made, not what shipped. Ma
 
 ---
 
+## 2026-07-04 — Three-fix parallel worktree team (stable announcement ids · live model apply · context length)
+
+- **What**: ran three Agent-Teams teammates in isolated worktrees with disjoint file ownership, integrated by cherry-picking each code commit onto main (448 tests + ruff + DeepSeek smoke green).
+- **Decision — split so the two model-config tasks never share a file**: live-apply and context-length both centre on the 模型配置 tab; kept them parallel by giving live-apply only `dashboard.py`/`main_window.py` (it rides the already-emitted `"models"` sentinel) and context-length only `login_dialog.py` + the credentials/bootstrap/provider plumbing — so `login_dialog.py`, the one would-be conflict file, is owned solely by context-length.
+- **Decision — cherry-pick code commits, not merge branches**: each teammate also committed its `claude_tasks/NN.md` brief, and `claude_tasks/` isn't gitignored at the base commit, so merging would drag briefs onto main; cherry-picking the feature commit and skipping the brief-doc commit keeps main clean.
+
+- **What**: 历史通知 detail `announcement with id … not found` — fixed by deriving a content-stable announcement id in `pku3b_announcements.py`.
+- **Decision — content-stable id over the earlier all-term retry**: the id was pypku3b's **positional** `content_hash(course_id, "{course_id}_{idx}")`, so any new/deleted/reordered notice shifts later ids — no re-list or all-term crawl can recover a positional id (why the 1d0ba31 fix failed in real testing). Deriving it from `(course_id, title, date)` makes a re-listed notice re-derive the same id; kept a dual-match (`{stable_id, positional_id}`) so legacy history rows that haven't drifted still resolve.
+- **Decision — tool-layer only, no `vendor/` and no `dashboard.py`**: fixing pypku3b's id upstream would edit the vendored subtree (clobbered on next pull); overloading the tool's exposed `id` with the stable value means the GUI passes it blindly and needs no change — which also kept this task disjoint from the live-apply task. Residual: a course rotated fully out of all terms still can't be fetched (documented, not tool-fixable).
+
+- **What**: model-config edits now apply to the running chat on save (live-apply); context window is user-settable per role.
+- **Decision — route the existing `"models"` sentinel up, don't reset the chat**: `_on_credentials_changed` already received `"models"` (it was dropped); a new `DashboardPanel.model_config_changed` → `MainWindow._on_model_config_changed` rebuilds the brain via `apply_chat_model` and refreshes switcher/meter, keeping the conversation for a same-role edit (falls back + resets only if the active role lost its key), guarding `self._busy` to never swap mid-turn.
+- **Decision — context_window as an instance attr shadowing the `ClassVar`**: providers hardcode `context_window` as a class constant; an optional ctor param that sets `self.context_window` only when positive keeps the default path untouched (blank/invalid ⇒ ClassVar) and additive (no wire-path change), threaded `models.json → ModelConfig → _build_role_provider → provider`.
+- **Files**: `src/tools/pku3b_announcements.py`, `src/ui/{dashboard,main_window,login_dialog}.py`, `src/core/{credentials,bootstrap}.py`, `src/llm/{base,deepseek,kimi}.py`, tests.
+- **Verify**: VERIFICATION.md three 2026-07-04 entries (历史通知 content-stable ids; 模型配置 live apply; per-role context length).
+
 ## 2026-07-04 — Merge review: worktree integration + proxy config hardening
 
 - **What**: reviewed and merged worktrees `fix-dean-history-notfound` + `network-proxy` into main (both green in isolation; merged main 422 tests + ruff + DeepSeek smoke green); review surfaced one gap, fixed in a follow-up commit — `CredentialStore.proxy()` returned a manual-mode config with an empty URL from a hand-edited `secrets/network.json`, which `apply_proxy` raises on inside `build_agent` → crash on launch.

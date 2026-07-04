@@ -8,17 +8,47 @@ Human-executable verification steps. Maintained by the `verification` skill. The
 
 ## Pending verification
 
-### 2026-07-04 — 历史通知 detail resolves across terms
+### 2026-07-04 — 模型配置 changes apply live on save (no restart)
 
-**Proves**: clicking a course notice in 历史通知 now shows its full content instead of `announcement with id … not found` — the detail lookup retries across all terms when the notice is no longer in the current-term list, and a notice deleted from 教学网 entirely degrades to the stored row fields (title/course/date + failure reason) instead of a bare red error.
+**Proves**: editing a model role in 账号中心 → 模型配置 and saving takes effect on the running chat immediately — no app restart (previously model edits only applied next launch).
 
 **Steps**:
-1. `[agent-run]` `pytest tests/` → **406 passed, 2 skipped** (adds the all-term retry + dialog fallback tests).
-2. **History detail (online, needs `secrets/pku/`)**: `python -m src --online`, wait for the 课程通知 card, click 历史通知 → pick a notice from **last term** (an old date, ideally one whose course is no longer this term's) → expect the detail window to load the notice's **full body text** (first such click may take noticeably longer — it crawls all terms once; later clicks are cached).
-3. **Panel rows unchanged**: click a notice directly on the 课程通知 card (最近 list) → detail loads fast, full body, as before.
-4. **Negative (residual failure)**: with the network cut (or for a notice removed from 教学网), open a 历史通知 detail → expect the window to show 标题/课程/发布时间 from the stored history plus a parenthesized `（教学网详情获取失败：…）` note — **not** a bare red "not found" error.
+1. `[agent-run]` `pytest tests/` → **448 passed, 2 skipped** (new `test_model_live_apply.py`, 10 offscreen-Qt cases); `[agent-run]` `python scripts/smoke_deepseek.py` → **passed**.
+2. **Live apply (online)**: `python -m src --online`, send a chat message to confirm the current brain works → 账号 → 模型配置 → change 文本模型 模型名称 (or point 接口地址 at another OpenAI-compatible endpoint) → 保存模型配置 → close the dialog → expect a chat system note ("已更新模型配置…即时生效") and the header switcher + context meter refreshed. Send another message → expect it to use the new config **without restarting**.
+3. **Same-role edit keeps history**: after step 2's save, the prior conversation is still present (config swap, not a new session).
+4. **Newly-configured role appears**: with only 文本模型 configured, add a 视觉模型 key → save → expect 视觉模型 to appear in the header switcher without restart.
+5. **Lost-key fallback**: clear the *active* role's key → save → expect a clean fallback to a configured role (new session, mirroring a manual switch), not a crash.
+6. **No mid-turn swap**: while a turn is streaming, save a model change → expect the swap deferred/skipped (no mid-turn brain swap), no crash.
+7. **Offline**: `python -m src` (offline), save a model change → no crash (no-op apply).
 
-**Automated**: `pytest tests/test_pku3b_tools.py tests/test_dashboard_dialogs.py` (detail mode retries `all_term=True` on a current-term miss and never double-fetches in list mode; the dialog degrades to stored fields on a failed fetch).
+**Automated**: `pytest tests/test_model_live_apply.py` (the `"models"` sentinel emits the new signal; non-models keys don't; busy guard; offline no-op; lost-key fallback+reset; apply-failure keeps the current brain; end-to-end signal→slot).
+
+### 2026-07-04 — user-configurable per-role context length
+
+**Proves**: each chat role's context window is now user-settable in 模型配置 (not hardcoded per provider), so a custom model/endpoint drives the right context-meter size and budget estimate; blank keeps the provider default.
+
+**Steps**:
+1. `[agent-run]` `pytest tests/` → **448 passed, 2 skipped** (new `test_model_context_window.py`, 10 cases + credentials round-trip/back-compat); `[agent-run]` smoke → **passed** (context_usage window `1000000` = DeepSeek default when unset).
+2. **Set a window (offline GUI is fine)**: `python -m src` → 账号 → 模型配置 → set 文本模型 上下文长度 to `500000` → 保存模型配置 → confirm `secrets/models.json` `text` entry now has `"context_window": 500000`.
+3. **Meter reflects it (online)**: with 500000 saved, the header context meter denominator reads the configured window, not 1M. (`python -m src --online`; observe the context-usage meter — takes effect immediately thanks to the sibling live-apply change, else after restart.)
+4. **Blank ⇒ default**: clear the 上下文长度 field → save → confirm the key is omitted from `models.json` and the meter returns to the provider default (DeepSeek 1M / Kimi 256k).
+5. **Back-compat**: an existing `secrets/models.json` with only `{api_key,base_url,model}` (no `context_window`) still loads and uses the provider default (no crash, no migration).
+6. **Invalid input tolerated**: type non-numeric text in 上下文长度 → save → treated as unset (default), no error/crash.
+
+**Automated**: `pytest tests/test_model_context_window.py tests/test_credentials.py` (`model()` round-trips a set window; blank/absent/invalid ⇒ None ⇒ ClassVar default; `_build_role_provider` threads it so a provider built with 500000 reports 500000; old 3-field JSON loads).
+
+### 2026-07-04 — 历史通知 detail via content-stable ids (supersedes the all-term-retry attempt)
+
+**Proves**: clicking a course notice in 历史通知 now shows its content instead of `announcement with id … not found`. The earlier all-term-retry fix could not work because the announcement id was **positional** (`content_hash(course_id, "{course_id}_{idx}")`) — any new/deleted/reordered notice shifted later ids, so the stored 历史通知 id matched nothing on re-list and no retry could recover a positional id. Fixed by deriving a **content-stable** id (course_id + title + date) in the tool layer, so a re-listed notice re-derives the same id.
+
+**Steps**:
+1. `[agent-run]` `pytest tests/` → **448 passed, 2 skipped** (adds reorder-then-resolve, content-determinism, undated-fallback, legacy dual-match cases).
+2. **One-time migration (do this first on entry-mac)**: `rm -f data/announcement_history.json` → drops rows carrying the old positional ids; they re-accumulate with stable ids on the next 课程通知 refresh. Without this, previously-seen rows keep the stale id and still miss.
+3. **History detail (online, needs `secrets/pku/`)**: `python -m src --online`, wait for the 课程通知 card → refresh once so rows re-accumulate → click 历史通知 → pick the notice the bug reproduced on (【2026程设】大作业阶段性提交通知) → expect the detail window to load its body, with **no** `教学网详情获取失败` note.
+4. **Recent-card rows unchanged**: click a notice directly on the 课程通知 最近 list → detail loads, full body, as before.
+5. **Negative (residual, expected)**: a notice whose course rotated fully out of both current-term and all-term lists (教学网 no longer serves it) still shows the stored fields + a `（教学网详情获取失败：…）` note — not tool-layer-fixable.
+
+**Automated**: `pytest tests/test_pku3b_tools.py` (stable id is a pure function of content; a reordered notice resolves by stable id; a genuine miss still errors; a legacy positional id dual-matches when it hasn't drifted).
 
 ### 2026-07-04 — 网络代理 (proxy modes) in the 账号中心
 
@@ -70,6 +100,8 @@ Human-executable verification steps. Maintained by the `verification` skill. The
 **Automated**: `pytest tests/test_credentials.py tests/test_login_dialog.py tests/test_bootstrap_docbase.py tests/test_dashboard_gating.py` (store read/write/legacy-fallback/clear; dialog persist + emit + offline-disabled treehole; role-keyed model builders; account dialog opens offline un-gated).
 
 ---
+
+## Verified
 
 ### 2026-07-01 — Vendored plib/dean/treehole in-process (no subprocess)
 
@@ -129,9 +161,3 @@ Human-executable verification steps. Maintained by the `verification` skill. The
 3. Regression confirm the fix end-to-end: after exercising a *failed* P-Lib / treehole call online, re-run steps 1–2 — expect no credential in `data/sessions/` and `***REDACTED***` where the error would have shown it.
 
 **Automated**: `pytest tests/test_redact.py` (the `redact()` helper + `PLibMaterialsTool` and `TreeholeAuthService` boundaries strip a known secret from a synthetic error).
-
----
-
-## Verified
-
-_(empty — entries land here once the architect signs off)_
