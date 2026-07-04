@@ -106,7 +106,9 @@ class LLMProvider(ABC):
     name: ClassVar[str]
     # Maximum tokens the model accepts in one request (prompt + completion).
     # Drives the GUI's context-usage meter; subclasses override with the real
-    # window of their default model. Conservative generic default.
+    # window of their default model. Conservative generic default. A subclass
+    # may also set an *instance* attribute of the same name (from a
+    # user-configured window) — it shadows this ClassVar for that instance.
     context_window: ClassVar[int] = 128_000
 
     @abstractmethod

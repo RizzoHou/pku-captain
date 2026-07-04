@@ -63,6 +63,7 @@ class KimiProvider(LLMProvider):
         base_url: str = "https://api.moonshot.cn/v1",
         timeout: float = 120.0,
         thinking: bool = True,
+        context_window: int | None = None,
     ) -> None:
         if not api_key:
             raise ValueError("api_key is required")
@@ -71,6 +72,10 @@ class KimiProvider(LLMProvider):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.thinking = thinking
+        # A user-configured window (positive int) shadows the ClassVar default;
+        # blank/None keeps the built-in 256k so the meter matches Kimi K2.6.
+        if context_window is not None and context_window > 0:
+            self.context_window = int(context_window)
 
     def _build_body(
         self,

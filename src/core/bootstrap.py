@@ -89,9 +89,17 @@ def _store() -> CredentialStore:
 def _build_role_provider(cfg: ModelConfig, provider: str) -> LLMProvider:
     """Instantiate the provider class for a role from its resolved config."""
     if provider == "kimi":
-        return KimiProvider(api_key=cfg.api_key, model=cfg.model, base_url=cfg.base_url)
+        return KimiProvider(
+            api_key=cfg.api_key,
+            model=cfg.model,
+            base_url=cfg.base_url,
+            context_window=cfg.context_window,
+        )
     return DeepSeekProvider(
-        api_key=cfg.api_key, model=cfg.model, base_url=cfg.base_url
+        api_key=cfg.api_key,
+        model=cfg.model,
+        base_url=cfg.base_url,
+        context_window=cfg.context_window,
     )
 
 _SYSTEM_PROMPT = (

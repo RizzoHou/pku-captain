@@ -93,6 +93,11 @@ class _ModelRoleForm(QGroupBox):
         self._model_input = QLineEdit(cfg.model)
         self._model_input.setObjectName("TreeholeAuthInput")
         self._model_input.setPlaceholderText(model_default(role, "model"))
+        self._window_input = QLineEdit(
+            "" if cfg.context_window is None else str(cfg.context_window)
+        )
+        self._window_input.setObjectName("TreeholeAuthInput")
+        self._window_input.setPlaceholderText("留空使用默认")
 
         form = QGridLayout()
         form.setContentsMargins(0, 0, 0, 0)
@@ -104,6 +109,8 @@ class _ModelRoleForm(QGroupBox):
         form.addWidget(self._base_input, 1, 1)
         form.addWidget(QLabel("模型名称"), 2, 0)
         form.addWidget(self._model_input, 2, 1)
+        form.addWidget(QLabel("上下文长度"), 3, 0)
+        form.addWidget(self._window_input, 3, 1)
         form.setColumnStretch(1, 1)
 
         layout = QVBoxLayout(self)
@@ -115,12 +122,24 @@ class _ModelRoleForm(QGroupBox):
     def role(self) -> str:
         return self._role
 
-    def values(self) -> dict[str, str]:
+    def values(self) -> dict[str, object]:
         return {
             "api_key": self._key_input.text(),
             "base_url": self._base_input.text(),
             "model": self._model_input.text(),
+            "context_window": self._parsed_window(),
         }
+
+    def _parsed_window(self) -> int | None:
+        """The 上下文长度 field as a positive int, or None (blank/non-numeric)."""
+        text = self._window_input.text().strip()
+        if not text:
+            return None
+        try:
+            value = int(text)
+        except ValueError:
+            return None
+        return value if value > 0 else None
 
     def has_key(self) -> bool:
         return bool(self._key_input.text().strip())
@@ -473,8 +492,8 @@ class LoginDialog(QDialog):
         ]
 
         hint = QLabel(
-            "DeepSeek / Kimi 为默认，可改为任意 OpenAI 兼容端点。"
-            "修改后需重启应用生效。"
+            "DeepSeek / Kimi 为默认，可改为任意 OpenAI 兼容端点，保存后即时生效。"
+            "上下文长度留空则使用模型默认值。"
         )
         hint.setObjectName("DialogSubtitle")
         hint.setWordWrap(True)
@@ -500,14 +519,16 @@ class LoginDialog(QDialog):
     def _save_models(self) -> None:
         for form in self._model_forms:
             values = form.values()
+            window = values["context_window"]
             self._store.save_model(
                 form.role,
-                api_key=values["api_key"],
-                base_url=values["base_url"],
-                model=values["model"],
+                api_key=str(values["api_key"]),
+                base_url=str(values["base_url"]),
+                model=str(values["model"]),
+                context_window=window if isinstance(window, int) else None,
             )
         self._mark_changed(_MODELS_KEY)
-        self._set_status(self._model_status, "已保存模型配置，重启应用后生效。", "ok")
+        self._set_status(self._model_status, "已保存模型配置并即时生效。", "ok")
 
     # -- network proxy tab --------------------------------------------------
     def _build_network_tab(self) -> QWidget:

@@ -71,6 +71,9 @@ class ModelConfig:
     api_key: str
     base_url: str
     model: str
+    # User-configured context window (tokens), or None to keep the provider's
+    # built-in default (its ClassVar). Threaded into the provider constructor.
+    context_window: int | None = None
 
     @property
     def is_configured(self) -> bool:
@@ -82,6 +85,21 @@ class ModelConfig:
 def model_default(role: str, field: str) -> str:
     """Return a role's default `base_url` / `model` / `label` (for prefill)."""
     return str(_MODEL_DEFAULTS[role][field])
+
+
+def _coerce_window(value: object) -> int | None:
+    """Parse a stored/entered context window to a positive int, else None.
+
+    Blank, zero, negative, or non-numeric all mean "unset" → the provider keeps
+    its ClassVar default. Accepts str (from the GUI field) or int (from JSON).
+    """
+    if value is None:
+        return None
+    try:
+        n = int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
 
 
 class CredentialStore:
@@ -229,7 +247,7 @@ class CredentialStore:
         )
 
     # -- models -----------------------------------------------------------
-    def _load_models(self) -> dict[str, dict[str, str]]:
+    def _load_models(self) -> dict[str, dict[str, object]]:
         if not self.models_path.exists():
             return {}
         try:
@@ -267,28 +285,41 @@ class CredentialStore:
             api_key=api_key,
             base_url=base_url,
             model=model,
+            context_window=_coerce_window(saved.get("context_window")),
         )
 
     def is_model_configured(self, role: str) -> bool:
         return self.model(role).is_configured
 
     def save_model(
-        self, role: str, *, api_key: str, base_url: str = "", model: str = ""
+        self,
+        role: str,
+        *,
+        api_key: str,
+        base_url: str = "",
+        model: str = "",
+        context_window: int | None = None,
     ) -> None:
         """Persist a role's endpoint/model/key into ``secrets/models.json``.
 
         Empty ``base_url`` / ``model`` fall back to the role defaults so the
         saved record is always complete; the caller (login page) prefills the
-        fields with the defaults, so a blank means "use default".
+        fields with the defaults, so a blank means "use default". ``context_window``
+        is written only when a positive value is given — an unset/blank/invalid
+        value omits the key so the provider's built-in default stays in force.
         """
         if role not in _MODEL_DEFAULTS:
             raise ValueError(f"unknown model role: {role!r}")
         data = self._load_models()
-        data[role] = {
+        record: dict[str, object] = {
             "api_key": api_key.strip(),
             "base_url": base_url.strip() or model_default(role, "base_url"),
             "model": model.strip() or model_default(role, "model"),
         }
+        window = _coerce_window(context_window)
+        if window is not None:
+            record["context_window"] = window
+        data[role] = record
         self.models_path.parent.mkdir(parents=True, exist_ok=True)
         self.models_path.write_text(
             json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"

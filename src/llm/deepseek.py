@@ -41,6 +41,7 @@ class DeepSeekProvider(LLMProvider):
         base_url: str = "https://api.deepseek.com/v1",
         timeout: float = 120.0,
         thinking: bool = True,
+        context_window: int | None = None,
     ) -> None:
         if not api_key:
             raise ValueError("api_key is required")
@@ -50,6 +51,10 @@ class DeepSeekProvider(LLMProvider):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.thinking = thinking
+        # A user-configured window (positive int) shadows the ClassVar default;
+        # blank/None keeps the built-in 1M so the meter matches DeepSeek V4.
+        if context_window is not None and context_window > 0:
+            self.context_window = int(context_window)
 
     def _build_body(
         self,

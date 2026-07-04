@@ -105,6 +105,34 @@ def test_corrupt_models_json_is_ignored(tmp_path) -> None:
     assert store.model("text").model == "deepseek-v4-pro"  # falls back, no raise
 
 
+def test_save_model_persists_context_window(tmp_path) -> None:
+    store = _store(tmp_path)
+    store.save_model("text", api_key="k", context_window=500_000)
+    cfg = CredentialStore(tmp_path / "secrets").model("text")  # fresh instance
+    assert cfg.context_window == 500_000
+    # Blank/invalid windows omit the key so the provider default stays in force.
+    store.save_model("visual", api_key="k")
+    assert store.model("visual").context_window is None
+    raw = json.loads((tmp_path / "secrets" / "models.json").read_text())
+    assert raw["text"]["context_window"] == 500_000
+    assert "context_window" not in raw["visual"]
+
+
+def test_old_models_json_without_context_window_loads(tmp_path) -> None:
+    """Back-compat: a 3-field record (no `context_window`) still parses."""
+    store = _store(tmp_path)
+    store.models_path.parent.mkdir(parents=True)
+    store.models_path.write_text(
+        json.dumps(
+            {"text": {"api_key": "k", "base_url": "u", "model": "m"}}
+        ),
+        encoding="utf-8",
+    )
+    cfg = store.model("text")
+    assert cfg.api_key == "k"
+    assert cfg.context_window is None
+
+
 # -- P-Lib ----------------------------------------------------------------
 def test_plib_save_read_clear(tmp_path) -> None:
     store = _store(tmp_path)
