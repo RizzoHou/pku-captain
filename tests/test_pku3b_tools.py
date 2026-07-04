@@ -10,7 +10,11 @@ from __future__ import annotations
 from pypku3b import Announcement, Assignment, Attachment, CourseTable, Identity  # noqa: F401
 from pypku3b.errors import AuthError, NeedOTP
 
-from src.tools.pku3b_announcements import PKU3bAnnouncementsTool
+from src.tools.pku3b_announcements import (
+    PKU3bAnnouncementsTool,
+    _stable_id,
+    _to_record,
+)
 from src.tools.pku3b_assignments import PKU3bAssignmentsTool
 from src.tools.pku3b_coursetable import PKU3bCourseTableTool
 
@@ -148,7 +152,9 @@ def test_announcements_list_shape_with_inline_dates(tmp_path):
     assert data["count"] == 2
     assert data["total_reported"] == 2
     first = data["announcements"][0]
-    assert first["id"] == "aaa"
+    # The exposed id is now the content-stable id, not pypku3b's positional a.id.
+    assert first["id"] == _stable_id(anns[0])
+    assert first["id"] != "aaa"
     assert first["posted_date"] == "2026-06-25"
     # posted_at strips the 发布时间: label.
     assert first["posted_at"].startswith("2026年6月25日")
@@ -238,6 +244,69 @@ def test_announcement_list_mode_never_retries_all_term(tmp_path):
 
     assert result.success
     assert client.calls["all_term_seq"] == [False]
+
+
+def test_announcement_stable_id_is_content_determined(tmp_path):
+    # Equal content (course_id/title/date) → equal id regardless of scrape
+    # position or pypku3b's positional a.id; different content → different id.
+    a1 = _ann(1, "程设", "期末通知", "pos-1", date="2026-06-25")
+    a2 = _ann(7, "程设", "期末通知", "pos-2", date="2026-06-25")
+    assert _to_record(a1)["id"] == _to_record(a2)["id"]
+
+    other_title = _ann(1, "程设", "别的通知", "pos-3", date="2026-06-25")
+    other_date = _ann(1, "程设", "期末通知", "pos-4", date="2026-06-26")
+    assert _to_record(a1)["id"] != _to_record(other_title)["id"]
+    assert _to_record(a1)["id"] != _to_record(other_date)["id"]
+
+
+def test_announcement_stable_id_undated_falls_back_to_course_title(tmp_path):
+    # Undated rows (body-snippet fallbacks) drop the date component but stay
+    # deterministic across scrapes.
+    u1 = _ann(1, "高数", "习题课调整通知", "pos-1")
+    u2 = _ann(5, "高数", "习题课调整通知", "pos-2")
+    assert _stable_id(u1) == _stable_id(u2)
+
+
+def test_announcement_detail_resolves_by_stable_id_after_reorder(tmp_path):
+    # The real bug: a course posts/deletes an announcement, so every later row's
+    # positional index (and thus pypku3b's a.id) shifts. The stable id the
+    # dashboard stored must still resolve to detail on the re-listed set.
+    earlier = _ann(1, "程设", "期末考试地点通知", "pos-old",
+                   date="2026-06-25", body="考场安排如下")
+    stored_id = _stable_id(earlier)  # what the dashboard persisted earlier
+
+    # Later scrape: same announcement now at index 3, positional id changed.
+    shifted = _ann(3, "程设", "期末考试地点通知", "pos-new",
+                   date="2026-06-25", body="考场安排如下")
+    tool = PKU3bAnnouncementsTool(
+        secrets_dir=tmp_path,
+        client_factory=_factory(FakeClient(announcements=[shifted])),
+    )
+
+    result = tool.invoke({"announcement_id": stored_id})
+
+    assert result.success
+    ann = result.data["announcement"]
+    assert ann["body"] == "考场安排如下"
+    # detail echoes the same stable id the caller queried
+    assert ann["id"] == stored_id
+
+
+def test_announcement_detail_resolves_legacy_positional_id(tmp_path):
+    # Dual-match: a legacy positional id that has NOT yet drifted still resolves
+    # (migration window), even though the tool now exposes stable ids.
+    ann = _ann(1, "程设", "期末通知", "legacy-pos-id", body="正文")
+    tool = PKU3bAnnouncementsTool(
+        secrets_dir=tmp_path,
+        client_factory=_factory(FakeClient(announcements=[ann])),
+    )
+
+    result = tool.invoke({"announcement_id": "legacy-pos-id"})
+
+    assert result.success
+    assert result.data["announcement"]["body"] == "正文"
+    # even when queried by the legacy id, the returned id is the stable one
+    assert result.data["announcement"]["id"] == _stable_id(ann)
 
 
 # -- coursetable ------------------------------------------------------------

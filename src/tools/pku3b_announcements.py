@@ -15,6 +15,7 @@ inline, so a date needs no extra fetch and there is no on-disk date cache:
 
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
 from typing import Any, ClassVar
@@ -123,7 +124,11 @@ class PKU3bAnnouncementsTool(Tool):
                 wanted = str(announcement_id).strip()
                 # History entries outlive the current-term list (term rotation),
                 # so a miss there is retried across all terms before failing.
-                if wanted and not all_term and all(a.id != wanted for a in announcements):
+                if (
+                    wanted
+                    and not all_term
+                    and all(wanted not in _candidate_ids(a) for a in announcements)
+                ):
                     announcements = client.list_announcements(all_term=True, force=force)
         except Pku3bError as exc:
             message = getattr(exc, "message", str(exc))
@@ -163,7 +168,9 @@ class PKU3bAnnouncementsTool(Tool):
             return ToolResult(
                 success=False, error="announcement_id must be a non-empty string"
             )
-        match = next((a for a in announcements if a.id == announcement_id), None)
+        match = next(
+            (a for a in announcements if announcement_id in _candidate_ids(a)), None
+        )
         if match is None:
             return ToolResult(
                 success=False,
@@ -173,7 +180,7 @@ class PKU3bAnnouncementsTool(Tool):
             success=True,
             data={
                 "announcement": {
-                    "id": match.id,
+                    "id": _stable_id(match),
                     "course": match.course,
                     "title": match.title,
                     "posted_at": _posted_at(match.posted_time),
@@ -190,13 +197,46 @@ def _posted_at(posted_time: str | None) -> str | None:
     return _POSTED_PREFIX.sub("", posted_time).strip() or None
 
 
+def _stable_id(a: Any) -> str:
+    """Content-stable announcement id that survives scrape reordering.
+
+    pypku3b's ``a.id`` is *positional* — ``content_hash(course_id,
+    "{course_id}_{idx}")`` where ``idx`` is the row's index in a single scrape —
+    so it shifts whenever a course's announcement set changes (a new post,
+    deletion, or reorder). The dashboard accumulates ids across scrapes into
+    ``data/announcement_history.json``; once the set drifts, a stored positional
+    id matches nothing on re-list and detail fails with "announcement with id …
+    not found". Derive the id from the announcement's own content instead —
+    ``(course_id, title, date)`` — so a re-listed announcement re-derives the
+    *same* id it had when stored. Undated rows (the body-snippet fallbacks
+    pypku3b emits) drop the date component. 16 hex chars, matching pypku3b's
+    ``content_hash`` width.
+    """
+    course_id = str(a.course_id or "").strip()
+    title = str(a.title or "").strip()
+    date = str(a.posted_date or "").strip()
+    parts = [course_id, title, date] if date else [course_id, title]
+    payload = "\x00".join(parts).encode("utf-8")
+    return hashlib.blake2b(payload, digest_size=8).hexdigest()
+
+
+def _candidate_ids(a: Any) -> set[str]:
+    """Ids a stored/queried id may match for this announcement.
+
+    The content-stable id (new, canonical) plus pypku3b's legacy positional
+    ``a.id``. Dual-matching keeps legacy history ids that have *not* yet drifted
+    resolvable during the migration window, while new rows resolve by stable id.
+    """
+    return {_stable_id(a), str(a.id)}
+
+
 def _to_record(a: Any) -> dict[str, Any]:
     return {
         "index": a.index,
         "course": a.course,
         "course_id": a.course_id,
         "title": a.title,
-        "id": a.id,
+        "id": _stable_id(a),
         "url": a.course_url,
         "posted_date": a.posted_date,
         "posted_at": _posted_at(a.posted_time),
