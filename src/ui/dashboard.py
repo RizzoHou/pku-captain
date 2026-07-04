@@ -178,12 +178,12 @@ class DashboardPanel(QWidget):
         self._knowledge_button = QPushButton("文档库")
         self._knowledge_button.setObjectName("SecondaryButton")
         self._knowledge_button.clicked.connect(self._show_docbase_dialog)
-        # Single entry point to the universal 账号中心 (treehole / P-Lib / models).
+        # Single entry point to the universal 设置 (treehole / P-Lib / models).
         # Not gated on online mode — credentials (and model endpoints) are
         # configured here even offline, taking effect on the next launch.
-        self._account_button = QPushButton("账号")
+        self._account_button = QPushButton("设置")
         self._account_button.setObjectName("SecondaryButton")
-        self._account_button.setToolTip("登录北大统一身份、P-Lib，并配置对话模型")
+        self._account_button.setToolTip("登录北大统一身份、P-Lib，配置对话模型与网络代理")
         self._account_button.clicked.connect(lambda: self._open_account_dialog())
 
         header = QGridLayout()
@@ -488,7 +488,7 @@ class DashboardPanel(QWidget):
         PLibSearchDialog(tool, self).exec()
 
     def _open_account_dialog(self, on_close: Callable[[], None] | None = None) -> None:
-        """Open the universal 账号中心. Not gated on online mode — model endpoints
+        """Open the universal 设置. Not gated on online mode — model endpoints
         and credentials are configured here even offline (they take effect on
         the next launch); only the live treehole SMS + P-Lib validation need the
         network, which the dialog handles via the injected auth service / tool.
@@ -1484,7 +1484,7 @@ def _treehole_row(item: dict[str, object]) -> QFrame:
 class TreeholeMessagesDialog(QDialog):
     """Modal list of treehole updates opened from the header/card.
 
-    Login itself now lives in the universal 账号中心 (`LoginDialog`); this dialog
+    Login itself now lives in the universal 设置 (`LoginDialog`); this dialog
     only shows the current treehole login status and a button that opens it
     (emitting `login_requested`).
     """
@@ -1652,7 +1652,7 @@ class TreeholeMessagesDialog(QDialog):
 
         login_button = QPushButton("登录 / 管理")
         login_button.setObjectName("SecondaryButton")
-        login_button.setToolTip("在账号中心登录北大统一身份并完成短信验证")
+        login_button.setToolTip("在设置中登录北大统一身份并完成短信验证")
         login_button.clicked.connect(self.login_requested)
 
         text_block = QVBoxLayout()

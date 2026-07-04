@@ -244,7 +244,7 @@ def build_chat_llm(model_key: str, *, offline: bool) -> LLMProvider:
     cfg = _store().model(model_key)
     if not cfg.is_configured:
         raise FileNotFoundError(
-            f"{info['label']}尚未配置 API 密钥。请在『账号』中配置模型，"
+            f"{info['label']}尚未配置 API 密钥。请在『设置』中配置模型，"
             "或以离线模式启动。"
         )
     return _build_role_provider(cfg, str(info["provider"]))

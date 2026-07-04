@@ -491,7 +491,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"已切换到 {label}")
 
     def _on_model_config_changed(self) -> None:
-        """Apply a 账号中心 → 模型配置 edit to the running chat brain, no restart.
+        """Apply a 设置 → 模型配置 edit to the running chat brain, no restart.
 
         The account dialog persists the new per-role endpoint / model / key and
         emits the `models` sentinel; this rebuilds the *active* role's brain from
@@ -916,7 +916,7 @@ def _format_dashboard_data(key: str, data: object) -> str:
 def _startup_diagnostics(*, offline: bool) -> str:
     missing: list[str] = []
     if not CredentialStore().is_model_configured("text"):
-        missing.append("文本模型：尚未配置 API 密钥（点击右上角『账号』→ 模型配置）")
+        missing.append("文本模型：尚未配置 API 密钥（点击右上角『设置』→ 模型配置）")
     if shutil.which("pku3b") is None and not _LOCAL_PKU3B.exists():
         missing.append("pku3b：未在 PATH 中找到")
     elif not _pku3b_configured():
@@ -928,7 +928,7 @@ def _startup_diagnostics(*, offline: bool) -> str:
         return ""
 
     prefix = (
-        "当前以离线模式运行。点击右上角『账号』即可登录北大统一身份、P-Lib 并配置对话模型。"
+        "当前以离线模式运行。点击右上角『设置』即可登录北大统一身份、P-Lib 并配置对话模型。"
         if offline
         else "在线依赖未完全就绪。"
     )

@@ -3,7 +3,7 @@
 Consolidates what used to be three scattered entry points (treehole IAAA+SMS
 buried in the messages dialog, a P-Lib dialog that never persisted, and no
 API-key entry at all) into a single tabbed dialog opened from the dashboard's
-『账号』button:
+『设置』button:
 
 * **统一身份 · 树洞** — IAAA ``学号``+密码 login then SMS verify, via the existing
   ``TreeholeAuthService`` (writes ``secrets/treehole/{id,password}`` + caches
@@ -161,7 +161,7 @@ class LoginDialog(QDialog):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("账号中心")
+        self.setWindowTitle("设置")
         self.resize(600, 480)
         self._store = store or CredentialStore()
         self._auth = auth
@@ -178,7 +178,7 @@ class LoginDialog(QDialog):
         # persisted for pku3b). Set by `_treehole_login`, consumed on success.
         self._pending_iaaa: tuple[str, str] | None = None
 
-        title = QLabel("账号中心")
+        title = QLabel("设置")
         title.setObjectName("DialogTitle")
         subtitle = QLabel(
             "在这里集中管理北大统一身份（树洞）、P-Lib 图书账号、对话模型与网络代理。"
