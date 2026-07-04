@@ -183,3 +183,61 @@ def test_treehole_logout_clears_pku(app: QApplication, tmp_path) -> None:
     assert emitted == [
         ["pku3b_announcements", "pku3b_assignments", "treehole_updates"]
     ]
+
+
+@pytest.fixture
+def proxy_env(monkeypatch):
+    """Snapshot/restore the managed proxy env vars around a network-tab test."""
+    from src.core import network
+
+    saved = {name: os.environ.get(name) for name in network._MANAGED_VARS}
+    for name in network._MANAGED_VARS:
+        os.environ.pop(name, None)
+    monkeypatch.setattr(network, "_original_env", None)
+    yield
+    for name, value in saved.items():
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
+
+
+def test_network_tab_persists_applies_and_emits(
+    app: QApplication, tmp_path, proxy_env
+) -> None:
+    from src.core.network import ProxyConfig
+
+    store = CredentialStore(tmp_path / "secrets")
+    dialog = LoginDialog(store=store, auth=None, plib_tool=None, offline=True)
+    emitted: list[list[str]] = []
+    dialog.credentials_changed.connect(emitted.append)
+
+    dialog._proxy_manual.setChecked(True)
+    dialog._proxy_url.setText("127.0.0.1:7890")  # scheme-less on purpose
+    dialog._save_network()
+    dialog.accept()
+
+    assert store.proxy() == ProxyConfig(mode="manual", url="http://127.0.0.1:7890")
+    assert os.environ["https_proxy"] == "http://127.0.0.1:7890"
+    assert emitted == [["network"]]
+
+
+def test_network_tab_prefills_and_gates_url(app: QApplication, tmp_path, proxy_env) -> None:
+    from src.core.network import ProxyConfig
+
+    store = CredentialStore(tmp_path / "secrets")
+    store.save_proxy(ProxyConfig(mode="manual", url="http://127.0.0.1:7890"))
+    dialog = LoginDialog(store=store, auth=None, plib_tool=None, offline=True)
+
+    assert dialog._proxy_manual.isChecked()
+    assert dialog._proxy_url.text() == "http://127.0.0.1:7890"
+    assert dialog._proxy_url.isEnabled()
+
+    dialog._proxy_direct.setChecked(True)
+    assert not dialog._proxy_url.isEnabled()
+
+    dialog._save_network()
+    # Direct mode keeps the remembered URL for a later switch back to manual.
+    assert store.proxy() == ProxyConfig(mode="direct", url="http://127.0.0.1:7890")
+    assert "https_proxy" not in os.environ
+    assert os.environ["NO_PROXY"] == "*"

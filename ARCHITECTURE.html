@@ -354,7 +354,7 @@
       <div class="band backend">
         <span class="band-label">Backend lane</span>
         <div class="backend-grid">
-          <div class="box"><span class="tag">core/</span><span><b>Agent</b> (kernel + turn loop) · Conversation · MemoryStore · MemoryLearnService · SessionStore · SessionTitler · DashboardCache · VisionRouter · <b>CredentialStore</b> <span class="mono">(secrets/ writer + status)</span></span></div>
+          <div class="box"><span class="tag">core/</span><span><b>Agent</b> (kernel + turn loop) · Conversation · MemoryStore · MemoryLearnService · SessionStore · SessionTitler · DashboardCache · VisionRouter · <b>CredentialStore</b> <span class="mono">(secrets/ writer + status)</span> · <b>network</b> <span class="mono">(ProxyConfig + apply_proxy — process-wide proxy env)</span></span></div>
           <div class="box"><span class="tag">llm/</span><span><b>LLMProvider</b> (ABC) → DeepSeekProvider · KimiProvider · EchoLLMProvider</span></div>
           <div class="box"><span class="tag">tools/</span><span><b>Tool</b> (ABC) + ToolRegistry → clock · memory · doc_base · pku3b* · plib · dean* · treehole* · calendar_reminder</span></div>
           <div class="box"><span class="tag">workflows/</span><span><b>Workflow</b> (ABC) + WorkflowRegistry → MorningBriefing · Hello (+ WorkflowTool)</span></div>
@@ -362,7 +362,7 @@
         </div>
       </div>
 
-      <div class="flowdown">↓<span>subprocess (pdftoppm / osascript) · in-process vendored clients (incl. pypku3b) · HTTPS</span></div>
+      <div class="flowdown">↓<span>subprocess (pdftoppm / osascript) · in-process vendored clients (incl. pypku3b) · HTTPS (honours the 网络代理 proxy env)</span></div>
 
       <!-- External band -->
       <div class="band external">
@@ -447,6 +447,7 @@
       <li><b>Dialog actions</b> — dashboard dialogs get tools from the injected <code>ToolRegistry</code> (<code>tools.find(name)</code>), gate online-only entries on membership, and run every blocking call through <code>tool_call_worker.run_async</code> onto a <code>QThreadPool</code>.</li>
       <li><b>Workflows</b> — GUI button path: <code>WorkflowWorker</code> (QThread) → <code>workflow.run</code>. Agent path: each <code>agent_callable</code> workflow is wrapped in a <code>WorkflowTool</code> registered into the <code>ToolRegistry</code>, so the model starts it through the normal tool-call loop.</li>
       <li><b>Session persistence</b> — <code>SessionStore</code> writes <code>data/sessions/&lt;id&gt;.json</code> per turn-finish/close (after the first real turn); <code>SessionTitler</code> (deepseek-v4-flash, non-think) names it async; <code>restore_conversation</code> reloads, re-seeding today's system prompt and dropping incomplete tool-call tails.</li>
+      <li><b>Proxy control</b> — 账号中心 网络代理 tab save (and <code>build_agent</code> at startup) → <code>core/network.apply_proxy</code> → process env (<code>HTTP_PROXY</code>/<code>HTTPS_PROXY</code>, modes 跟随系统/直连/自定义) → every <code>requests</code> call, vendored clients and LLM providers alike; persisted by <code>CredentialStore</code> in <code>secrets/network.json</code>; a save emits the <code>network</code> sentinel → dashboard re-polls the live cards. (macOS treehole notifier daemon: separate process, not covered.)</li>
     </ul>
   </section>
 
@@ -515,7 +516,7 @@
     <p>Runtime pip deps: <code>PyQt6</code>, <code>requests</code>, <code>numpy</code>, plus <code>beautifulsoup4</code> + <code>lxml</code> (the vendored pypku3b/plib/dean HTML scrapers). No Rust toolchain or external binary.</p>
 
     <div class="callout">
-      <p><strong>Data layout.</strong> <code>secrets/</code> (gitignored — <code>models.json</code> model-role endpoints/keys, P-Lib/treehole/pku creds, sessions + cookies; written by <code>CredentialStore</code> via the 账号中心), <code>data/</code> (gitignored — memory, sessions, inboxes, caches incl. <code>pku3b_cache/</code>), <code>doc_base/</code> (committed — split PDFs + <code>manifest.json</code>), <code>downloads/</code> (gitignored), <code>vendor/</code> (committed — git-subtree'd Python siblings, imported in-process).</p>
+      <p><strong>Data layout.</strong> <code>secrets/</code> (gitignored — <code>models.json</code> model-role endpoints/keys, <code>network.json</code> proxy mode/URL, P-Lib/treehole/pku creds, sessions + cookies; written by <code>CredentialStore</code> via the 账号中心), <code>data/</code> (gitignored — memory, sessions, inboxes, caches incl. <code>pku3b_cache/</code>), <code>doc_base/</code> (committed — split PDFs + <code>manifest.json</code>), <code>downloads/</code> (gitignored), <code>vendor/</code> (committed — git-subtree'd Python siblings, imported in-process).</p>
     </div>
   </section>
 

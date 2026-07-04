@@ -17,6 +17,9 @@ API-key entry at all) into a single tabbed dialog opened from the dashboard's
   Each carries an API key + endpoint + model name; DeepSeek/Kimi are only the
   defaults. Fully usable offline (writes ``secrets/models.json``); changes take
   effect on the next launch.
+* **网络代理** — the process-wide proxy mode (跟随系统 / 直连 / 自定义 URL, see
+  ``src.core.network``). Pure local config (writes ``secrets/network.json``),
+  applied immediately via ``apply_proxy`` — no restart needed.
 
 All persistence goes through ``CredentialStore`` and ``TreeholeAuthService`` —
 the dialog constructs no ``Tool`` / ``LLMProvider`` subclasses itself
@@ -41,20 +44,29 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QRadioButton,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from ..core.credentials import CredentialStore, model_default
+from ..core.network import (
+    DEFAULT_PROXY_URL,
+    ProxyConfig,
+    apply_proxy,
+    normalize_proxy_url,
+)
 from ..tools.base import Tool
 from .tool_call_worker import run_async
 
 # Tool keys a login change should trigger a dashboard refresh for; "models" is a
-# sentinel the window turns into a "restart to apply" hint rather than a card.
+# sentinel the window turns into a "restart to apply" hint rather than a card,
+# and "network" is a sentinel for a proxy change (re-poll every network card).
 _TREEHOLE_KEY = "treehole_updates"
 _PLIB_KEY = "plib_materials"
 _MODELS_KEY = "models"
+_NETWORK_KEY = "network"
 # The pku3b cards a treehole login (which mirrors the shared IAAA identity into
 # secrets/pku/) newly provisions — refresh them once creds land.
 _PKU_KEYS = ("pku3b_assignments", "pku3b_announcements")
@@ -150,7 +162,7 @@ class LoginDialog(QDialog):
         title = QLabel("账号中心")
         title.setObjectName("DialogTitle")
         subtitle = QLabel(
-            "在这里集中管理北大统一身份（树洞）、P-Lib 图书账号与对话模型。"
+            "在这里集中管理北大统一身份（树洞）、P-Lib 图书账号、对话模型与网络代理。"
         )
         subtitle.setObjectName("DialogSubtitle")
         subtitle.setWordWrap(True)
@@ -159,6 +171,7 @@ class LoginDialog(QDialog):
         tabs.addTab(self._build_treehole_tab(), "统一身份 · 树洞")
         tabs.addTab(self._build_plib_tab(), "P-Lib 图书")
         tabs.addTab(self._build_models_tab(), "模型配置")
+        tabs.addTab(self._build_network_tab(), "网络代理")
 
         close_button = QPushButton("关闭")
         close_button.setObjectName("InlineToggleButton")
@@ -495,6 +508,87 @@ class LoginDialog(QDialog):
             )
         self._mark_changed(_MODELS_KEY)
         self._set_status(self._model_status, "已保存模型配置，重启应用后生效。", "ok")
+
+    # -- network proxy tab --------------------------------------------------
+    def _build_network_tab(self) -> QWidget:
+        panel = QWidget()
+        cfg = self._store.proxy()
+
+        hint = QLabel(
+            "代理作用于全部网络访问（教学网 / 树洞 / P-Lib / 教务 / 模型接口），"
+            "保存后立即生效。校外通过 Clash / mihomo 等访问校内资源时，"
+            "选择「自定义代理」并填写本机代理地址。"
+        )
+        hint.setObjectName("DialogSubtitle")
+        hint.setWordWrap(True)
+
+        self._proxy_system = QRadioButton("跟随系统代理（默认）")
+        self._proxy_direct = QRadioButton("直连（忽略系统代理）")
+        self._proxy_manual = QRadioButton("自定义代理")
+        self._proxy_url = QLineEdit(cfg.url)
+        self._proxy_url.setObjectName("TreeholeAuthInput")
+        self._proxy_url.setPlaceholderText(DEFAULT_PROXY_URL)
+        {
+            "direct": self._proxy_direct,
+            "manual": self._proxy_manual,
+        }.get(cfg.mode, self._proxy_system).setChecked(True)
+        # The URL only matters in manual mode; grey it out elsewhere.
+        self._proxy_url.setEnabled(cfg.mode == "manual")
+        for radio in (self._proxy_system, self._proxy_direct, self._proxy_manual):
+            radio.toggled.connect(
+                lambda _checked: self._proxy_url.setEnabled(
+                    self._proxy_manual.isChecked()
+                )
+            )
+
+        self._network_status = QLabel("")
+        self._network_status.setObjectName("PLibAuthStatus")
+        self._network_status.setWordWrap(True)
+
+        save_button = QPushButton("保存代理设置")
+        save_button.setObjectName("PrimaryButton")
+        save_button.clicked.connect(self._save_network)
+
+        url_row = QHBoxLayout()
+        url_row.setContentsMargins(24, 0, 0, 0)
+        url_row.addWidget(QLabel("代理地址"))
+        url_row.addWidget(self._proxy_url, 1)
+
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(12)
+        layout.addWidget(hint)
+        layout.addWidget(self._proxy_system)
+        layout.addWidget(self._proxy_direct)
+        layout.addWidget(self._proxy_manual)
+        layout.addLayout(url_row)
+        layout.addWidget(self._network_status)
+        layout.addWidget(save_button, 0, Qt.AlignmentFlag.AlignRight)
+        layout.addStretch(1)
+        return panel
+
+    def _save_network(self) -> None:
+        if self._proxy_manual.isChecked():
+            mode = "manual"
+        elif self._proxy_direct.isChecked():
+            mode = "direct"
+        else:
+            mode = "system"
+        url = normalize_proxy_url(self._proxy_url.text())
+        if mode == "manual":
+            if not url:
+                QMessageBox.warning(
+                    self, "网络代理", f"请输入代理地址，例如 {DEFAULT_PROXY_URL}。"
+                )
+                return
+            self._proxy_url.setText(url)
+        # Keep the URL even in system/direct mode so switching back to 自定义
+        # remembers the last address; apply_proxy only reads it in manual mode.
+        config = ProxyConfig(mode=mode, url=url)
+        self._store.save_proxy(config)
+        apply_proxy(config)
+        self._mark_changed(_NETWORK_KEY)
+        self._set_status(self._network_status, "已保存代理设置，立即生效。", "ok")
 
     # -- shared -----------------------------------------------------------
     def _mark_changed(self, key: str) -> None:

@@ -49,6 +49,7 @@ from .conversation import Conversation
 from .credentials import CredentialStore, ModelConfig
 from .dashboard_cache import DashboardCache
 from .memory import MemoryStore
+from .network import apply_proxy
 from .session_store import (
     SessionStore,
     deserialize_messages,
@@ -129,6 +130,9 @@ def build_agent(*, offline: bool = False) -> Agent:
     registered only while the active brain is Kimi (the default brain is
     DeepSeek, so it starts unregistered; `apply_chat_model` toggles it).
     """
+    # Proxy first: everything below (identity sync, tools, providers) must
+    # already honour the user's 网络代理 setting on its first request.
+    apply_proxy(_store().proxy())
     llm = _build_llm(offline=offline)
     # One shared store: the MemoryTool writes to it and the Agent reads it
     # back when folding memory into each turn's context. A second instance on
