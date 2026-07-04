@@ -103,7 +103,6 @@ def _open_external_url(url: str) -> bool:
 class DashboardPanel(QWidget):
     """Dashboard shell with the Week-2 core information widgets."""
 
-    morning_briefing_requested = pyqtSignal()
     refresh_requested = pyqtSignal()
     partial_refresh_requested = pyqtSignal(list)
     auto_refresh_settings_requested = pyqtSignal()
@@ -169,9 +168,6 @@ class DashboardPanel(QWidget):
         self._auto_refresh_button = QPushButton("自动刷新")
         self._auto_refresh_button.setObjectName("SecondaryButton")
         self._auto_refresh_button.clicked.connect(self.auto_refresh_settings_requested)
-        self._briefing_button = QPushButton("今日简报")
-        self._briefing_button.setObjectName("PrimaryButton")
-        self._briefing_button.clicked.connect(self.morning_briefing_requested)
         self._treehole_button = QPushButton("◉ 树洞")
         self._treehole_button.setObjectName("HeaderTreeholeButton")
         self._treehole_button.setToolTip("查看树洞新消息")
@@ -199,11 +195,10 @@ class DashboardPanel(QWidget):
         header.addWidget(
             self._auto_refresh_button, 0, 3, 2, 1, Qt.AlignmentFlag.AlignRight
         )
-        header.addWidget(self._briefing_button, 0, 4, 2, 1, Qt.AlignmentFlag.AlignRight)
-        header.addWidget(self._treehole_button, 0, 5, 2, 1, Qt.AlignmentFlag.AlignRight)
-        header.addWidget(self._memory_button, 0, 6, 2, 1, Qt.AlignmentFlag.AlignRight)
-        header.addWidget(self._knowledge_button, 0, 7, 2, 1, Qt.AlignmentFlag.AlignRight)
-        header.addWidget(self._account_button, 0, 8, 2, 1, Qt.AlignmentFlag.AlignRight)
+        header.addWidget(self._treehole_button, 0, 4, 2, 1, Qt.AlignmentFlag.AlignRight)
+        header.addWidget(self._memory_button, 0, 5, 2, 1, Qt.AlignmentFlag.AlignRight)
+        header.addWidget(self._knowledge_button, 0, 6, 2, 1, Qt.AlignmentFlag.AlignRight)
+        header.addWidget(self._account_button, 0, 7, 2, 1, Qt.AlignmentFlag.AlignRight)
 
         self._cards = {
             "schedule": ScheduleCard(),
@@ -442,10 +437,6 @@ class DashboardPanel(QWidget):
 
     def set_updated_text(self, text: str) -> None:
         self._updated_label.setText(text)
-
-    def set_briefing_busy(self, busy: bool) -> None:
-        self._briefing_button.setEnabled(not busy)
-        self._briefing_button.setText("生成中" if busy else "今日简报")
 
     def otp_code(self) -> str:
         return self._otp_input.text().strip()

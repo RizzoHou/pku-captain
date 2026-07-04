@@ -42,7 +42,7 @@ from ..tools.pku3b import (
     default_client_factory,
     stored_credentials,
 )
-from ..workflows import HelloWorkflow, MorningBriefingWorkflow, WorkflowTool
+from ..workflows import HelloWorkflow, WorkflowTool
 from ..workflows.base import WorkflowRegistry
 from .agent import Agent
 from .conversation import Conversation
@@ -397,7 +397,6 @@ def _sync_pku3b_identity_memory(memory: MemoryStore, *, client_factory=None) -> 
 def _build_workflows(tools: ToolRegistry) -> WorkflowRegistry:
     registry = WorkflowRegistry()
     registry.register(HelloWorkflow(tools))
-    registry.register(MorningBriefingWorkflow(tools))
     return registry
 
 
