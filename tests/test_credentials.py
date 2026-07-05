@@ -172,3 +172,50 @@ def test_treehole_presence_and_clear(tmp_path) -> None:
     store.clear_treehole()
     assert not store.has_treehole()
     assert not (store.treehole_dir / "session.json").exists()
+
+
+# -- app settings (tool-round limit) --------------------------------------
+def test_tool_rounds_default_when_unset(tmp_path) -> None:
+    from src.core.credentials import TOOL_ROUNDS_DEFAULT
+
+    assert _store(tmp_path).tool_rounds() == TOOL_ROUNDS_DEFAULT
+
+
+def test_tool_rounds_round_trips(tmp_path) -> None:
+    store = _store(tmp_path)
+    store.save_tool_rounds(12)
+    # Fresh instance reads it back from secrets/settings.json.
+    assert CredentialStore(tmp_path / "secrets").tool_rounds() == 12
+
+
+def test_tool_rounds_clamps_out_of_range(tmp_path) -> None:
+    from src.core.credentials import TOOL_ROUNDS_MAX, TOOL_ROUNDS_MIN
+
+    store = _store(tmp_path)
+    store.save_tool_rounds(9999)
+    assert store.tool_rounds() == TOOL_ROUNDS_MAX
+    store.save_tool_rounds(0)
+    assert store.tool_rounds() == TOOL_ROUNDS_MIN
+
+
+def test_tool_rounds_corrupt_file_degrades_to_default(tmp_path) -> None:
+    from src.core.credentials import TOOL_ROUNDS_DEFAULT
+
+    store = _store(tmp_path)
+    store.settings_path.parent.mkdir(parents=True, exist_ok=True)
+    store.settings_path.write_text("{ not json", encoding="utf-8")
+    assert store.tool_rounds() == TOOL_ROUNDS_DEFAULT
+    # A non-numeric stored value also degrades rather than raising.
+    store.settings_path.write_text('{"tool_rounds": "many"}', encoding="utf-8")
+    assert store.tool_rounds() == TOOL_ROUNDS_DEFAULT
+
+
+def test_tool_rounds_save_preserves_other_settings(tmp_path) -> None:
+    store = _store(tmp_path)
+    store.settings_path.parent.mkdir(parents=True, exist_ok=True)
+    store.settings_path.write_text('{"future_key": "keep"}', encoding="utf-8")
+    store.save_tool_rounds(5)
+    assert json.loads(store.settings_path.read_text(encoding="utf-8")) == {
+        "future_key": "keep",
+        "tool_rounds": 5,
+    }

@@ -79,6 +79,19 @@ def test_apply_chat_model_gates_doc_read(monkeypatch, tmp_path) -> None:
     assert "doc_read" not in agent.tools  # text role → removed
 
 
+def test_build_agent_reads_tool_rounds_from_store(monkeypatch, tmp_path) -> None:
+    # build_agent threads the persisted 对话设置 limit into the Agent's loop cap
+    # (default 8 when unset, the stored value otherwise).
+    from src.core.credentials import TOOL_ROUNDS_DEFAULT
+
+    store = _configured_store(tmp_path)
+    monkeypatch.setattr(bootstrap, "_store", lambda: store)
+
+    assert bootstrap.build_agent(offline=True).max_tool_iterations == TOOL_ROUNDS_DEFAULT
+    store.save_tool_rounds(15)
+    assert bootstrap.build_agent(offline=True).max_tool_iterations == 15
+
+
 def test_build_chat_llm_offline_is_echo() -> None:
     assert isinstance(bootstrap.build_chat_llm("visual", offline=True), EchoLLMProvider)
     assert isinstance(bootstrap.build_chat_llm("text", offline=True), EchoLLMProvider)

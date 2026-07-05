@@ -131,6 +131,41 @@ def test_plib_tab_saves_without_tool_offline(app: QApplication, tmp_path) -> Non
     assert store.plib() == ("a@b.c", "pw")
 
 
+def test_agent_tab_persists_tool_rounds_and_emits(app: QApplication, tmp_path) -> None:
+    store = CredentialStore(tmp_path / "secrets")
+    dialog = LoginDialog(store=store, auth=None, plib_tool=None, offline=True)
+    emitted: list[list[str]] = []
+    dialog.credentials_changed.connect(emitted.append)
+
+    dialog._tool_rounds_spin.setValue(12)
+    dialog._save_tool_rounds()
+    dialog.accept()
+
+    assert store.tool_rounds() == 12
+    assert emitted == [["tool_rounds"]]
+
+
+def test_agent_tab_prefills_tool_rounds_from_store(app: QApplication, tmp_path) -> None:
+    store = CredentialStore(tmp_path / "secrets")
+    store.save_tool_rounds(20)
+    dialog = LoginDialog(store=store, auth=None, plib_tool=None, offline=True)
+    assert dialog._tool_rounds_spin.value() == 20
+
+
+def test_settings_tabs_use_pkuhub_not_plib(app: QApplication, tmp_path) -> None:
+    # The materials tab is rebranded PKUHub; no user-visible "P-Lib 图书" tab
+    # remains, and the 对话设置 tab exists.
+    from PyQt6.QtWidgets import QTabWidget
+
+    store = CredentialStore(tmp_path / "secrets")
+    dialog = LoginDialog(store=store, auth=None, plib_tool=None, offline=True)
+    tabs = dialog.findChild(QTabWidget)
+    titles = [tabs.tabText(i) for i in range(tabs.count())]
+    assert "PKUHub" in titles
+    assert "对话设置" in titles
+    assert not any("P-Lib" in t for t in titles)
+
+
 def test_treehole_tab_disabled_offline(app: QApplication, tmp_path) -> None:
     store = CredentialStore(tmp_path / "secrets")
     dialog = LoginDialog(store=store, auth=None, plib_tool=None, offline=True)

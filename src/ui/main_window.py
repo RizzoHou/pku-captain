@@ -58,7 +58,6 @@ from .workflow_worker import WorkflowWorker, workflow_summary
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _LOCAL_PKU3B = _REPO_ROOT / ".local" / "cargo" / "bin" / "pku3b"
-_LOCAL_PLIB = _REPO_ROOT.parent / "plib-cli" / ".venv" / "bin" / "plib"
 _TZ = ZoneInfo("Asia/Shanghai")
 
 
@@ -249,6 +248,7 @@ class MainWindow(QMainWindow):
         )
         self._dashboard.treehole_settings_changed.connect(self._reconfigure_treehole_sync)
         self._dashboard.model_config_changed.connect(self._on_model_config_changed)
+        self._dashboard.agent_settings_changed.connect(self._on_agent_settings_changed)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._dashboard)
@@ -543,6 +543,20 @@ class MainWindow(QMainWindow):
             self._refresh_context_meter()
             self._chat_panel.add_system_message("已更新模型配置并即时生效。")
             self.statusBar().showMessage("模型配置已更新")
+
+    def _on_agent_settings_changed(self) -> None:
+        """Apply a 设置 → 对话设置 edit (tool-round limit) to the live agent.
+
+        The dialog persisted the new limit and emitted the `tool_rounds`
+        sentinel; re-read it and set `max_tool_iterations` on the running agent
+        so the next turn honours it (no restart). Applies to any brain, so —
+        unlike the model sentinel — it needs no offline guard. A mid-turn edit
+        takes effect on the following turn (the current turn's iteration count
+        is already fixed), so there is no busy guard either.
+        """
+        rounds = CredentialStore().tool_rounds()
+        self._agent.max_tool_iterations = rounds
+        self.statusBar().showMessage(f"已更新工具调用轮数上限：{rounds}")
 
     def _on_open_history(self) -> None:
         if self._busy:
@@ -921,14 +935,12 @@ def _startup_diagnostics(*, offline: bool) -> str:
         missing.append("pku3b：未在 PATH 中找到")
     elif not _pku3b_configured():
         missing.append("pku3b：已安装，但尚未完成首次登录配置")
-    if shutil.which("plib") is None and not _LOCAL_PLIB.exists():
-        missing.append("plib：未在 PATH 中找到，P-Lib 搜索不可用")
 
     if not missing:
         return ""
 
     prefix = (
-        "当前以离线模式运行。点击右上角『设置』即可登录北大统一身份、P-Lib 并配置对话模型。"
+        "当前以离线模式运行。点击右上角『设置』即可登录北大统一身份、PKUHub 并配置对话模型。"
         if offline
         else "在线依赖未完全就绪。"
     )

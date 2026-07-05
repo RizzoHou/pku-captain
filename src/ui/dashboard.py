@@ -113,6 +113,10 @@ class DashboardPanel(QWidget):
     # `models` sentinel) so the window can rebuild + apply the chat brain live,
     # without a restart. The model roles carry no dashboard card of their own.
     model_config_changed = pyqtSignal()
+    # Emitted after the account dialog closes with a 对话设置 edit (the
+    # `tool_rounds` sentinel) so the window can apply the new tool-round limit to
+    # the live agent. Like the model roles, it has no dashboard card.
+    agent_settings_changed = pyqtSignal()
 
     def __init__(
         self,
@@ -183,7 +187,7 @@ class DashboardPanel(QWidget):
         # configured here even offline, taking effect on the next launch.
         self._account_button = QPushButton("设置")
         self._account_button.setObjectName("SecondaryButton")
-        self._account_button.setToolTip("登录北大统一身份、P-Lib，配置对话模型与网络代理")
+        self._account_button.setToolTip("登录北大统一身份、PKUHub，配置对话模型与网络代理")
         self._account_button.clicked.connect(lambda: self._open_account_dialog())
 
         header = QGridLayout()
@@ -416,7 +420,7 @@ class DashboardPanel(QWidget):
         if key == "plib_materials":
             card = self._cards.get("plib_materials")
             if isinstance(card, PLibMaterialsCard):
-                card.set_body(f"P-Lib 不可用：{message}", "error")
+                card.set_body(f"PKUHub 不可用：{message}", "error")
             return
         if key == "dean_updates":
             # Keep accumulated dean items visible; only the summary shows the
@@ -482,7 +486,7 @@ class DashboardPanel(QWidget):
         DeanDetailDialog(tool, item, self).exec()
 
     def _show_plib_dialog(self) -> None:
-        tool = self._require_tool("plib_materials", "P-Lib 资料搜索")
+        tool = self._require_tool("plib_materials", "PKUHub 资料搜索")
         if tool is None:
             return
         PLibSearchDialog(tool, self).exec()
@@ -514,9 +518,13 @@ class DashboardPanel(QWidget):
         (`network` sentinel) affects every network card at once, so it re-polls
         all of them. A model-role edit (`models` sentinel) has no dashboard
         card — it routes up via `model_config_changed` so the window rebuilds
-        and applies the chat brain immediately (no restart)."""
+        and applies the chat brain immediately (no restart). A 对话设置 edit
+        (`tool_rounds` sentinel) likewise routes up via `agent_settings_changed`
+        so the window applies the new tool-round limit to the live agent."""
         if "models" in keys:
             self.model_config_changed.emit()
+        if "tool_rounds" in keys:
+            self.agent_settings_changed.emit()
         live = ("treehole_updates", "plib_materials", "pku3b_assignments", "pku3b_announcements")
         scoped = list(live) if "network" in keys else [key for key in keys if key in live]
         if scoped:
@@ -1016,9 +1024,9 @@ class PLibMaterialsCard(QFrame):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.setMinimumHeight(196)
 
-        title_label = QLabel("P-Lib 资料")
+        title_label = QLabel("PKUHub 资料")
         title_label.setObjectName("CardTitle")
-        self._body_label = QLabel("课程资料检索 · PKUHUB")
+        self._body_label = QLabel("课程资料检索 · PKUHub")
         self._body_label.setObjectName("CardBody")
         self._body_label.setWordWrap(True)
         self._quota_label = QLabel("下载额度加载中...")
@@ -1061,17 +1069,17 @@ class PLibMaterialsCard(QFrame):
         self._body_label.setText(text)
         self._body_label.setStyleSheet(f"color: {colors.get(state, colors['data'])};")
         if state == "loading":
-            self._quota_label.setText("正在读取 P-Lib 下载额度...")
+            self._quota_label.setText("正在读取 PKUHub 下载额度...")
         elif state == "error":
-            self._quota_label.setText("仍可打开搜索窗口；请确认 plib-cli 已安装并已登录。")
+            self._quota_label.setText("仍可打开搜索窗口；请确认 PKUHub 账号已登录。")
 
     def set_quota(self, data: dict[str, object]) -> None:
         remaining = data.get("download_remaining")
         if remaining is None:
-            self.set_body("已接入 P-Lib 搜索与下载", "data")
+            self.set_body("已接入 PKUHub 搜索与下载", "data")
             self._quota_label.setText("今日剩余下载次数：未知")
         else:
-            self.set_body("已接入 P-Lib 搜索与下载", "data")
+            self.set_body("已接入 PKUHub 搜索与下载", "data")
             self._quota_label.setText(f"今日剩余下载次数：{remaining}")
 
 
@@ -1888,15 +1896,15 @@ class PLibSearchDialog(QDialog):
 
     def __init__(self, tool: Tool, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("P-Lib 资料搜索")
+        self.setWindowTitle("PKUHub 资料搜索")
         self.resize(820, 680)
         self._tool = tool
         self._results: list[dict[str, object]] = []
         self._pending: object = None
 
-        title = QLabel("P-Lib 资料搜索")
+        title = QLabel("PKUHub 资料搜索")
         title.setObjectName("DialogTitle")
-        subtitle = QLabel("搜索 PKUHUB 课程资料；下载会保存到本项目 downloads/plib 目录。")
+        subtitle = QLabel("搜索 PKUHub 课程资料；下载会保存到本项目 downloads/plib 目录。")
         subtitle.setObjectName("DialogSubtitle")
         subtitle.setWordWrap(True)
 
@@ -1998,7 +2006,7 @@ class PLibSearchDialog(QDialog):
     def _search(self) -> None:
         query = self._query_input.text().strip()
         if not query:
-            QMessageBox.warning(self, "P-Lib 搜索", "请输入搜索关键词。")
+            QMessageBox.warning(self, "PKUHub 搜索", "请输入搜索关键词。")
             return
         args: dict[str, object] = {
             "action": "search",
@@ -2060,10 +2068,10 @@ class PLibSearchDialog(QDialog):
     def _on_show_result(self, result: object, material: dict[str, object]) -> None:
         if not getattr(result, "success", False):
             error = str(getattr(result, "error", "") or "获取详情失败")
-            QMessageBox.warning(self, "P-Lib 详情", error)
+            QMessageBox.warning(self, "PKUHub 详情", error)
             return
         detail = result.data if isinstance(result.data, dict) else material
-        QMessageBox.information(self, "P-Lib 详情", _plib_detail_text(detail))
+        QMessageBox.information(self, "PKUHub 详情", _plib_detail_text(detail))
 
     def _download_selected(self) -> None:
         material = self._selected_material()
@@ -2073,7 +2081,7 @@ class PLibSearchDialog(QDialog):
         title = str(material.get("title") or f"资料 {material_id}")
         reply = QMessageBox.question(
             self,
-            "下载 P-Lib 资料",
+            "下载 PKUHub 资料",
             f"确定下载：{title}\n\n文件将保存到 downloads/plib。",
         )
         if reply != QMessageBox.StandardButton.Yes:
@@ -2082,10 +2090,12 @@ class PLibSearchDialog(QDialog):
 
     def _on_download_result(self, result: object) -> None:
         if not getattr(result, "success", False):
-            QMessageBox.warning(self, "P-Lib 下载", str(getattr(result, "error", "") or "下载失败"))
+            QMessageBox.warning(
+                self, "PKUHub 下载", str(getattr(result, "error", "") or "下载失败")
+            )
             return
         data = result.data if isinstance(result.data, dict) else {}
-        QMessageBox.information(self, "P-Lib 下载", _plib_download_text(data))
+        QMessageBox.information(self, "PKUHub 下载", _plib_download_text(data))
 
     def _selected_material(self) -> dict[str, object]:
         item = self._result_list.currentItem()
