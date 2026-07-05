@@ -25,9 +25,11 @@ Two credential kinds live here:
   legacy ``secrets/api_keys/<brand>_key.txt`` files are honoured as an
   ``api_key`` fallback so existing checkouts keep working with no migration.
 
-Plus one piece of per-machine network config in the same tree (not a
-credential, but the store stays the single ``secrets/`` writer): the proxy
-mode + URL for ``src.core.network.apply_proxy``, in ``secrets/network.json``.
+Plus per-machine config in the same tree (not credentials, but the store stays
+the single ``secrets/`` writer): the proxy mode + URL for
+``src.core.network.apply_proxy`` in ``secrets/network.json``, and general app
+settings — currently the agent tool-call round limit — in
+``secrets/settings.json``.
 """
 
 from __future__ import annotations
@@ -42,6 +44,16 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # The two model roles, in display order. `text` is the default chat brain.
 MODEL_ROLES: tuple[str, ...] = ("text", "visual")
+
+# Agent tool-call round limit (how many LLM iterations one turn may take before
+# the loop bails to avoid runaway tool-calling). Persisted in
+# ``secrets/settings.json`` and threaded into ``Agent.max_tool_iterations`` by
+# ``build_agent``. The default mirrors ``Agent``'s own field default; MIN/MAX
+# bound both the stored value and the GUI spinbox so a hand-edited file can't
+# push it to 0 (never runs a tool) or something absurd.
+TOOL_ROUNDS_DEFAULT = 8
+TOOL_ROUNDS_MIN = 1
+TOOL_ROUNDS_MAX = 50
 
 # Per-role storage defaults: the endpoint/model a role falls back to when the
 # user has not customised it, plus the legacy single-key files (relative to
@@ -87,6 +99,11 @@ def model_default(role: str, field: str) -> str:
     return str(_MODEL_DEFAULTS[role][field])
 
 
+def _clamp_rounds(value: int) -> int:
+    """Bound a tool-round count to ``[TOOL_ROUNDS_MIN, TOOL_ROUNDS_MAX]``."""
+    return max(TOOL_ROUNDS_MIN, min(TOOL_ROUNDS_MAX, value))
+
+
 def _coerce_window(value: object) -> int | None:
     """Parse a stored/entered context window to a positive int, else None.
 
@@ -119,6 +136,7 @@ class CredentialStore:
         self.pku_dir = self.secrets_dir / "pku"
         self.models_path = self.secrets_dir / "models.json"
         self.network_path = self.secrets_dir / "network.json"
+        self.settings_path = self.secrets_dir / "settings.json"
 
     # -- small helpers ----------------------------------------------------
     @staticmethod
@@ -244,6 +262,44 @@ class CredentialStore:
                 indent=2,
             ),
             encoding="utf-8",
+        )
+
+    # -- app settings -----------------------------------------------------
+    def _load_settings(self) -> dict[str, object]:
+        """Parse ``secrets/settings.json`` into a dict; corrupt/missing → {}."""
+        if not self.settings_path.exists():
+            return {}
+        try:
+            raw = json.loads(self.settings_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return {}
+        return raw if isinstance(raw, dict) else {}
+
+    def tool_rounds(self) -> int:
+        """The agent's tool-call round limit, clamped to a sane range.
+
+        A blank / non-numeric / out-of-range stored value degrades to
+        ``TOOL_ROUNDS_DEFAULT`` (or the nearest bound), so a hand-edited file
+        never breaks ``build_agent``.
+        """
+        raw = self._load_settings().get("tool_rounds")
+        try:
+            value = int(str(raw).strip())
+        except (TypeError, ValueError):
+            return TOOL_ROUNDS_DEFAULT
+        return _clamp_rounds(value)
+
+    def save_tool_rounds(self, rounds: int) -> None:
+        """Persist the tool-call round limit into ``secrets/settings.json``.
+
+        Merges into the existing settings dict (future-proof for more scalar
+        app settings) and clamps to ``[TOOL_ROUNDS_MIN, TOOL_ROUNDS_MAX]``.
+        """
+        data = self._load_settings()
+        data["tool_rounds"] = _clamp_rounds(rounds)
+        self.settings_path.parent.mkdir(parents=True, exist_ok=True)
+        self.settings_path.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
         )
 
     # -- models -----------------------------------------------------------

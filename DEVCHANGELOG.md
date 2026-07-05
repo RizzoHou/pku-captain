@@ -17,6 +17,17 @@ The **development decision log** — why changes were made, not what shipped. Ma
 - **Files**: `src/tools/doc_base.py` (render swap + guarded imports), `pyproject.toml` (deps + version), `install.sh`, `.github/workflows/ci.yml`, `README.md`, `CHANGELOG.md`, `docs/setup_zh.md`, `CLAUDE.md`.
 - **Architecture note**: new runtime external dep (pypdfium2/Pillow) + render data-flow change (subprocess→in-process), but doc_read stays the same box/seam — no ARCHITECTURE.html map change.
 
+## 2026-07-05 — Configurable tool-call round limit + P-Lib→PKUHub GUI rebrand
+
+- **What**: `设置` gains a 对话设置 tab (spinbox) for `Agent.max_tool_iterations` (was hardcoded 8), persisted in `secrets/settings.json` and applied to the live agent on save; separately, user-visible "P-Lib"/"P-Lib 图书" GUI copy is rebranded "PKUHub".
+- **Decision — store the setting in `secrets/settings.json`, not a new `data/` file**: it's user config, not runtime state, and the proxy setting set the precedent that `CredentialStore` is the single `secrets/` writer even for non-credential config (`network.json`). Reused the same tolerant read/clamp/merge shape (`_load_settings` / `tool_rounds` / `save_tool_rounds`, `TOOL_ROUNDS_{DEFAULT,MIN,MAX}`), so `tmp_secrets` already redirects it — no new test sink.
+- **Decision — live-apply over restart**: mirrored the `models` sentinel path (`credentials_changed(["tool_rounds"])` → `agent_settings_changed` → `_on_agent_settings_changed`) rather than a "restart to apply" hint. No offline/busy guard needed (unlike models): the cap applies to any brain and `range(max_tool_iterations)` is fixed at turn start, so a mid-turn edit just lands on the next turn.
+- **Decision — rename scope is display strings only**: the task said "on GUI", so backend identifiers stay (tool key `plib_materials`, `PLib*` classes, `PLibAuth*`/`PLibResultList` objectNames + QSS selectors, `secrets/plib` + `downloads/plib` paths) — renaming those would break stored creds, styling, and the integration-contract tool name for zero user benefit. Left `#`/docstring "P-Lib" mentions (dev-facing).
+- **Decision — removed (not rebranded) the stale `shutil.which("plib")` startup diagnostic**: plib is vendored in-process now, so the PATH probe always found nothing and spuriously reported "P-Lib 搜索不可用"; rebranding a dead, false diagnostic to "PKUHub" would perpetuate the lie, so dropped it + the `_LOCAL_PLIB` constant. (Left the parallel `pku3b` PATH probe alone — out of scope.)
+- **Decision — one worktree, not a team**: both tasks edit `login_dialog.py` (Task A adds the tab, Task B renames its P-Lib tab), so parallel worktree teammates would collide there; solo was cleaner than the coordination.
+- **Files**: `src/core/{credentials,bootstrap}.py`; `src/ui/{login_dialog,dashboard,main_window,tool_trace_panel}.py`; `tests/{test_credentials,test_bootstrap_docbase,test_login_dialog,test_agent_settings_live_apply}.py`.
+- **Verify**: VERIFICATION.md 2026-07-05 entries (对话设置 round limit live-apply; PKUHub rebrand). Full suite 473 pass / 3 skip, ruff clean, DeepSeek smoke pass.
+
 ## 2026-07-04 — 历史通知 detail: body leaking into 发布时间 (the "标题/发布时间 swap")
 
 - **What**: the captain saw a 历史通知 whose 发布时间 was the *entire body* and whose 标题 was a 20-char body snippet. Fixed by sanitizing `_posted_at` in `src/tools/pku3b_announcements.py`.

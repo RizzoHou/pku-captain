@@ -46,12 +46,18 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QRadioButton,
+    QSpinBox,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
-from ..core.credentials import CredentialStore, model_default
+from ..core.credentials import (
+    TOOL_ROUNDS_MAX,
+    TOOL_ROUNDS_MIN,
+    CredentialStore,
+    model_default,
+)
 from ..core.network import (
     DEFAULT_PROXY_URL,
     ProxyConfig,
@@ -68,6 +74,9 @@ _TREEHOLE_KEY = "treehole_updates"
 _PLIB_KEY = "plib_materials"
 _MODELS_KEY = "models"
 _NETWORK_KEY = "network"
+# Sentinel for a 对话设置 (tool-round limit) change — has no dashboard card;
+# the window applies it to the live agent rather than refreshing a card.
+_TOOL_ROUNDS_KEY = "tool_rounds"
 # The pku3b cards a treehole login (which mirrors the shared IAAA identity into
 # secrets/pku/) newly provisions — refresh them once creds land.
 _PKU_KEYS = ("pku3b_assignments", "pku3b_announcements")
@@ -218,15 +227,17 @@ class LoginDialog(QDialog):
         title = QLabel("设置")
         title.setObjectName("DialogTitle")
         subtitle = QLabel(
-            "在这里集中管理北大统一身份（树洞）、P-Lib 图书账号、对话模型与网络代理。"
+            "在这里集中管理北大统一身份（树洞）、PKUHub 账号、对话模型、"
+            "工具调用轮数与网络代理。"
         )
         subtitle.setObjectName("DialogSubtitle")
         subtitle.setWordWrap(True)
 
         tabs = QTabWidget()
         tabs.addTab(self._build_treehole_tab(), "统一身份 · 树洞")
-        tabs.addTab(self._build_plib_tab(), "P-Lib 图书")
+        tabs.addTab(self._build_plib_tab(), "PKUHub")
         tabs.addTab(self._build_models_tab(), "模型配置")
+        tabs.addTab(self._build_agent_tab(), "对话设置")
         tabs.addTab(self._build_network_tab(), "网络代理")
 
         close_button = QPushButton("关闭")
@@ -418,7 +429,7 @@ class LoginDialog(QDialog):
         panel = QFrame()
         panel.setObjectName("PLibAuthPanel")
 
-        self._plib_status = QLabel("请输入 P-Lib 邮箱和密码")
+        self._plib_status = QLabel("请输入 PKUHub 邮箱和密码")
         self._plib_status.setObjectName("PLibAuthStatus")
         self._plib_status.setWordWrap(True)
 
@@ -464,15 +475,15 @@ class LoginDialog(QDialog):
 
     def _refresh_plib_status(self) -> None:
         if self._store.has_plib():
-            self._set_status(self._plib_status, "已保存 P-Lib 凭据。", "ok")
+            self._set_status(self._plib_status, "已保存 PKUHub 凭据。", "ok")
         else:
-            self._set_status(self._plib_status, "尚未配置 P-Lib 账号。", "error")
+            self._set_status(self._plib_status, "尚未配置 PKUHub 账号。", "error")
 
     def _plib_save_login(self) -> None:
         email = self._plib_email.text().strip()
         password = self._plib_password.text()
         if not email or not password:
-            QMessageBox.warning(self, "P-Lib", "请输入邮箱和密码。")
+            QMessageBox.warning(self, "PKUHub", "请输入邮箱和密码。")
             return
         # Persist first (works offline, survives restart), then validate live if
         # the tool is registered.
@@ -482,7 +493,7 @@ class LoginDialog(QDialog):
             self._set_status(self._plib_status, "已保存，将在在线模式下生效。", "ok")
             return
         self._plib_save.setEnabled(False)
-        self._set_status(self._plib_status, "正在登录 P-Lib...", "pending")
+        self._set_status(self._plib_status, "正在登录 PKUHub...", "pending")
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         self._pending.append(
             run_async(
@@ -518,7 +529,7 @@ class LoginDialog(QDialog):
         self._plib_email.clear()
         self._plib_password.clear()
         self._mark_changed(_PLIB_KEY)
-        self._set_status(self._plib_status, "已清除 P-Lib 凭据。", "error")
+        self._set_status(self._plib_status, "已清除 PKUHub 凭据。", "error")
 
     # -- models tab -------------------------------------------------------
     def _build_models_tab(self) -> QWidget:
@@ -567,13 +578,63 @@ class LoginDialog(QDialog):
         self._mark_changed(_MODELS_KEY)
         self._set_status(self._model_status, "已保存模型配置并即时生效。", "ok")
 
+    # -- agent (tool-round limit) tab -------------------------------------
+    def _build_agent_tab(self) -> QWidget:
+        panel = QWidget()
+
+        hint = QLabel(
+            "工具调用轮数：一次对话中 Captain 最多可连续调用工具的次数（每一轮为"
+            "一次模型思考 + 工具调用）。轮数越大越能完成多步任务，但可能更慢；"
+            "达到上限后会停止以避免无限循环。保存后即时生效。"
+        )
+        hint.setObjectName("DialogSubtitle")
+        hint.setWordWrap(True)
+
+        self._tool_rounds_spin = QSpinBox()
+        self._tool_rounds_spin.setObjectName("TreeholeAuthInput")
+        self._tool_rounds_spin.setRange(TOOL_ROUNDS_MIN, TOOL_ROUNDS_MAX)
+        self._tool_rounds_spin.setValue(self._store.tool_rounds())
+
+        self._agent_status = QLabel("")
+        self._agent_status.setObjectName("PLibAuthStatus")
+        self._agent_status.setWordWrap(True)
+
+        save_button = QPushButton("保存对话设置")
+        save_button.setObjectName("PrimaryButton")
+        save_button.clicked.connect(self._save_tool_rounds)
+
+        rounds_row = QHBoxLayout()
+        rounds_row.setContentsMargins(0, 0, 0, 0)
+        rounds_row.setSpacing(10)
+        rounds_row.addWidget(QLabel("工具调用轮数"))
+        rounds_row.addWidget(self._tool_rounds_spin)
+        rounds_row.addStretch(1)
+
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(12)
+        layout.addWidget(hint)
+        layout.addLayout(rounds_row)
+        layout.addWidget(self._agent_status)
+        layout.addWidget(save_button, 0, Qt.AlignmentFlag.AlignRight)
+        layout.addStretch(1)
+        return panel
+
+    def _save_tool_rounds(self) -> None:
+        rounds = self._tool_rounds_spin.value()
+        self._store.save_tool_rounds(rounds)
+        self._mark_changed(_TOOL_ROUNDS_KEY)
+        self._set_status(
+            self._agent_status, f"已保存：工具调用轮数上限 {rounds}，即时生效。", "ok"
+        )
+
     # -- network proxy tab --------------------------------------------------
     def _build_network_tab(self) -> QWidget:
         panel = QWidget()
         cfg = self._store.proxy()
 
         hint = QLabel(
-            "代理作用于全部网络访问（教学网 / 树洞 / P-Lib / 教务 / 模型接口），"
+            "代理作用于全部网络访问（教学网 / 树洞 / PKUHub / 教务 / 模型接口），"
             "保存后立即生效。校外通过 Clash / mihomo 等访问校内资源时，"
             "选择「自定义代理」并填写本机代理地址。"
         )

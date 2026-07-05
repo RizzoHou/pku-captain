@@ -20,6 +20,32 @@ Human-executable verification steps. Maintained by the `verification` skill. The
 
 **Automated / [agent-run] on Linux**: clean `git clone` → `./install.sh` (35s, installed pku-captain 1.0.0 + pypdfium2 5.11 + Pillow 12.3) → unmocked `_render_pages` produced valid PNG data URIs + correct page count → offline `build_agent` booted → `ruff check src` clean + `pytest tests/` **460 passed / 3 skipped**. Mac wheel + Gatekeeper-free CLI run are the human-only part.
 
+### 2026-07-05 — 设置 → 对话设置: configurable tool-call round limit (live-apply)
+
+**Proves**: the agent's tool-call round limit is user-settable from a new 对话设置 tab, persists across restarts, and takes effect on the running chat without a restart.
+
+**Steps**:
+1. **Tab + persistence (offline GUI fine)**: `python -m src` → 设置 → the tab strip now has **对话设置** (between 模型配置 and 网络代理). Open it → a **工具调用轮数** spinbox (default 8, range 1–50) → set it to **2** → **保存对话设置** → expect the status line "已保存：工具调用轮数上限 2，即时生效。" and a status-bar note "已更新工具调用轮数上限：2".
+2. **Survives restart**: `cat secrets/settings.json` → expect `{"tool_rounds": 2}`. Quit and relaunch `python -m src` → reopen 设置 → 对话设置 → the spinbox shows **2** (prefilled from disk).
+3. **Live effect (online)**: `python -m src --online`, set the limit to **2** and save, then ask a question that forces several tool rounds (e.g. "查一下我最近的作业、课程通知和树洞新回复，一起总结"). Expect the reply to end with **"工具调用已达到上限（2 轮）。…"** rather than a full answer — proving the new cap is applied live (no restart). Reset it to 8 afterward for normal use.
+4. **Negative / clamp**: a hand-edited `secrets/settings.json` with `{"tool_rounds": 999}` or garbage → app still launches and behaves as the clamped/default value (no crash).
+
+**Automated**: `pytest tests/test_credentials.py tests/test_bootstrap_docbase.py tests/test_login_dialog.py tests/test_agent_settings_live_apply.py` (`[agent-run]` 473 pass / 3 skip — store round-trip/clamp/corrupt, build_agent wiring, tab persists+emits+prefill, sentinel→live-apply routing) + `[agent-run]` `python scripts/smoke_deepseek.py` passed.
+
+### 2026-07-05 — P-Lib rebranded to PKUHub across the GUI
+
+**Proves**: no user-visible "P-Lib" text remains; the rename is copy-only (login/credentials and download dirs still work).
+
+**Steps**:
+1. **Settings tab**: `python -m src` → 设置 → the materials tab reads **PKUHub** (not "P-Lib 图书"); its status line says "请输入 PKUHub 邮箱和密码"; the dialog subtitle and 网络代理 hint say **PKUHub**.
+2. **Dashboard card + dialogs (online)**: `python -m src --online` → the 资料 card title reads **PKUHub 资料** with body "已接入 PKUHub 搜索与下载"; click **搜索资料** → the window title + heading read **PKUHub 资料搜索**; a detail/download prompt reads **PKUHub 详情 / 下载 PKUHub 资料**.
+3. **Inline tool trace**: ask Captain to search course materials → the inline tool-call row reads "PKUHub 返回 N 条资料…" / "PKUHub 今日剩余下载次数…".
+4. **Login still works (creds path unchanged)**: 设置 → PKUHub → enter email+password → 保存并登录 → expect success + quota; `ls secrets/plib/{email,password}` still written. Existing stored creds keep working (path is unchanged).
+5. **Stale diagnostic gone**: launch offline (`python -m src`) with no keys → the first-run diagnostic no longer lists "plib：未在 PATH 中找到，P-Lib 搜索不可用"; the offline hint says "…登录北大统一身份、PKUHub 并配置对话模型。"
+6. **Grep sanity**: `grep -rn 'P-Lib' src/ui/ | grep -v '#\|"""'` → only docstring lines (no runtime string literals shown to the user).
+
+**Automated**: `pytest tests/test_login_dialog.py::test_settings_tabs_use_pkuhub_not_plib` (`[agent-run]` passed — tab reads PKUHub, no "P-Lib" in tab titles, 对话设置 present).
+
 ### 2026-07-04 — 历史通知 detail no longer shows the body under 发布时间
 
 **Proves**: opening a history course notice whose body was leaking into its 发布时间 (the 标题/发布时间 "swap") now renders cleanly — no time line rather than the whole body under 发布时间.

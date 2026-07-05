@@ -252,12 +252,12 @@ def _format_treehole(data: dict[str, Any]) -> str:
 
 def _format_plib_materials(data: dict[str, Any]) -> str:
     if "download_remaining" in data:
-        return f"P-Lib 今日剩余下载次数：{data.get('download_remaining')}"
+        return f"PKUHub 今日剩余下载次数：{data.get('download_remaining')}"
     results = data.get("results")
     if isinstance(results, list):
         if not results:
-            return "P-Lib 没有找到匹配资料。"
-        lines = [f"P-Lib 返回 {len(results)} 条资料，展示前 5 条："]
+            return "PKUHub 没有找到匹配资料。"
+        lines = [f"PKUHub 返回 {len(results)} 条资料，展示前 5 条："]
         for item in results[:5]:
             if isinstance(item, dict):
                 lines.append(
@@ -276,7 +276,7 @@ def _format_plib_materials(data: dict[str, Any]) -> str:
             desc=data.get("description") or data.get("course") or "",
         ).strip()
     if "downloads" in data:
-        return f"P-Lib 已下载 {len(data.get('downloads') or [])} 个文件。"
+        return f"PKUHub 已下载 {len(data.get('downloads') or [])} 个文件。"
     return _to_json(data)
 
 
