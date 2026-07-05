@@ -6,6 +6,17 @@ The **development decision log** — why changes were made, not what shipped. Ma
 
 ---
 
+## 2026-07-05 — 1.0.0 release packaging: in-process PDF render, installer, CI
+
+- **What**: prep the first tagged release. Replaced `doc_read`'s poppler subprocess renderer with in-process `pypdfium2` + Pillow; added `install.sh` + a CI workflow; bumped `0.0.1`→`1.0.0`; rewrote the stale README; cut CHANGELOG `[1.0.0]`.
+- **Decision — pypdfium2 over PyMuPDF over a stdlib PNG encoder**: all three drop the external `pdftoppm` binary, but PyMuPDF is AGPL (a real hazard once the course repo goes public) and a hand-rolled numpy→PNG encoder ships a bespoke channel-order/stride correctness risk in release code. pypdfium2 (BSD-3/Apache-2.0, bundled PDFium) + Pillow (HPND) are two permissive pure wheels — the license-safe, integration-easy, own-no-encoder choice. Both imported defensively so `doc_search` still works if a wheel is absent.
+- **Decision — runtime poppler removed, build-time poppler kept**: only `doc_read`'s render path (`_render_pages`/`_pdf_page_count`) ships to users; `scripts/split_doc_base.py` (qpdf/poppler/ghostscript) is a one-time corpus-build step and the 286 PDFs are already committed, so it stays untouched. This scopes the "no external binary" promise to what actually reaches the user's machine.
+- **Decision — ready PR, not auto-merge to main**: the captain said they'll Mac-test, and the pypdfium2 wheel is the one thing unverifiable on this Linux box; a ready (non-draft) PR they merge post-test fits that, and the background-job policy forbids merging to main anyway. Tag `v1.0.0` + GitHub Release deferred to post-merge (squash-merge mints a new commit, so a pre-merge tag would orphan).
+- **Decision — install.sh installs base only, extras opt-in**: `--math` (WebEngine) and `--dev` (pytest/ruff/mypy) are flags, not defaults, so a plain user install stays lean; picks newest Python ≥3.11 and is re-runnable.
+- **Verify — validated on a clean clone**: `git clone` → `./install.sh` (35s) → unmocked pypdfium2 render produced valid PNGs, offline `build_agent` booted, ruff clean + 460 pass. Mac render path noted in VERIFICATION.md as pending (human).
+- **Files**: `src/tools/doc_base.py` (render swap + guarded imports), `pyproject.toml` (deps + version), `install.sh`, `.github/workflows/ci.yml`, `README.md`, `CHANGELOG.md`, `docs/setup_zh.md`, `CLAUDE.md`.
+- **Architecture note**: new runtime external dep (pypdfium2/Pillow) + render data-flow change (subprocess→in-process), but doc_read stays the same box/seam — no ARCHITECTURE.html map change.
+
 ## 2026-07-04 — 历史通知 detail: body leaking into 发布时间 (the "标题/发布时间 swap")
 
 - **What**: the captain saw a 历史通知 whose 发布时间 was the *entire body* and whose 标题 was a 20-char body snippet. Fixed by sanitizing `_posted_at` in `src/tools/pku3b_announcements.py`.

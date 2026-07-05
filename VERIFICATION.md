@@ -8,6 +8,18 @@ Human-executable verification steps. Maintained by the `verification` skill. The
 
 ## Pending verification
 
+### 2026-07-05 — 1.0.0 packaging: install.sh + in-process PDF render (Mac)
+
+**Proves**: on macOS the app installs via the one-shot script and `doc_read` renders curriculum PDFs with **no poppler/`pdftoppm` installed** (the pypdfium2 wheel replaces it). This is the one path this repo's Linux CI can't confirm for a Mac release.
+
+**Steps (Mac)**:
+1. In a fresh clone: `./install.sh` → expect it to pick your Python ≥3.11, create `.venv`, and finish with "done. Launch PKU Captain with:". (`./install.sh --math` if you want chat LaTeX.)
+2. **Render without poppler**: confirm poppler is absent or ignored — `which pdftoppm` may print nothing; the feature must still work. `.venv/bin/python -m src --online` → set the visual (Kimi) model in 设置 → open **文档库** → pick a 培养方案 doc → **让 Captain 阅读** → expect page images to be read and answered in the dialog (not a "缺少 PDF 渲染依赖" or "未找到 pdftoppm" error).
+3. **Agent path**: on the visual model, ask a 培养方案 学分 question → Captain chains `doc_search`→`doc_read` and answers from the rendered pages (page images injected into chat).
+4. **Negative**: if you ever see `缺少 PDF 渲染依赖 pypdfium2 / Pillow`, the wheel didn't install — re-run `./install.sh`; the app should not crash, just report it.
+
+**Automated / [agent-run] on Linux**: clean `git clone` → `./install.sh` (35s, installed pku-captain 1.0.0 + pypdfium2 5.11 + Pillow 12.3) → unmocked `_render_pages` produced valid PNG data URIs + correct page count → offline `build_agent` booted → `ruff check src` clean + `pytest tests/` **460 passed / 3 skipped**. Mac wheel + Gatekeeper-free CLI run are the human-only part.
+
 ### 2026-07-04 — 历史通知 detail no longer shows the body under 发布时间
 
 **Proves**: opening a history course notice whose body was leaking into its 发布时间 (the 标题/发布时间 "swap") now renders cleanly — no time line rather than the whole body under 发布时间.
