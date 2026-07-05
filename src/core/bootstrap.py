@@ -162,6 +162,7 @@ def build_agent(*, offline: bool = False) -> Agent:
         workflows=workflows,
         conversation=conversation,
         memory=memory,
+        max_tool_iterations=_store().tool_rounds(),
     )
 
 
