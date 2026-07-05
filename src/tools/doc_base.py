@@ -25,16 +25,29 @@ right shape when there is no chat to inject images into.
 from __future__ import annotations
 
 import base64
+import io
 import json
-import shutil
-import subprocess
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
 from ..llm.base import ChatMessage, LLMProvider, image_part, text_part
 from .base import Tool, ToolResult
+
+# PDF rendering runs fully in-process via pypdfium2 (bundled PDFium, no external
+# binary) plus Pillow for PNG encoding — both are pip wheels, so the packaged app
+# needs no poppler/pdftoppm on the user's machine. Imported defensively so the
+# module still loads (and doc_search still works) on a platform without a wheel;
+# doc_read then raises an actionable DocReadError instead of failing at import.
+try:
+    import pypdfium2 as _pdfium
+except Exception:  # pragma: no cover - platform without a pypdfium2 wheel
+    _pdfium = None
+
+try:
+    from PIL import Image as _PILImage
+except Exception:  # pragma: no cover - Pillow missing
+    _PILImage = None
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DOC_BASE_DIR = _REPO_ROOT / "doc_base"
@@ -252,8 +265,8 @@ def _render_doc(
 
     Shared by `DocBaseReadTool` (agent image injection) and `DocBaseReader`
     (dashboard standalone Q&A). Raises `DocReadError` with a Chinese message on
-    any user-actionable failure (bad path, missing file, bad page spec, no
-    pdftoppm). Returns `(entry, page_nums, total_pages, truncated, images)`.
+    any user-actionable failure (bad path, missing file, bad page spec, missing
+    render deps). Returns `(entry, page_nums, total_pages, truncated, images)`.
     """
     rel_path = str(args.get("path") or "").strip()
     if not rel_path:
@@ -277,11 +290,9 @@ def _render_doc(
 
     try:
         images = _render_pages(pdf_path, page_nums, dpi)
-    except FileNotFoundError as exc:
-        raise DocReadError(
-            "未找到 pdftoppm；请安装 poppler（brew install poppler）。"
-        ) from exc
-    except (subprocess.CalledProcessError, OSError) as exc:
+    except DocReadError:
+        raise
+    except Exception as exc:  # pypdfium2 / Pillow rendering failure
         raise DocReadError(f"渲染 PDF 失败：{exc}") from exc
     return entry, page_nums, total, truncated, images
 
@@ -431,44 +442,39 @@ class DocBaseReader:
 
 
 def _pdf_page_count(pdf_path: Path) -> int:
-    """Best-effort page count via pdfinfo; 0 if unavailable."""
-    pdfinfo = shutil.which("pdfinfo")
-    if pdfinfo is None:
+    """Best-effort page count via pypdfium2; 0 if unavailable."""
+    if _pdfium is None:
         return 0
-    out = subprocess.run(
-        [pdfinfo, str(pdf_path)], capture_output=True, text=True, check=False
-    )
-    for line in out.stdout.splitlines():
-        if line.startswith("Pages:"):
-            try:
-                return int(line.split(":", 1)[1].strip())
-            except ValueError:
-                return 0
-    return 0
+    try:
+        pdf = _pdfium.PdfDocument(str(pdf_path))
+    except Exception:
+        return 0
+    try:
+        return len(pdf)
+    finally:
+        pdf.close()
 
 
 def _render_pages(pdf_path: Path, page_nums: list[int], dpi: int) -> list[str]:
-    """Render the given 1-based pages to PNG data URIs via pdftoppm."""
-    pdftoppm = shutil.which("pdftoppm")
-    if pdftoppm is None:
-        raise FileNotFoundError("pdftoppm")
+    """Render the given 1-based pages to PNG data URIs via pypdfium2 + Pillow."""
+    if _pdfium is None or _PILImage is None:
+        raise DocReadError(
+            "缺少 PDF 渲染依赖 pypdfium2 / Pillow；请运行 pip install pypdfium2 Pillow。"
+        )
+    scale = dpi / 72.0  # pypdfium2 renders at 72 DPI * scale
     uris: list[str] = []
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp_dir = Path(tmp)
-        for page in page_nums:
-            prefix = tmp_dir / f"p{page}"
-            subprocess.run(
-                [
-                    pdftoppm, "-png", "-r", str(dpi),
-                    "-f", str(page), "-l", str(page),
-                    str(pdf_path), str(prefix),
-                ],
-                capture_output=True,
-                check=True,
-            )
-            rendered = sorted(tmp_dir.glob(f"p{page}*.png"))
-            if not rendered:
+    pdf = _pdfium.PdfDocument(str(pdf_path))
+    try:
+        total = len(pdf)
+        for page in page_nums:  # 1-based
+            index = page - 1
+            if index < 0 or index >= total:
                 continue
-            data = rendered[0].read_bytes()
+            image = pdf[index].render(scale=scale).to_pil().convert("RGB")
+            buffer = io.BytesIO()
+            image.save(buffer, format="PNG")
+            data = buffer.getvalue()
             uris.append("data:image/png;base64," + base64.b64encode(data).decode())
+    finally:
+        pdf.close()
     return uris

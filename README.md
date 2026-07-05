@@ -1,38 +1,46 @@
 # PKU Captain
 
-面向北大学生的桌面 AI 助手。统一信息总站（课表、DDL、课程通知）+ 对话式智能助手。OOP / 程序设计实践课程作业，三人团队作品。
+面向北大学生的桌面 AI 助手。统一信息总站（课表、DDL、课程通知、树洞 / 教务更新）+ 对话式智能助手。OOP / 程序设计实践课程作业，三人团队作品。
+
+## 安装
+
+需要 Python 3.11+。**无需任何外部二进制**——PDF 渲染走进程内的 `pypdfium2`，pku3b / 图书馆 / 树洞 / 教务客户端都已 vendored 进本仓库。
+
+```bash
+./install.sh            # 一键安装：创建 .venv 并装好依赖
+./install.sh --math     # 额外安装聊天气泡的 LaTeX 渲染（PyQt6-WebEngine）
+./install.sh --dev      # 额外安装开发工具链（pytest / ruff / mypy）
+```
+
+或手动：
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e .        # 加 ".[dev,math]" 可一并带上开发 / LaTeX 依赖
+```
+
+## 启动
+
+```bash
+.venv/bin/python -m src          # 离线：EchoLLMProvider + 离线工具子集，无需密钥
+.venv/bin/python -m src --online # 在线：文本 / 视觉模型 + pku3b 等实时工具
+```
+
+首次克隆离线即可运行。在线模式的**模型密钥与账号**都在应用内 **设置** 弹窗里填写，不必手动放置文件；缺少文本模型密钥时会自动回退离线模式。
+
+命令行 REPL（同一 agent loop，便于调试）：
+
+```bash
+.venv/bin/python -m src.cli --offline   # 无密钥，EchoLLMProvider
+.venv/bin/python -m src.cli             # 在线 DeepSeek
+```
 
 ## 文档
 
-- [`docs/setup_zh.md`](docs/setup_zh.md) — 环境配置（pku3b 安装等）
+- [`docs/setup_zh.md`](docs/setup_zh.md) — 环境配置与凭证说明
 - [`docs/design_reference_zh.md`](docs/design_reference_zh.md) — 设计参考
 - [`docs/roadmap_zh.md`](docs/roadmap_zh.md) — 开发路线图
 - [`docs/schedule_zh.md`](docs/schedule_zh.md) — 课程节点
 - [`docs/integration_contract_zh.md`](docs/integration_contract_zh.md) — 后端 / GUI 接口契约
-
-## GUI 启动
-
-```bash
-.venv/bin/python -m src          # 离线 GUI：EchoLLMProvider + 离线工具子集
-.venv/bin/python -m src --online # 在线 GUI：DeepSeek + pku3b 等实时工具
-```
-
-在线模式需要 `secrets/deepseek_key.txt` 和 fork 版 `pku3b`。缺少 DeepSeek key 时 GUI 会自动回退离线模式；缺少 `pku3b` 时 DDL / 通知相关卡片会显示错误状态。
-GUI 在线启动会跳过本地 BGE RAG 的预加载，避免首次启动下载大模型；后端 `build_agent()` 默认完整路径仍保留 `KnowledgeSearchTool`。
-
-安装 `pku3b` 还需要本机先具备 Rust/Cargo：
-
-```bash
-cargo install --git https://github.com/RizzoHou/pku3b --branch master
-pku3b --version
-pku3b assignment list --format json
-pku3b identity --format json
-```
-
-当前开发机也支持项目内工具链路径：
-
-```bash
-.local/cargo/bin/pku3b --version
-```
 
 录屏流程见 [`docs/gui_demo_zh.md`](docs/gui_demo_zh.md)，手动验收见 [`docs/gui_manual_test_zh.md`](docs/gui_manual_test_zh.md)。

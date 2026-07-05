@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pku-captain"
-version = "0.0.1"
+version = "1.0.0"
 description = "Desktop AI assistant for PKU students."
 requires-python = ">=3.11"
 dependencies = [
@@ -15,6 +15,11 @@ dependencies = [
     # treehole needs only requests. See vendor/*/pyproject.toml for provenance.
     "beautifulsoup4>=4.12",
     "lxml>=5.0",
+    # doc_read renders curriculum PDF pages to images fully in-process:
+    # pypdfium2 bundles PDFium (no poppler/pdftoppm binary on the user's box),
+    # Pillow encodes the frames to PNG. Both are permissive-licensed pip wheels.
+    "pypdfium2>=4.30",
+    "Pillow>=10.0",
 ]
 
 [project.optional-dependencies]
