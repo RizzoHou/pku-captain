@@ -1,0 +1,251 @@
+% !TEX program = xelatex
+\documentclass[UTF8,a4paper,11pt,fontset=none]{ctexart}
+
+\usepackage{fontspec}
+\setCJKmainfont{Noto Serif CJK SC}
+\setCJKsansfont{Noto Sans CJK SC}
+\setCJKmonofont{Noto Sans Mono CJK SC}
+\setmonofont{Noto Sans Mono CJK SC}
+
+\usepackage[a4paper,top=2cm,bottom=2cm,left=2.1cm,right=2.1cm]{geometry}
+\usepackage[table]{xcolor}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{tcolorbox}
+\usepackage{fancyhdr}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{pkured}{HTML}{8C0000}
+\definecolor{pkurdk}{HTML}{650000}
+\definecolor{pkugold}{HTML}{B78B36}
+\definecolor{inkmuted}{HTML}{667085}
+\definecolor{codebg}{HTML}{FBF3EF}
+\definecolor{seambg}{HTML}{FDE8E8}
+\definecolor{rulegray}{HTML}{D9CFCB}
+
+\hypersetup{colorlinks=true,linkcolor=pkurdk,urlcolor=pkurdk}
+
+% ---- compact headings ----
+\titleformat{\section}{\Large\bfseries\color{pkured}}{\thesection}{0.6em}{}
+\titleformat{\subsection}{\large\bfseries\color{pkurdk}}{\thesubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{1.4ex plus .3ex}{0.7ex}
+\titlespacing*{\subsection}{0pt}{1.1ex plus .2ex}{0.5ex}
+
+\setlist{leftmargin=1.3em,itemsep=1.2pt,topsep=2pt,parsep=0pt}
+\renewcommand{\arraystretch}{1.25}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.45em}
+\setlength{\emergencystretch}{3.2em}
+
+% inline code
+\newcommand{\code}[1]{{\ttfamily\small #1}}
+
+% callout box
+\newtcolorbox{callout}{colback=seambg,colframe=pkured,boxrule=0.6pt,
+  left=6pt,right=6pt,top=4pt,bottom=4pt,arc=2pt,before skip=6pt,after skip=6pt}
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{\color{rulegray}\hrule height 0.4pt}
+\lhead{\small\color{inkmuted}PKU Captain — 项目作业报告}
+\rhead{\small\color{inkmuted}\thepage}
+
+\begin{document}
+
+% =========================== 标题区 ===========================
+{\color{pkured}\hrule height 2pt}
+\vspace{10pt}
+{\fontsize{22}{26}\selectfont\bfseries\color{pkured} PKU Captain}\\[3pt]
+{\large\bfseries 面向北京大学学生的桌面 AI 助手 —— 项目作业报告}\\[8pt]
+{\color{pkured}\hrule height 0.8pt}
+\vspace{8pt}
+
+\begin{center}
+\begin{tabular}{@{}c@{\hspace{2.2em}}c@{\hspace{2.2em}}c@{}}
+\textbf{侯宇泽} & \textbf{石一} & \textbf{邱文晰} \\
+2500013225 & 2500013039 & 2400010732 \\
+{\small\color{inkmuted}@RizzoHou（组长）} & {\small\color{inkmuted}@by-lastime} & {\small\color{inkmuted}@Q-star17} \\
+\end{tabular}\\[6pt]
+{\small 信息科学技术学院 \quad|\quad 面向对象程序设计实践 \quad|\quad 2026 年 7 月}
+\end{center}
+\vspace{2pt}
+
+\begin{callout}
+\textbf{一句话简介：} PKU Captain 是一款面向北大学生的 PyQt6 桌面应用，以\textbf{仪表盘（信息总站）}为主舞台，聚合课表、DDL、课程通知、树洞与教务更新；侧栏是一个\textbf{可见工具调用}的对话式 LLM agent，通过工具调用与文档库检索基于真实校园情境作答，并编排多步工作流。项目代码约 1.6 万行、62 个模块、450 项自动化测试，四条平行的 OOP 继承体系支撑全部扩展。
+\end{callout}
+
+% =========================== 一、功能 ===========================
+\section{程序功能介绍}
+
+PKU Captain 解决的是北大学生「信息分散」的痛点：作业在教学网、通知在 Blackboard、办事流程在教务部、闲聊在树洞——每处都需独立登录、界面各异、信息易过期，而通用 LLM 又不了解你的课表与临近 DDL。本应用把这些权威数据源接入一个统一界面，左侧仪表盘一屏总览，右侧 agent 用自然语言应答并自动化。产品重心是仪表盘，对话 agent 作为侧栏承担多步编排与自然语言查询，二者共享同一套后端工具。
+
+\subsection{六项核心功能}
+
+\begin{enumerate}[label=\textbf{\arabic*.}]
+\item \textbf{统一仪表盘}——今日课表、近期 DDL、未读课程通知、树洞消息、教务更新一屏呈现。卡片级\textbf{独立刷新}（点某卡只刷该卡）、\textbf{并行刷新}（线程池扇出，启动耗时取决于最慢单卡而非累加）、\textbf{磁盘缓存秒开}（先用上次结果绘制，再静默比对签名只重绘变更卡），且各卡\textbf{错误隔离}，一卡失败不影响其余。
+\item \textbf{对话侧栏}——自然语言查询全部 PKU 数据；工具调用过程以 \code{InlineToolCall} 内联可见；回答\textbf{流式}逐字输出；\textbf{思维链}可选显示（默认关闭）；支持多会话历史、复制、上下文用量计量与 LaTeX 公式渲染。
+\item \textbf{工具集}——可被 agent 调用的 Tool 子类：pku3b（作业 / 通知 / 课表 / 身份）、文档库检索与视觉阅读、持久记忆、日历提醒、P-Lib 资料、教务部资源与更新、树洞检索。均带 JSON schema，在线才注册联网工具。
+\item \textbf{多步工作流}——\code{Workflow} 子类组合多次工具调用完成复杂任务（今日简报、周复盘、课程补课）；既可由仪表盘按钮触发，也被包装成 \code{WorkflowTool} 让 agent 在工具调用循环中直接发起。
+\item \textbf{文档库（取代嵌入式 RAG）}——\code{doc\_search} 对切分后的 PDF 清单做词法排序检索；\code{doc\_read} 用 \code{pdftoppm} 渲染 PDF 页并作为图像交给\textbf{视觉模型直接阅读}，省去「PDF→文本」的信息损耗中间层。
+\item \textbf{记忆系统}——持久化个人偏好（食堂口味、课程、作息），每次响应\textbf{自然融入}系统提示；支持自然语言一句话入库，仪表盘还能调用 LLM 把整段话\textbf{抽取}成若干原子事实分别存储。
+\end{enumerate}
+
+\subsection{支撑性亮点}
+
+\begin{itemize}
+\item \textbf{双模型角色，运行时可切换}：\code{text}（文本，默认 DeepSeek）与 \code{visual}（视觉，默认 Kimi）两个\emph{角色}，端点 / 模型 / 密钥均可在设置中配置，任何 OpenAI 兼容端点均可接入；切换即重置对话并按视觉能力启停 \code{doc\_read}。
+\item \textbf{统一账号中心}：一个「设置」入口，分「统一身份·树洞 / P-Lib / 模型配置 / 网络代理」四个标签页；一次 IAAA 登录同时供给树洞与 pku3b。
+\item \textbf{进程级网络代理}：跟随系统 / 直连 / 自定义三态，保存即对所有 \code{requests} 路径（含 vendored 库与 LLM）生效。
+\item \textbf{离线优先}：默认离线启动（\code{EchoLLMProvider} + 离线工具子集），无需密钥即可跑通全链路与全部测试；\code{python -m src --online} 切换在线。
+\end{itemize}
+
+\subsection{工程规模一览}
+
+\begin{center}
+\small
+\begin{tabular}{@{}l c l c@{}}
+\toprule
+\rowcolor{seambg}\textbf{指标} & \textbf{数量} & \textbf{指标} & \textbf{数量} \\
+\midrule
+\code{src/} 代码行数 & $\approx$16,000 & OOP 继承体系 & 4 \\
+Python 模块 & 62 & Vendored 校园客户端 & 4 \\
+自动化测试（pytest） & $\approx$450 & 可注册工具（Tool） & 13+ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% =========================== 二、模块与类设计 ===========================
+\section{项目各模块与类设计细节}
+
+\subsection{总体架构：两条泳道与一道接缝}
+
+系统是一个 PyQt6 桌面应用，划分为 \textbf{GUI 泳道}（\code{src/ui/}）与 \textbf{后端泳道}（\code{src/core}、\code{llm}、\code{tools}、\code{workflows}、\code{rag}），二者由\textbf{唯一的工厂接缝}连接：GUI 从不直接构造具体的 Provider / Tool / Source，只调用 \code{src/core/bootstrap.py} 中的工厂（\code{build\_agent}、\code{build\_source\_registry} 等），拿到抽象类型后交互。该接缝的公共 API、线程模型、事件流与错误约定由 \code{docs/integration\_contract\_zh.md}（集成契约）唯一定义，是跨泳道协作的硬约束。\code{build\_agent(offline=True)} 一键换成离线实现，让 GUI 无需密钥即可开发。
+
+\subsection{四条平行的 OOP 继承体系（课程核心）}
+
+OOP 是本课程的考核重点。项目的全部可扩展性都收敛为一个统一范式：\textbf{「子类化 + 向对应注册表注册」}，杜绝 ad-hoc 分发，模块保持\textbf{无导入副作用}（注册发生在调用点 \code{bootstrap.py}，而非 import 时），充分体现开闭原则。
+
+\begin{center}
+\small
+\begin{tabular}{@{}>{\bfseries}l l l l@{}}
+\toprule
+\rowcolor{seambg}\textbf{体系} & \textbf{抽象基类} & \textbf{注册表} & \textbf{典型子类} \\
+\midrule
+Tool & \code{Tool / ToolResult} & \code{ToolRegistry} & Clock（离线示例）、Memory、DocBase、pku3b*、\\
+ & & & Plib、Dean*、Treehole、CalendarReminder \\
+Workflow & \code{Workflow} & \code{WorkflowRegistry} & Hello（离线示例）+ \code{WorkflowTool} 适配器 \\
+LLM & \code{LLMProvider} & 工厂选择（无注册表） & Echo（离线）、DeepSeek、Kimi \\
+Source & \code{Source} & \code{SourceRegistry} & Static（离线）、Dean、Calendar \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+每条体系都遵循「一个离线参考子类 + 若干真实子类」的模式，使内核循环与测试无需 API key 或联网即可运行。要点：
+
+\begin{itemize}
+\item \textbf{Tool}：子类声明 \code{name / description / parameters\_schema}（JSON schema），实现 \code{invoke(args) → ToolResult}。\code{ToolResult} 恒被填充（成功或失败都有结构化结果），并可携带 \code{images}——供视觉模型直接阅读的图像数据（\code{doc\_read} 渲染的 PDF 页即走这条路）。\code{ToolRegistry.to\_openai\_schema()} 把工具集序列化为 OpenAI 工具调用格式；\code{unregister} 用于按当前模型角色动态启停 \code{doc\_read}。
+\item \textbf{LLMProvider}：统一 \code{chat()} 与 \code{stream\_chat()} 接口；\code{ChatStreamEvent} 分离\emph{答案增量}与\emph{思维链增量}两路 token 流。DeepSeek 实现真正的 SSE 流式与「思维链回放」（推理模型要求把上一轮 \code{reasoning\_content} 回传，否则 400），Kimi 提供视觉能力。二者的 \code{stream\_chat} 都\textbf{按原始字节流再统一 UTF-8 解码}，避免在分块边界截断多字节中文。
+\item \textbf{Workflow}：构造时注入 \code{ToolRegistry}，在 \code{run} 中按名字组合工具调用；通过注册表成员检查，未注册 / 失败的工具会被记录并跳过。\code{agent\_callable} 标志决定是否被包成工具暴露给模型。
+\item \textbf{Source}：知识源按各自 \code{refresh\_interval} 轮询，\code{fetch()} 返回 \code{Chunk} 序列；采集 pipeline 对所有源统一处理。
+\end{itemize}
+
+\subsection{Agent 内核与回合循环}
+
+\code{Agent.turn()} 是对话的心脏，最多迭代 8 轮：
+
+\begin{tcolorbox}[colback=codebg,colframe=rulegray,boxrule=0.5pt,left=6pt,right=6pt,top=3pt,bottom=3pt,arc=1.5pt]
+\small\ttfamily
+user msg → Conversation.add\_user → \textbf{loop}（≤8）：\\
+\hspace*{1.2em}取快照并把\textbf{记忆}折叠进\emph{领头} system 消息（逐轮刷新，不写入 Conversation）\\
+\hspace*{1.2em}→ llm.stream\_chat → 事件：reasoning\_delta · assistant\_delta · llm\_response\\
+\hspace*{1.2em}→ 若有 tool\_calls：tool\_call → tool.invoke → tool\_result（逐个）\\
+\hspace*{2.4em}└ 若 ToolResult.images → 在所有结果后注入一条多模态 user 消息（视觉模型读图）\\
+\hspace*{1.2em}→ context\_usage →（无 tool\_calls）→ final
+\end{tcolorbox}
+
+关键设计不变量：\textbf{记忆折叠进快照而非写入对话}——bootstrap 让 \code{MemoryTool} 与 \code{Agent} \textbf{共享同一个} \code{MemoryStore} 实例，每轮把当前条目经 \code{render\_memory\_context()} 合并进快照副本的领头 system 消息，因而 mid-turn 写入的记忆能即时反映，而渲染历史保持干净。工具错误串在工具边界（\code{redact.py}）\textbf{凭据脱敏}后才进入对话，注入 / 持有的密钥永不进入 LLM 请求或落盘的会话文件。
+
+\subsection{核心服务类与 GUI 线程模型}
+
+后端 \code{core/} 还提供一组单一职责的服务类：\code{Conversation}（历史）、\code{MemoryStore} / \code{MemoryLearnService}（记忆与 LLM 抽取）、\code{CredentialStore}（\code{secrets/} 的唯一写入者与状态源）、\code{network.ProxyConfig / apply\_proxy}（进程级代理）、\code{SessionStore} / \code{SessionTitler}（多会话持久化与自动命名）、\code{DashboardCache}（卡片原始载荷落盘）、\code{VisionRouter}（培养方案类问题自动切到视觉角色）。
+
+GUI 侧遵循集成契约的三线程模型：\code{AgentWorker}（对话回合）、\code{DashboardWorker}（仪表盘刷新）、\code{WorkflowWorker}（工作流）三个 \code{QThread}，外加一个 \code{QThreadPool}（\code{tool\_call\_worker.run\_async} 承接对话框的阻塞调用），保证窗口始终响应。取消回合用 \code{threading.Event} 而非 \code{@pyqtSlot}（worker 正阻塞在回合内）。
+
+\subsection{Vendored 在进程内驱动的校园客户端}
+
+pku3b / P-Lib / 树洞 / 教务部四个校园客户端均以 \textbf{git subtree} 形式 vendored 进 \code{vendor/}，映射为顶层包（\code{pypku3b} / \code{plib\_cli} / \code{dean} / \code{treehole}）并\textbf{在进程内直接驱动}——没有子进程、没有兄弟 \code{.venv}、没有外部二进制，应用完全自包含。其中 \code{pypku3b} 用 \code{requests}+\code{bs4} 纯 Python 重写了原 Rust 版 pku3b 用到的子集（教学网 Blackboard + 信息门户，走 IAAA SSO），并把 TLS 固定到\textbf{系统信任库}（certifi 无法验证 \code{course.pku.edu.cn} 的 GlobalSign 证书链）。
+
+\subsection{运行时数据流}
+
+除对话回合外，另有三条关键数据流，均遵循「后台线程 + 错误隔离 + 缓存优先」的一致设计：
+
+\begin{itemize}
+\item \textbf{仪表盘刷新}——\code{DashboardWorker} 用 \code{ThreadPoolExecutor} 把选中的工具扇出并发执行，\code{as\_completed} 从工作线程逐卡发射结果，因而启动耗时取决于最慢单卡而非累加；\code{\_invoke} 吞掉每个异常、逐卡独立上报，实现\textbf{错误隔离}。\code{DashboardCache} 把各卡\emph{原始载荷}落盘，启动先据此绘制，再静默刷新、只对签名变更的卡重绘。刷新范围可控：单卡按钮只发 \code{partial\_refresh\_requested}，表头「刷新」才重载全部。
+\item \textbf{会话持久化}——\code{SessionStore} 在每回合结束 / 关闭时（且仅在首个真实回合后）写 \code{data/sessions/}；\code{SessionTitler} 用非思考模式的轻量模型异步命名；\code{restore\_conversation} 重放时会\textbf{丢弃不完整的 tool-call 尾}，避免中断的回合在重开时永久 400。
+\item \textbf{代理控制}——账号中心「网络代理」保存 → \code{apply\_proxy} 写进程环境变量 → 所有 \code{requests} 调用（vendored 客户端与 LLM 一体）随即生效，无需重启。
+\end{itemize}
+
+\subsection{可验证性与自动化测试}
+
+约 450 项 pytest 覆盖记忆 / 会话 / 工具 / 仪表盘并发刷新 / 视觉注入 / 上下文计量等核心路径；GUI 流程通过一个\textbf{无第三方依赖}的 headless 框架驱动真实 worker 线程并对渲染态断言。凡改动 \code{core/}、\code{llm/} 或工具调用线格式，还必须跑 \code{scripts/smoke\_deepseek.py} 做一次真实 DeepSeek 往返冒烟。\code{python -m src.cli} 是与 GUI 同一 \code{build\_agent} 循环的 REPL，充当接缝一致性探针。
+
+% =========================== 三、分工 ===========================
+\section{小组成员分工情况}
+
+本项目采用「组长吸收整合开销、成员自由认领」的协作模式：周任务以待办清单列出，不预分负责人，任一成员认领未勾选条目、完成后追加 GitHub handle 作为 involver。三名成员的主要贡献如下。
+
+\begin{center}
+\small
+\begin{tabular}{@{}>{\bfseries}l l l p{7.6cm}@{}}
+\toprule
+\rowcolor{seambg}\textbf{成员} & \textbf{学号} & \textbf{GitHub} & \textbf{主要负责} \\
+\midrule
+侯宇泽 & 2500013225 & @RizzoHou & 组长；整体架构与集成契约、Agent 内核、LLM Provider、工具框架、vendored 客户端、跨任务整合与评审 \\
+石一 & 2500013039 & @by-lastime & GUI 泳道主体：主窗口、对话面板、工具调用可视化、仪表盘、流式 / 思维链渲染、多会话交互 \\
+邱文晰 & 2400010732 & @Q-star17 & 知识与工具层：文档库检索与视觉阅读、记忆系统、Source 采集、部分校园工具、pytest 测试体系 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{侯宇泽（组长，@RizzoHou）}——负责项目的骨架与接缝：搭建四条 OOP 抽象基类与注册表、Agent 内核回合循环、\code{build\_agent} 工厂与集成契约；实现 DeepSeek / Kimi 两个 Provider 的 SSE 流式与思维链回放；把 pku3b 等四个校园客户端 vendored 进仓库并改造为进程内驱动。此外承担全部跨任务整合、PR 评审协调与发布前的凭据审计，是团队的技术中枢。
+
+\textbf{石一（@by-lastime）}——独立承担了 GUI 泳道的\textbf{主体工程}，工作量可观。他从零搭起 \code{MainWindow} 外壳与两栏（仪表盘 | 对话）布局，实现了对话面板的收发、Markdown / LaTeX 渲染、消息复制与「每个 assistant 片段一个气泡」的分段渲染逻辑；打磨了工具调用的内联可视化（\code{InlineToolCall}），让 agent 的每一次工具调用与结果对用户透明；完整实现了仪表盘的今日课表 / 近期 DDL / 通知等卡片与配套的 \code{PKU3bCourseTableTool}，并处理了流式输出、可选思维链窗口的自适应尺寸、多会话历史开关等一系列棘手的 Qt 细节。GUI 是用户对本产品的第一观感，石一的工作直接决定了应用「像不像一个成品」，其对渲染顺序、线程安全与视觉一致性的细致把控贯穿整个 UI 层。
+
+\textbf{邱文晰（@Q-star17）}——负责知识、工具与质量保障层，覆盖面广且技术含量高。她实现了取代嵌入式 RAG 的\textbf{文档库}子系统——\code{doc\_search} 词法检索与 \code{doc\_read} 视觉阅读的完整链路，以及配套的 \code{DocBaseReader} 服务；构建了持久化记忆系统（\code{MemoryStore} 的内容哈希入库、\code{MemoryLearnService} 的 LLM 事实抽取），让个人偏好能自然融入每次响应；接入并调试了多个校园信息源与工具（Source 采集 pipeline、教务部资源等），并\textbf{独立搭建了项目的 pytest 测试体系}——目前 450 项测试覆盖记忆、会话、工具、仪表盘刷新并发、视觉注入等核心路径，是「main 永远可演示」的质量底座。测试与知识层往往是最容易被忽视却最耗心力的部分，邱文晰在这两块的投入为项目稳定性提供了关键保障。
+
+% =========================== 四、总结与反思 ===========================
+\section{项目总结与反思}
+
+\subsection{一次坦诚的承认}
+
+我们必须诚实：这个项目\textbf{很庞大}——约 1.6 万行代码、62 个模块、四条 OOP 继承体系、四个 vendored 校园客户端、450 项测试，覆盖流式 LLM、视觉多模态、并发刷新、进程级代理、凭据脱敏等诸多细节。以三名本科生在一门课的时间预算，这显然不是能够「手搓」出来的规模。因此我们不回避：\textbf{本项目的大部分代码是「vibe」出来的}——由 LLM 在我们的引导下生成。
+
+但我们认为，真正有价值、也真正属于我们的贡献，\textbf{不在于逐行敲出这些代码，而在于探索：在 agentic coding 的时代，如何 vibe 出\emph{高质量}的代码}。当写代码的边际成本趋近于零，工程的重心就从「如何把代码写出来」上移到「如何保证一堆自己没有逐字读过的代码是正确、可维护、可审计的」。这正是本项目 \code{DEVCHANGELOG}、\code{VERIFICATION}、\code{TASTES} 等制品以及我们为之编写的对应 skill 存在的原因。
+
+\subsection{agentic 代码工程的方法论}
+
+我们把「人的注意力」从代码本身抽离出来，重新投放到几个正交的轴上，每个轴由一份 stack-agnostic（与技术栈无关）的散文制品承载，并由一个项目级 skill 自动维护、按变更类型触发：
+
+\begin{itemize}
+\item \textbf{\code{CLAUDE.md}（活的不变量）}——记录「绝不能破坏」的规则（如「记忆 store 必须共享」「累积而非替换」），是每次会话载入的项目宪法。
+\item \textbf{\code{ARCHITECTURE.html}（结构）}——盒箭图式的系统结构地图，让不写代码的架构师也能一眼看清「谁和谁通信、边界在哪」。仅结构变更时更新。
+\item \textbf{\code{DEVCHANGELOG.md}（为什么）}——决策日志，记录「为何选 X 而非 Y」。它与记录「交付了什么」的 \code{CHANGELOG.md} 正交：同一次改动可在两份文件里各留一条，分处不同的轴。
+\item \textbf{\code{VERIFICATION.md}（怎么验）}——把验证从「读代码」搬到「可观察行为」：一份非程序员也能照着执行的、可复制粘贴的人工验证步骤清单，作为 pytest 之外的验证地板，专门覆盖 GUI 行为、真实网络往返、凭据处理等自动化测试难以覆盖之处。
+\item \textbf{\code{TASTES/}（怎么写才好看）}——规定性的编码品味指南，从本仓库自身的教训中蒸馏（子类+注册、无导入副作用、累积而非替换、原始字节解码中文），而非照搬网络上的通用说教。
+\item \textbf{集成契约（接缝）}——把 GUI 与后端之间的公共 API、线程模型、事件流、错误约定固化成硬约束，破坏性变更必须显式标注，让两条泳道可以并行演进而不互相踩踏。
+\end{itemize}
+
+在流程上，我们还引入了 \textbf{plan-gate}：任何非平凡 / 结构性改动，都必须先用散文陈述计划（涉及哪些文件、方案、可能破坏什么、有何假设），让「架构师」评审\textbf{计划而非 diff}——把「要不要新增一个服务 / 全局」这类边界决策\emph{上提}到计划层，把「用哪个 Qt 信号、调哪个 API」这类惯用法\emph{下放}到代码层。而「子类 + 注册」这一贯穿全项目的纪律，本身就是一道结构护栏：它把「新增能力」约束成一种可预测、可枚举、可测试的动作。
+
+\subsection{哲学：从写代码到定契约}
+
+我们逐渐意识到，\textbf{vibe coding 的反面不是「亲手写每一行」，而是「放任」}。一个由 LLM 生成的大型系统之所以可能失控，不是因为代码由机器所写，而是因为\textbf{无人为它维护一套人类可审计的真相}——结构、决策、规则、品味、验证分别散落又互相污染。我们的应对，是把这些真相\textbf{显式化、正交化、并各自配一个自动维护它的 skill}，从而让一个不写代码的架构师也能审计整个系统的健康度。
+
+这套方法也暴露了自身的边界，我们同样如实记录：例如\textbf{凭据泄露对行为测试是不可见的}（应用一边泄密一边正常工作），只能靠发布前人工审计；例如 LLM 生成的代码在\emph{局部}正确却可能在\emph{系统级}引入隐蔽的状态耦合（我们用「共享单例」「累积而非替换」等不变量反复堵这类洞）。承认边界，本身就是方法论的一部分。
+
+回头看，这个项目与其说是「三个学生做了一个 App」，不如说是\textbf{一次关于 agentic software engineering 的方法论实验}：我们交付了一个能跑的产品，但更想交付的，是一套「在写代码几乎免费的时代，如何让免费的代码依然可信」的工作方式。这些方法论制品与配套 skill，是我们认为比代码本身更值得被审阅的部分。
+
+\end{document}
