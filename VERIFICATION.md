@@ -8,6 +8,43 @@ Human-executable verification steps. Maintained by the `verification` skill. The
 
 ## Pending verification
 
+### 2026-07-06 — PKUHub 下载 works again (405 → CSRF POST) (Mac)
+
+**Proves**: after entering PKUHub credentials, a real file **download** succeeds instead of failing with HTTP 405 — pkuhub moved `/download/<id>` from GET to a CSRF-guarded POST, and the vendored client now matches it. Login + quota already worked (that's why this was easy to miss).
+
+**Steps (Mac, in `~/Downloads/pku-captain`, re-prepared with this fix)**:
+1. `.venv/bin/python -m src --online` → 设置 → **PKUHub** → enter 图书馆邮箱 + 密码 → 保存. Confirm the dashboard PKUHub card shows 今日剩余下载次数 (e.g. `10`) — proves login/quota (already worked).
+2. **The fix — download**: in chat ask e.g. `帮我在 P-Lib 搜"高等数学"往年题，下载第一个`, or drive the tool directly. Expect a file to be **saved** (a `downloads/plib/<name>` path + `quota_remaining` decremented by 1), **not** an error containing `HTTP 405` or `download returned HTTP`.
+3. **Sanity on disk**: `ls -la downloads/plib/` → expect the downloaded file present with non-zero size. Open it → expect a real document, not an HTML error page.
+4. **Negative (optional)**: after exhausting the daily quota, a further download → expect the Chinese quota message (`今日剩余下载次数`/配额), still no 405.
+
+**Automated / [agent-run] on Linux**: live-probed pkuhub — `GET /download/727` → `405 Allow: POST, OPTIONS`, unauth `POST` (no token) → `400`; confirmed the CSRF mechanism from the live `csrf_helper.js` (wraps `fetch` to add `X-CSRFToken`). Path-forced trace: `download()` issues one `POST /download/<id>` with `{X-CSRFToken}` + `retry=False`. Vendored `test_client.py` **6 pass** (new POST/CSRF contract test), pku-captain suite **473 pass / 3 skip**, ruff clean. No P-Lib creds on the Linux box, so the real end-to-end download is the human-only part.
+
+### 2026-07-06 — Cold-start login on `--online` with no key + slim clone (Mac)
+
+**Proves**: a brand-new install can reach and use the 统一身份·树洞 login the *first* time it launches — no key configured yet — instead of the old deadlock where `--online` fell to offline and disabled the login tab. Also that the shallow clone is materially faster.
+
+**Steps (Mac, in `~/Downloads/pku-captain` prepared for you)**:
+1. **Slim clone**: this dir was made with `git clone --depth 1` of branch `worktree-release-1.0-packaging`. Sanity: `du -sh doc_base` → expect ~80 MB (no `doc_base/original/`); `ls doc_base/original 2>/dev/null` → expect *no such directory*.
+2. **Cold launch, zero keys**: with **no** `secrets/models.json` yet (fresh — don't copy old secrets), `.venv/bin/python -m src --online`. Expect the window to open in **在线模式** (title/first system line), with a chat note that the text-model key isn't configured (点击『设置』→ 模型配置). It must **not** say "已切换到离线模式".
+3. **The fix — login is reachable**: click **设置** → **统一身份·树洞** tab → the 学号 / 密码 / 验证码 fields and 登录 button are **enabled** (not greyed), and there is **no** "树洞登录需要在线模式启动" banner. Enter your IAAA 学号+门户密码 → 登录 → complete SMS → expect 已登录 · <name>. (This is the exact step that was impossible before.)
+4. **Brain swaps in live**: still in 设置 → 模型配置 → enter your DeepSeek text-model key → 保存 → close. Send a chat message → expect a real DeepSeek reply (not an echo), no restart.
+5. **Negative**: plain `.venv/bin/python -m src` (offline) → 设置 → 统一身份·树洞 is *correctly* disabled with the "需要在线模式启动" hint — that message is now accurate only for genuine offline launches.
+
+**Automated / [agent-run] on Linux**: full suite **473 pass / 3 skip**; `build_agent(offline=False)` against an empty secrets dir returns an `EchoLLMProvider`-brained agent with `treehole_updates` registered and `available_chat_models(offline=False) == []` (previously raised `FileNotFoundError` → offline fallback). Mac GUI cold-start is the human-only part.
+
+### 2026-07-05 — 1.0.0 packaging: install.sh + in-process PDF render (Mac)
+
+**Proves**: on macOS the app installs via the one-shot script and `doc_read` renders curriculum PDFs with **no poppler/`pdftoppm` installed** (the pypdfium2 wheel replaces it). This is the one path this repo's Linux CI can't confirm for a Mac release.
+
+**Steps (Mac)**:
+1. In a fresh clone: `./install.sh` → expect it to pick your Python ≥3.11, create `.venv`, and finish with "done. Launch PKU Captain with:". (`./install.sh --math` if you want chat LaTeX.)
+2. **Render without poppler**: confirm poppler is absent or ignored — `which pdftoppm` may print nothing; the feature must still work. `.venv/bin/python -m src --online` → set the visual (Kimi) model in 设置 → open **文档库** → pick a 培养方案 doc → **让 Captain 阅读** → expect page images to be read and answered in the dialog (not a "缺少 PDF 渲染依赖" or "未找到 pdftoppm" error).
+3. **Agent path**: on the visual model, ask a 培养方案 学分 question → Captain chains `doc_search`→`doc_read` and answers from the rendered pages (page images injected into chat).
+4. **Negative**: if you ever see `缺少 PDF 渲染依赖 pypdfium2 / Pillow`, the wheel didn't install — re-run `./install.sh`; the app should not crash, just report it.
+
+**Automated / [agent-run] on Linux**: clean `git clone` → `./install.sh` (35s, installed pku-captain 1.0.0 + pypdfium2 5.11 + Pillow 12.3) → unmocked `_render_pages` produced valid PNG data URIs + correct page count → offline `build_agent` booted → `ruff check src` clean + `pytest tests/` **460 passed / 3 skipped**. Mac wheel + Gatekeeper-free CLI run are the human-only part.
+
 ### 2026-07-05 — 设置 → 对话设置: configurable tool-call round limit (live-apply)
 
 **Proves**: the agent's tool-call round limit is user-settable from a new 对话设置 tab, persists across restarts, and takes effect on the running chat without a restart.

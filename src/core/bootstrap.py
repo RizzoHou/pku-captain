@@ -293,7 +293,20 @@ def _set_doc_read_registered(tools: ToolRegistry, enabled: bool) -> None:
 
 
 def _build_llm(*, offline: bool) -> LLMProvider:
-    return build_chat_llm(DEFAULT_CHAT_MODEL, offline=offline)
+    """The chat brain for `build_agent`. Online mode boots even with no
+    text-model key: it degrades to `EchoLLMProvider` so the login dialog and the
+    live tools stay available (the user configures credentials / model keys in
+    设置), then `MainWindow._on_model_config_changed` swaps the real brain in
+    live once a key is saved. Raising here instead dropped the whole app to
+    offline and disabled the credential dialog — a cold-start deadlock where
+    `python -m src --online` still told the user to launch in online mode.
+    """
+    if offline:
+        return EchoLLMProvider()
+    try:
+        return build_chat_llm(DEFAULT_CHAT_MODEL, offline=False)
+    except FileNotFoundError:
+        return EchoLLMProvider()
 
 
 def _build_tools(

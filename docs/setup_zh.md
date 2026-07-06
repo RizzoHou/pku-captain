@@ -127,7 +127,7 @@ P-Lib 账号是 PKUHUB 自注册的邮箱 / 密码（**不是** IAAA），在 <h
 
 `doc_base/` 用「拆分后的小 PDF + 视觉读取」取代了原先的向量知识库（培养方案 PDF 里大量图表，嵌入模型读不动）。`doc_base/original/` 放教务部原始大 PDF（培养方案文/理科卷、辅修双专业、选课手册），`scripts/split_doc_base.py` 把它们按大纲 / 印刷目录拆成 `学部/院系/专业.pdf` 这样的层级小文件，并生成 `doc_base/manifest.json` 索引。拆分结果**已提交进仓库**，正常使用无需重跑；只有当 `original/` 换了新一年的 PDF 时才需要重建。
 
-**运行时**（用文档库回答问题，不是重建）：`doc_search` 只读 `manifest.json`，离线也能用，无依赖。读文档需要 (1) `secrets/api_keys/kimi_key.txt`，(2) 运行机上有 `pdftoppm`（`brew install poppler`）。两条路径：**对话里**——把 brain 切到 Kimi K2.6（或问培养方案类问题时自动切换），`doc_read` 把 PDF 页面图片直接喂给 Kimi 自己看图作答（DeepSeek brain 下不注册 `doc_read`）；**仪表盘文档库弹窗**——「让 Captain 阅读」用封装式 `DocBaseReader` 直接问 Kimi 返回文本答案。缺 Kimi key 时两条路径都不可用，文档库仍可浏览 / 打开 PDF。
+**运行时**（用文档库回答问题，不是重建）：`doc_search` 只读 `manifest.json`，离线也能用，无依赖。读文档只需要**视觉模型密钥**（默认 Kimi，在应用内 设置 → 模型配置 里填，或 `secrets/models.json` / 兼容旧路径 `secrets/api_keys/kimi_key.txt`）——PDF 渲染走进程内的 `pypdfium2`，**运行时无需安装 poppler / pdftoppm**。两条路径：**对话里**——把 brain 切到 Kimi K2.6（或问培养方案类问题时自动切换），`doc_read` 把 PDF 页面图片直接喂给 Kimi 自己看图作答（DeepSeek brain 下不注册 `doc_read`）；**仪表盘文档库弹窗**——「让 Captain 阅读」用封装式 `DocBaseReader` 直接问 Kimi 返回文本答案。缺 Kimi key 时两条路径都不可用，文档库仍可浏览 / 打开 PDF。
 
 重建依赖三个系统 CLI（不进 venv，`brew install` 即可）：
 
