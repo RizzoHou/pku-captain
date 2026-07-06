@@ -8,6 +8,19 @@ Human-executable verification steps. Maintained by the `verification` skill. The
 
 ## Pending verification
 
+### 2026-07-06 — Release bundle installs from the download zip (Mac)
+
+**Proves**: a user who *only* downloads the Release asset (no git, no clone) gets a working app — the curated `pku-captain-1.0.0.zip` unzips, `install.sh` runs, and the app launches, with the doc base present.
+
+**Steps (Mac, clean machine simulation)**:
+1. Open https://github.com/RizzoHou/pku-captain/releases/latest → **Assets** → download `pku-captain-1.0.0.zip`. Expect ~80 MB.
+2. Unzip → expect a single `pku-captain-1.0.0/` folder containing `README.md`, `install.sh`, `pyproject.toml`, `src/`, `vendor/`, `doc_base/` — and **no** `tests/`, `scripts/`, `docs/`, `.github/`, `.claude/`, `CLAUDE.md`, `DEVCHANGELOG.md`, `VERIFICATION.md`.
+3. `cd pku-captain-1.0.0 && ./install.sh` → expect it to create `.venv`, install deps, and print the launch hint (1–2 min).
+4. `.venv/bin/python -m src` → expect the window to open in 离线模式, no crash. `du -sh doc_base` → expect ~76 MB (doc base shipped, `doc_base/original/` absent).
+5. Sanity that the README the user reads matches: `sed -n '1,20p' README.md` → expect the 快速安装（推荐） download-first flow, not a git-clone-first one.
+
+**Automated / [agent-run] on Linux**: built the zip with `scripts/package_release.sh`; unzipped into a throwaway dir; `python -m venv` + `pip install -e .` in a fresh venv succeeded; `import src` and all four vendored packages (`plib_cli`, `dean`, `treehole`, `pypku3b`) import. Verified the archive contains only the six intended top-level entries and excludes `tests/`/`scripts/`/`docs/`/`.claude/`/`CLAUDE.md`. Mac cold-install + GUI launch is the human-only part.
+
 ### 2026-07-06 — PKUHub 下载 works again (405 → CSRF POST) (Mac)
 
 **Proves**: after entering PKUHub credentials, a real file **download** succeeds instead of failing with HTTP 405 — pkuhub moved `/download/<id>` from GET to a CSRF-guarded POST, and the vendored client now matches it. Login + quota already worked (that's why this was easy to miss).
