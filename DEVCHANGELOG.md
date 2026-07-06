@@ -6,6 +6,16 @@ The **development decision log** — why changes were made, not what shipped. Ma
 
 ---
 
+## 2026-07-06 — Curated release bundle + download-first README
+
+- **What**: `scripts/package_release.sh` builds `dist/pku-captain-<version>.zip` (README, install.sh, pyproject, src/, vendor/, doc_base/ — nothing else); README rewritten to lead with download-and-unzip instead of git-clone. Uploaded the bundle as an asset on the existing v1.0.0 release.
+- **Decision — attach to v1.0.0 without re-tagging or bumping**: the bundle's *runtime* tree (src/vendor/doc_base/pyproject) is byte-identical to the tagged v1.0.0 commit — only README (improved) and the new packaging script differ, and the script isn't shipped in the zip. Release assets are build artifacts, not required to match the tag tree, so attaching to v1.0.0 keeps the one clean release the captain wanted. Rejected: (a) re-tagging v1.0.0 to the new main commit — rewrites a published tag for a README-only delta; (b) cutting v1.0.1 — version churn for zero code change, and proliferates releases against the captain's "one formal release" intent.
+- **Decision — `git archive` over a copy/rsync**: guarantees the zip carries only committed, tracked files (no `__pycache__`, `secrets/`, `.venv`, or local cruft) with an explicit include list, so a stray untracked file can never leak into a distributed artifact. Matches the public-repo hygiene rule (no `.claude/`/`CLAUDE.md` in the bundle) for free.
+- **Decision — one README for both GitHub and the zip**: a self-contained install flow inline + absolute GitHub URLs for deep docs, so the same file renders correctly on the repo landing page and from inside the unzipped folder (relative `docs/` links would 404 in the zip, which ships no `docs/`).
+- **Decision — no auto-upload GitHub Action**: a `release: published` workflow wouldn't fire for the already-published v1.0.0 (so the manual upload is needed regardless) and adds a reviewable moving part for no benefit today; deferred.
+- **Verify**: built the zip, unzipped into a throwaway dir, `pip install -e .` in a fresh venv, imported `src` + all four vendored packages. VERIFICATION.md entry for the human download step.
+- **Files**: `scripts/package_release.sh` (new), `README.md`, `CHANGELOG.md`, `VERIFICATION.md`.
+
 ## 2026-07-06 — P-Lib download 405: pkuhub moved /download to CSRF-guarded POST
 
 - **What**: entry-mac Mac test — PKUHub login + quota worked, but 下载 returned HTTP 405. Root-caused live: `GET /download/<id>` now returns `405` with `Allow: POST, OPTIONS`; the endpoint moved to a Flask-WTF CSRF-guarded POST (unauth POST without a token → 400 HTML CSRF page). The vendored `plib_cli` still issued a GET.

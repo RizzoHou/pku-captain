@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+- **Curated end-user release bundle + download-first README.** `scripts/package_release.sh` builds `dist/pku-captain-<version>.zip` — the app packaged for a user who won't clone: `README.md`, `install.sh`, `pyproject.toml`, `src/`, the vendored clients, and the `doc_base/` PDFs, and **nothing else** (no `tests/`, `scripts/`, `docs/`, CI, or Claude/audit files). Built via `git archive` so it carries only committed files (no `__pycache__`/secrets/`.venv`). The zip's runtime tree is byte-identical to the tagged v1.0.0 code, so it attaches to the existing **v1.0.0** release as an install-ready asset — no re-tag, no version bump. README was rewritten to lead with **下载 Release 压缩包 → 解压 → `./install.sh` → 启动**; the git-clone path is demoted to a "从源码运行（贡献者）" section, and doc links are now absolute GitHub URLs so they still resolve from inside the unzipped folder.
+
 ## [1.0.0] - 2026-07-06
 
 First tagged release. Groups the accumulated post-`2026-06-05` work into a version and adds the packaging pieces needed to hand the app to a user: a one-shot installer, CI, and an in-process PDF renderer that removes the last external-binary dependency.
