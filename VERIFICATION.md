@@ -8,6 +8,18 @@ Human-executable verification steps. Maintained by the `verification` skill. The
 
 ## Pending verification
 
+### 2026-07-06 — PKUHub 下载 works again (405 → CSRF POST) (Mac)
+
+**Proves**: after entering PKUHub credentials, a real file **download** succeeds instead of failing with HTTP 405 — pkuhub moved `/download/<id>` from GET to a CSRF-guarded POST, and the vendored client now matches it. Login + quota already worked (that's why this was easy to miss).
+
+**Steps (Mac, in `~/Downloads/pku-captain`, re-prepared with this fix)**:
+1. `.venv/bin/python -m src --online` → 设置 → **PKUHub** → enter 图书馆邮箱 + 密码 → 保存. Confirm the dashboard PKUHub card shows 今日剩余下载次数 (e.g. `10`) — proves login/quota (already worked).
+2. **The fix — download**: in chat ask e.g. `帮我在 P-Lib 搜"高等数学"往年题，下载第一个`, or drive the tool directly. Expect a file to be **saved** (a `downloads/plib/<name>` path + `quota_remaining` decremented by 1), **not** an error containing `HTTP 405` or `download returned HTTP`.
+3. **Sanity on disk**: `ls -la downloads/plib/` → expect the downloaded file present with non-zero size. Open it → expect a real document, not an HTML error page.
+4. **Negative (optional)**: after exhausting the daily quota, a further download → expect the Chinese quota message (`今日剩余下载次数`/配额), still no 405.
+
+**Automated / [agent-run] on Linux**: live-probed pkuhub — `GET /download/727` → `405 Allow: POST, OPTIONS`, unauth `POST` (no token) → `400`; confirmed the CSRF mechanism from the live `csrf_helper.js` (wraps `fetch` to add `X-CSRFToken`). Path-forced trace: `download()` issues one `POST /download/<id>` with `{X-CSRFToken}` + `retry=False`. Vendored `test_client.py` **6 pass** (new POST/CSRF contract test), pku-captain suite **473 pass / 3 skip**, ruff clean. No P-Lib creds on the Linux box, so the real end-to-end download is the human-only part.
+
 ### 2026-07-06 — Cold-start login on `--online` with no key + slim clone (Mac)
 
 **Proves**: a brand-new install can reach and use the 统一身份·树洞 login the *first* time it launches — no key configured yet — instead of the old deadlock where `--online` fell to offline and disabled the login tab. Also that the shallow clone is materially faster.

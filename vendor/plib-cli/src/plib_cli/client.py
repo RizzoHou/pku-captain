@@ -264,6 +264,17 @@ class PlibClient:
             raise ParseError(f"could not parse material {material_id} — markup changed?")
         return mat
 
+    def _csrf_token(self, material_id: int) -> str | None:
+        """CSRF token for the download POST (see :meth:`download`).
+
+        pkuhub mints a per-session Flask-WTF token and renders it into every
+        page's ``<meta name="csrf-token">``. Harvest it from the material page —
+        the self-healing :meth:`_get_html` also (re-)authenticates as a side
+        effect, so the token is guaranteed to match the live session before we
+        POST it back.
+        """
+        return _extract_csrf(self._get_html(f"/material/{material_id}"))
+
     def download(
         self,
         material_id: int,
@@ -279,7 +290,25 @@ class PlibClient:
                     "Use --force to attempt anyway, or wait for the daily reset."
                 )
 
-        resp = self._request("GET", f"/download/{material_id}", allow_redirects=True)
+        # pkuhub switched /download/<id> from a plain GET link to a CSRF-guarded
+        # POST: GET now returns HTTP 405, and the site's own csrf_helper.js sends
+        # the token as the X-CSRFToken header on every unsafe same-origin fetch.
+        # Mirror that exactly — harvest the session token, then POST it. retry is
+        # off: _csrf_token just authenticated us, so a login bounce here is a real
+        # failure, and re-posting the now-stale token would only 400.
+        token = self._csrf_token(material_id)
+        resp = self._request(
+            "POST",
+            f"/download/{material_id}",
+            retry=False,
+            allow_redirects=True,
+            headers={"X-CSRFToken": token} if token else None,
+        )
+        if resp.status_code == 405:
+            raise NetworkError(
+                "download returned HTTP 405 — pkuhub rejected the POST method; "
+                "the download endpoint may have changed again"
+            )
         if resp.status_code == 404:
             raise NotFoundError(f"material {material_id} not found (404)")
         if _is_login_redirect(resp):

@@ -18,6 +18,9 @@ def _client(remaining: int | None) -> PlibClient:
     c = PlibClient.__new__(PlibClient)
     c._download_remaining = None
     c.profile = lambda: Profile(download_remaining=remaining)  # type: ignore[method-assign]
+    # download() harvests a CSRF token from the material page before POSTing;
+    # stub that fetch so the no-network tests never touch _request for it.
+    c._get_html = lambda path: '<meta name="csrf-token" content="tok">'  # type: ignore[method-assign]
     return c
 
 
@@ -44,6 +47,27 @@ def test_download_decrements_server_quota(tmp_path) -> None:
     second = c.download(42, tmp_path)
     assert second.quota_remaining == 4  # cached, decremented again — no refetch
     assert c.quota_remaining() == 4
+
+
+def test_download_posts_with_csrf_header(tmp_path) -> None:
+    """pkuhub moved /download/<id> to a CSRF-guarded POST — a GET now 405s."""
+    c = _client(6)
+    calls: dict[str, object] = {}
+
+    def fake_request(method, path, **kwargs):  # noqa: ANN001, ANN202
+        calls["method"] = method
+        calls["path"] = path
+        calls["headers"] = kwargs.get("headers")
+        calls["retry"] = kwargs.get("retry")
+        return _FakeResp(b"PK\x03\x04data", "x.zip")
+
+    c._request = fake_request  # type: ignore[method-assign]
+    c.download(42, tmp_path)
+
+    assert calls["method"] == "POST"
+    assert calls["path"] == "/download/42"
+    assert calls["headers"] == {"X-CSRFToken": "tok"}
+    assert calls["retry"] is False
 
 
 def test_download_blocked_when_no_quota_left(tmp_path) -> None:
