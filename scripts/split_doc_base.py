@@ -9,7 +9,8 @@ LLM can read on demand at acceptable context cost.
 Layout produced (siblings of original/):
 
     doc_base/
-      original/                         # untouched source PDFs
+      original/                         # source PDFs (gitignored, not shipped —
+                                        #   place them here to regenerate)
       本科培养方案2025-文科卷/            # one dir per source doc
         北京大学在用本科专业目录（本部）.pdf   # top-level leaf sections
         人文学部/                        # 学部  (internal outline node -> dir)

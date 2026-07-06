@@ -8,6 +8,19 @@ Human-executable verification steps. Maintained by the `verification` skill. The
 
 ## Pending verification
 
+### 2026-07-06 — Cold-start login on `--online` with no key + slim clone (Mac)
+
+**Proves**: a brand-new install can reach and use the 统一身份·树洞 login the *first* time it launches — no key configured yet — instead of the old deadlock where `--online` fell to offline and disabled the login tab. Also that the shallow clone is materially faster.
+
+**Steps (Mac, in `~/Downloads/pku-captain` prepared for you)**:
+1. **Slim clone**: this dir was made with `git clone --depth 1` of branch `worktree-release-1.0-packaging`. Sanity: `du -sh doc_base` → expect ~80 MB (no `doc_base/original/`); `ls doc_base/original 2>/dev/null` → expect *no such directory*.
+2. **Cold launch, zero keys**: with **no** `secrets/models.json` yet (fresh — don't copy old secrets), `.venv/bin/python -m src --online`. Expect the window to open in **在线模式** (title/first system line), with a chat note that the text-model key isn't configured (点击『设置』→ 模型配置). It must **not** say "已切换到离线模式".
+3. **The fix — login is reachable**: click **设置** → **统一身份·树洞** tab → the 学号 / 密码 / 验证码 fields and 登录 button are **enabled** (not greyed), and there is **no** "树洞登录需要在线模式启动" banner. Enter your IAAA 学号+门户密码 → 登录 → complete SMS → expect 已登录 · <name>. (This is the exact step that was impossible before.)
+4. **Brain swaps in live**: still in 设置 → 模型配置 → enter your DeepSeek text-model key → 保存 → close. Send a chat message → expect a real DeepSeek reply (not an echo), no restart.
+5. **Negative**: plain `.venv/bin/python -m src` (offline) → 设置 → 统一身份·树洞 is *correctly* disabled with the "需要在线模式启动" hint — that message is now accurate only for genuine offline launches.
+
+**Automated / [agent-run] on Linux**: full suite **473 pass / 3 skip**; `build_agent(offline=False)` against an empty secrets dir returns an `EchoLLMProvider`-brained agent with `treehole_updates` registered and `available_chat_models(offline=False) == []` (previously raised `FileNotFoundError` → offline fallback). Mac GUI cold-start is the human-only part.
+
 ### 2026-07-05 — 1.0.0 packaging: install.sh + in-process PDF render (Mac)
 
 **Proves**: on macOS the app installs via the one-shot script and `doc_read` renders curriculum PDFs with **no poppler/`pdftoppm` installed** (the pypdfium2 wheel replaces it). This is the one path this repo's Linux CI can't confirm for a Mac release.

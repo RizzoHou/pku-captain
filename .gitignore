@@ -32,6 +32,11 @@ debug/
 data/
 downloads/
 
+# Doc-base source PDFs: build-time input to scripts/split_doc_base.py only (the
+# committed split output under doc_base/<volume>/ is what the app reads). ~110 MB
+# of originals bloated clones for no runtime benefit — keep them local, unshipped.
+doc_base/original/
+
 # Project-local toolchains / binaries
 .local/
 

@@ -6,6 +6,14 @@ The **development decision log** — why changes were made, not what shipped. Ma
 
 ---
 
+## 2026-07-06 — Cold-start login deadlock + slim the clone (post-Mac-test fixes)
+
+- **What**: two release blockers the captain hit cold-starting the packaged app on entry-mac. (1) `--online` with no API key couldn't reach the login form — the 统一身份·树洞 tab was disabled and told them to launch in online mode, which they had. (2) `git clone` was slow from the ~110 MB `doc_base/original/` source PDFs.
+- **Decision — decouple online mode from having an API key (fix in `_build_llm`, not `MainWindow`'s try/except or the login dialog)**: the deadlock chain was `build_chat_llm("text")` raising on no key → `build_agent(offline=False)` raising → `MainWindow` catching it as an "online failure" and rebuilding offline → offline agent has no `treehole_updates` tool → `_open_account_dialog` computes `offline=True`, `auth=None` → login tab disabled. The clean cut is at the source: `_build_llm` degrades the chat brain to Echo when the text key is missing rather than raising, so online mode boots with the full live tool set + enabled login dialog and the real brain swaps in live on key-save. Considered but rejected: (a) making the login tab persist creds offline like the PKUHub tab — treehole login is inherently live (IAAA+SMS), so it wouldn't actually unblock; (b) widening `MainWindow`'s except to treat no-key specially — leaves the fragile "online == has key" coupling in place. Kept `build_chat_llm`'s raise (the switch path gates on `available_chat_models` and relies on it).
+- **Decision — shallow clone + untrack, not a history rewrite**: `doc_base/original/` is build-time-only (the app reads the committed split output), so `git rm --cached` + gitignore drops it from the tip (~190→80 MB tracked). It stays in one history commit, so the README installs via `git clone --depth 1` to skip history — fast clones without a destructive force-push to public `main`. A real history purge (filter-repo + force-push) would need explicit captain approval per the public-repo/git rules and would break every existing clone/fork; offered as an opt-in, not done.
+- **Verify**: full suite 473 pass; `build_agent(offline=False)` against an empty secrets dir returns an Echo-brained online agent with `treehole_updates` registered (was: raised). Mac cold-start retest is the human step in VERIFICATION.md.
+- **Files**: `src/core/bootstrap.py` (`_build_llm` Echo fallback), `.gitignore` + `scripts/split_doc_base.py` header (untrack originals), `README.md` (shallow clone + corrected no-key note), `CHANGELOG.md`.
+
 ## 2026-07-05 — 1.0.0 release packaging: in-process PDF render, installer, CI
 
 - **What**: prep the first tagged release. Replaced `doc_read`'s poppler subprocess renderer with in-process `pypdfium2` + Pillow; added `install.sh` + a CI workflow; bumped `0.0.1`→`1.0.0`; rewrote the stale README; cut CHANGELOG `[1.0.0]`.

@@ -7,7 +7,7 @@
 - **macOS 或 Linux**：`install.sh` 是 bash 脚本；Windows 用户请用 WSL，或按下方「手动安装」步骤操作。
 - **Python 3.11 或更高**：终端运行 `python3 --version` 检查。
 - **git**：用于克隆仓库。
-- 约 300 MB 磁盘空间（仓库自带文档库 PDF + 运行依赖）。**无需任何外部二进制**——pku3b / PKUHub 图书 / 树洞 / 教务客户端都已 vendored 进本仓库，PDF 渲染走进程内的 `pypdfium2`，不需要 poppler / Rust / node 等。
+- 约 1 GB 磁盘空间（仓库 ~80 MB + PyQt6 等运行依赖装进 `.venv`）。**无需任何外部二进制**——pku3b / PKUHub 图书 / 树洞 / 教务客户端都已 vendored 进本仓库，PDF 渲染走进程内的 `pypdfium2`，不需要 poppler / Rust / node 等。
 
 macOS 上若缺 Python 或 git，先安装 [Homebrew](https://brew.sh)，再：
 
@@ -17,12 +17,16 @@ brew install git python@3.12
 
 ## 安装（从零开始）
 
-**1. 克隆仓库**（含文档库 PDF，约 200 MB，视网速需要几分钟）
+**1. 克隆仓库**（含文档库 PDF，约 80 MB，视网速需要几分钟）
+
+用 `--depth 1` 浅克隆——只取最新版本，跳过历史里的大文件，明显更快：
 
 ```bash
-git clone https://github.com/RizzoHou/pku-captain.git
+git clone --depth 1 https://github.com/RizzoHou/pku-captain.git
 cd pku-captain
 ```
+
+（贡献者若需完整提交历史，去掉 `--depth 1` 做完整克隆即可。）
 
 **2. 一键安装**（在仓库根目录运行——脚本会创建 `.venv` 并装好全部依赖，约 1–2 分钟，会下载 PyQt6 等）
 
@@ -54,7 +58,7 @@ cd pku-captain
 - **模型配置**：文本模型（默认 DeepSeek）与视觉模型（默认 Kimi，读文档库用）的 API key 与 endpoint。
 - **网络代理**：校外访问校内资源时按需设置。
 
-缺文本模型 key 时会自动回退离线模式；`doc_read`（读培养方案文档）需要配置视觉模型。
+`--online` 无需预先配置任何密钥即可启动：仪表盘工具与登录框都可用，聊天先用占位大脑，在 **模型配置** 里填好文本模型 key 后即时切换为真正的对话模型。`doc_read`（读培养方案文档）需要配置视觉模型。
 
 ### 手动安装（不用脚本）
 
