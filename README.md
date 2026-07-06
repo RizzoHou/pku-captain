@@ -60,6 +60,16 @@ cd pku-captain
 - 命令行 REPL（同一 agent loop，便于调试）：`.venv/bin/python -m src.cli --offline`（无密钥）/ `.venv/bin/python -m src.cli`（在线）。
 - 打包 Release 压缩包：`scripts/package_release.sh` → `dist/pku-captain-<version>.zip`（只含安装运行必需文件 + README）。
 
+---
+
+## 📄 课程作业报告 & 🎬 演示录屏（助教评阅入口）
+
+> **项目作业报告：[`docs/23-作业报告.pdf`](docs/23-作业报告.pdf)** — 程序功能介绍、项目各模块与类设计细节、小组成员分工、项目总结与反思。
+>
+> **演示录屏：<https://disk.pku.edu.cn/link/AA30E499DD94024C9BADC35DAF521CD5E1>** — 文件名 `pku-captain-v1.mp4`（北大网盘，链接有效期至 2026-08-05）。
+
+---
+
 ## 文档
 
 - [环境配置与凭证](https://github.com/RizzoHou/pku-captain/blob/main/docs/setup_zh.md)
